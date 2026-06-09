@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AIDashboard v10</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;line-height:1.6}
+  .tab-bar{display:flex;gap:4px;margin-bottom:24px;background:#1e293b;padding:6px;border-radius:12px}
+  .tab{flex:1;padding:12px 8px;text-align:center;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#94a3b8;transition:all .2s;white-space:nowrap}
+  .tab:hover{background:#334155;color:#e2e8f0}.tab.sel{background:#2563eb;color:#fff}
+  .view{display:none}.view.on{display:block}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+  .card{background:#1e293b;padding:16px;border-radius:10px;text-align:center}
+  .card .val{font-size:26px;font-weight:700}.card .lbl{font-size:12px;color:#94a3b8;margin-top:4px}
+  .card .sub{font-size:10px;color:#64748b;margin-top:2px}
+  .box{background:#1e293b;padding:16px;border-radius:10px;margin-bottom:16px}
+  .box h4{color:#94a3b8;font-size:13px;margin-bottom:12px}
+  .row2{display:flex;gap:16px}.col{flex:1}
+  table{width:100%;font-size:13px;border-collapse:collapse}
+  th{color:#94a3b8;text-align:left;padding:8px 6px;border-bottom:1px solid #334155;font-weight:500;font-size:12px}
+  td{padding:8px 6px;border-bottom:1px solid #1e293b}
+  .tag{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px}
+  .t-g{background:#065f46;color:#4ade80}.t-y{background:#78350f;color:#fbbf24}
+  .t-r{background:#7f1d1d;color:#f87171}.t-b{background:#1e3a5f;color:#38bdf8}
+  .t-p{background:#3b0764;color:#a78bfa}.t-d{background:#1e293b;color:#f472b6;border:1px solid #f472b644}
+  .prog{height:6px;background:#334155;border-radius:3px;width:100px;display:inline-block;vertical-align:middle;margin-right:6px}
+  .prog div{height:6px;border-radius:3px}
+  .alert{background:#7f1d1d22;border:1px solid #7f1d1d44;padding:12px;border-radius:8px;font-size:13px;margin-top:8px}
+  .warn{background:#78350f22;border:1px solid #78350f44;padding:12px;border-radius:8px;font-size:13px;margin-top:8px}
+  .info{background:#1e3a5f22;border:1px solid #1e3a5f44;padding:12px;border-radius:8px;font-size:13px}
+  .bars{display:flex;align-items:end;gap:32px;height:90px;padding:0 10px}
+  .bars .bar{display:flex;flex-direction:column;align-items:center}
+  .bars .bar .b{width:44px;border-radius:4px 4px 0 0}
+  .bars .bar span{font-size:11px;margin-top:6px}
+  input[type=checkbox]{width:16px;height:16px;accent-color:#4ade80}
+  .btn{display:inline-block;background:#4ade80;color:#000;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+  h2{font-size:20px;margin-bottom:4px}.sub{font-size:13px;color:#94a3b8;margin-bottom:20px}
+  .doc-link{color:#38bdf8;font-size:12px;cursor:pointer;text-decoration:none}.doc-link:hover{text-decoration:underline}
+  .feishu-link{display:inline-flex;align-items:center;gap:6px;background:#1e3a5f;color:#38bdf8;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none}
+  .report-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .tabs-mini{display:flex;gap:2px;margin-bottom:12px;background:#0f172a;padding:3px;border-radius:6px;width:fit-content}
+  .tab-mini{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;color:#94a3b8;transition:all .2s}
+  .tab-mini:hover{background:#1e293b;color:#e2e8f0}.tab-mini.sel{background:#2563eb;color:#fff}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;margin-top:6px}
+  .legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .token-row{display:flex;gap:10px;margin-bottom:12px}
+  .token-card{flex:1;background:#0f172a;border-radius:8px;padding:12px;text-align:center}
+  .token-card .val{font-size:22px;font-weight:700}.token-card .lbl{font-size:11px;color:#94a3b8}
+  .report-time{font-size:11px;color:#64748b;margin-top:2px}
+  .ac-list{font-size:12px;line-height:1.8;list-style:none;padding:0}
+  .ac-list li{padding:2px 0}.ac-list li.done{color:#4ade80;text-decoration:line-through}
+  .ac-list li.pending{color:#94a3b8}
+  .meta-row{font-size:11px;color:#64748b;margin-top:8px;display:flex;gap:16px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="tab-bar" id="tabs">
+  <div class="tab sel" onclick="show('director')">👑 总监</div>
+  <div class="tab" onclick="show('tl')">👥 TL·AI工程</div>
+  <div class="tab" onclick="show('pm')">📦 PM</div>
+  <div class="tab" onclick="show('emp')">🧑‍💻 张三</div>
+  <div class="tab" onclick="show('flow')">🔄 流程</div>
+</div>
+
+<!-- ==================== 总监 ==================== -->
+<div id="director" class="view on">
+  <h2>🏢 部门总监 · 李</h2>
+  <p class="sub">AI工程 · 推理加速 · 模型训练 | 40人 | 6需求 | 2026-06-09</p>
+
+  <div class="report-row">
+    <a class="feishu-link">📄 部门每日进展 <span class="report-time">每天20:00生成</span></a>
+    <a class="feishu-link">📊 部门周报 W23 <span class="report-time">周五17:00生成</span></a>
+    <a class="feishu-link" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;">📤 我的Session上报</a>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#38bdf8;">187</div><div class="lbl">今日部门 Session</div></div>
+    <div class="card"><div class="val" style="color:#4ade80;">73%</div><div class="lbl">任务完成率</div></div>
+    <div class="card"><div class="val" style="color:#f87171;">2</div><div class="lbl">跨团队阻塞</div></div>
+    <div class="card">
+      <div class="lbl" style="margin-bottom:4px;">Token 消耗 (全部门)</div>
+      <div style="display:flex;gap:6px;justify-content:center;">
+        <div><div style="font-size:18px;color:#fbbf24;">3.2M</div><div style="font-size:10px;color:#64748b;">今日</div></div>
+        <div><div style="font-size:18px;color:#fbbf24;">22.5M</div><div style="font-size:10px;color:#64748b;">本周</div></div>
+        <div><div style="font-size:18px;color:#fbbf24;">285M</div><div style="font-size:10px;color:#4ade80;">本月 ▼12%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 团队活跃度 + Token趋势 -->
+  <div class="row2">
+    <div class="col box">
+      <h4>📊 团队活跃度 <span style="font-size:11px;color:#64748b;">(活跃=当日≥1个已上报Session)</span></h4>
+      <div class="bars">
+        <div class="bar"><div class="b" style="height:65px;background:linear-gradient(0deg,#2563eb,#60a5fa);"></div><span>AI工程<br/><strong>11/13</strong></span></div>
+        <div class="bar"><div class="b" style="height:48px;background:linear-gradient(0deg,#7c3aed,#a78bfa);"></div><span>推理加速<br/><strong>9/13</strong></span></div>
+        <div class="bar"><div class="b" style="height:55px;background:linear-gradient(0deg,#059669,#34d399);"></div><span>模型训练<br/><strong>10/14</strong></span></div>
+      </div>
+      <div class="meta-row"><span>沉寂预警: 孙八(AI工程) 2天 · 周七(推理加速) 3天</span></div>
+    </div>
+
+    <div class="col box">
+      <h4>Token 趋势 <span style="font-size:11px;color:#64748b;">(全部门 · 点击切换粒度)</span></h4>
+      <div class="tabs-mini"><span class="tab-mini sel">日</span><span class="tab-mini">周</span><span class="tab-mini">月</span></div>
+      <div style="display:flex;align-items:end;gap:6px;height:55px;margin-bottom:6px;">
+        <span style="width:14px;height:22px;background:#334155;border-radius:2px;"></span>
+        <span style="width:14px;height:30px;background:#334155;border-radius:2px;"></span>
+        <span style="width:14px;height:28px;background:#334155;border-radius:2px;"></span>
+        <span style="width:14px;height:38px;background:#334155;border-radius:2px;"></span>
+        <span style="width:14px;height:35px;background:#334155;border-radius:2px;"></span>
+        <span style="width:14px;height:52px;background:#2563eb;border-radius:2px;"></span>
+        <span style="width:14px;height:48px;background:#2563eb;border-radius:2px;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:8px;">
+        <div style="width:90px;height:90px;border-radius:50%;background:conic-gradient(#2563eb 0% 55%, #7c3aed 55% 80%, #059669 80% 95%, #fbbf24 95% 100%);display:flex;align-items:center;justify-content:center;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">3.2M</div>
+        </div>
+        <div>
+          <div class="legend"><span class="legend-dot" style="background:#2563eb;"></span>Sonnet 55%</div>
+          <div class="legend"><span class="legend-dot" style="background:#7c3aed;"></span>Opus 25%</div>
+          <div class="legend"><span class="legend-dot" style="background:#059669;"></span>GPT-5 15%</div>
+          <div class="legend"><span class="legend-dot" style="background:#fbbf24;"></span>其他 5%</div>
+        </div>
+      </div>
+      <div class="meta-row">点击饼图切换: 团队/模型/需求维度</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h4>📋 需求总览</h4>
+    <table>
+      <tr><th>需求</th><th>创建者</th><th>飞书</th><th>团队</th><th>AC</th><th>进度</th><th>Deadline</th><th>Token(本周)</th></tr>
+      <tr><td>REQ-001 AI平台v3.0</td><td><span class="tag t-p">PM</span></td><td><a class="doc-link">📄</a></td><td>AI工程+推理加速</td><td>5/7</td><td><span class="prog"><div style="width:71%;height:6px;background:#4ade80;border-radius:3px;"></div></span>71%</td><td>07-30</td><td>8.4M</td></tr>
+      <tr><td>REQ-002 数据中台</td><td><span class="tag t-p">PM</span></td><td><a class="doc-link">📄</a></td><td>AI工程</td><td>3/5</td><td>60%</td><td>08-15</td><td>4.7M</td></tr>
+      <tr><td>REQ-003 用户中心</td><td><span class="tag t-d">总监</span></td><td><a class="doc-link">📄</a></td><td>推理加速</td><td>4/6</td><td>67%</td><td>06-20</td><td>2.1M</td></tr>
+      <tr><td>REQ-005 安全加固</td><td><span class="tag t-d">总监</span></td><td><a class="doc-link">📄</a></td><td>AI工程+模型训练</td><td>1/3</td><td><span class="prog"><div style="width:33%;height:6px;background:#f87171;border-radius:3px;"></div></span>33%</td><td style="color:#f87171;">‼06-10</td><td>1.2M</td></tr>
+    </table>
+  </div>
+
+  <div class="row2">
+    <div class="col alert">🔴 REQ-005 deadline 6-10仅剩1天(33%) — <strong>PM介入推动</strong></div>
+    <div class="col warn">🟡 T-104跨团队阻塞(AI工程→推理加速) — TL自行协商中</div>
+  </div>
+</div>
+
+<!-- ==================== TL ==================== -->
+<div id="tl" class="view">
+  <h2>👥 AI工程 · TL: 刘</h2>
+  <p class="sub">13人 · 参与4需求(2跨团队) · 拆解18任务 · 活跃度11/13</p>
+
+  <div class="report-row">
+    <a class="feishu-link">📄 团队日报 <span class="report-time">每天20:00</span></a>
+    <a class="feishu-link">📊 团队周报 <span class="report-time">周五17:00</span></a>
+    <a class="feishu-link" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;">📤 我的Session上报</a>
+    <a class="feishu-link" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;">📝 我的日报</a>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#38bdf8;">11/13</div><div class="lbl">今日活跃</div></div>
+    <div class="card"><div class="val" style="color:#a78bfa;">4</div><div class="lbl">参与需求</div></div>
+    <div class="card"><div class="val" style="color:#f87171;">1</div><div class="lbl">阻碍预警</div></div>
+    <div class="card">
+      <div class="lbl">本队 Token</div>
+      <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;">
+        <div><div style="font-size:16px;color:#fbbf24;">1.84M</div><div style="font-size:10px;color:#64748b;">今</div></div>
+        <div><div style="font-size:16px;color:#fbbf24;">12.9M</div><div style="font-size:10px;color:#64748b;">周</div></div>
+        <div><div style="font-size:16px;color:#fbbf24;">123M</div><div style="font-size:10px;color:#64748b;">月</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="col box">
+      <h4>👤 成员 + Token <span style="font-size:11px;color:#64748b;">(本周)</span></h4>
+      <table>
+        <tr><th>成员</th><th>任务</th><th>需求</th><th>今日</th><th>本周</th><th>本月</th><th>状态</th></tr>
+        <tr><td>张三</td><td>T-101 ✓</td><td>REQ-001</td><td>128K</td><td>594K</td><td>2.8M</td><td><span class="tag t-g">🟢</span></td></tr>
+        <tr><td>李四</td><td>T-102 80%</td><td>REQ-001</td><td>94K</td><td>420K</td><td>1.9M</td><td><span class="tag t-g">🟢</span></td></tr>
+        <tr><td>王五</td><td>T-201</td><td>REQ-004</td><td style="color:#f87171;">310K</td><td style="color:#f87171;">1.48M</td><td style="color:#f87171;">5.9M</td><td><span class="tag t-r">🔴</span></td></tr>
+        <tr><td>赵六</td><td>T-103(跨)</td><td>REQ-001</td><td>36K</td><td>253K</td><td>1.1M</td><td><span class="tag t-y">🟡</span></td></tr>
+        <tr><td>钱七</td><td>T-104(跨)</td><td>REQ-001</td><td>21K</td><td>100K</td><td>360K</td><td><span class="tag t-r">🔴</span></td></tr>
+      </table>
+      <div style="margin-top:10px;"><span class="btn" style="font-size:12px;padding:6px 14px;">+ 拆解任务</span> <span class="btn" style="font-size:12px;padding:6px 14px;background:#a78bfa;">+ 创建需求</span></div>
+    </div>
+    <div class="col">
+      <div class="box">
+        <h4>Token 分布 (本周·按成员) <span style="font-size:11px;color:#64748b;">点击切换维度</span></h4>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(#2563eb 0% 32%, #7c3aed 32% 55%, #f87171 55% 82%, #059669 82% 94%, #fbbf24 94% 100%);display:flex;align-items:center;justify-content:center;">
+            <div style="width:42px;height:42px;border-radius:50%;background:#1e293b;font-size:11px;font-weight:700;">12.9M</div>
+          </div>
+          <div>
+            <div class="legend"><span class="legend-dot" style="background:#2563eb;"></span>张三 32%</div>
+            <div class="legend"><span class="legend-dot" style="background:#7c3aed;"></span>李四 23%</div>
+            <div class="legend"><span class="legend-dot" style="background:#f87171;"></span>王五 27% ⚠</div>
+            <div class="legend"><span class="legend-dot" style="background:#059669;"></span>赵六 12%</div>
+            <div class="legend"><span class="legend-dot" style="background:#fbbf24;"></span>其他 6%</div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <h4>📋 本队需求</h4>
+        <table>
+          <tr><th>需求</th><th>飞书</th><th>AC</th><th>进度</th><th>Deadline</th><th>本周Token</th></tr>
+          <tr><td>REQ-001(跨)</td><td><a class="doc-link">📄</a></td><td>5/7</td><td>71%</td><td>07-30</td><td>6.2M</td></tr>
+          <tr><td>REQ-005(跨)</td><td><a class="doc-link">📄</a></td><td>1/3</td><td>33%</td><td style="color:#f87171;">‼06-10</td><td>420K</td></tr>
+        </table>
+      </div>
+      <div class="alert">⚠️ 王五本月Token异常高(5.9M) · 钱七跨团队等AI工程T-102+推理加速T-103</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PM ==================== -->
+<div id="pm" class="view">
+  <h2>📦 产品经理 · 陈</h2>
+  <p class="sub">全部6需求 · 57任务 · 3重点关注 · 跨团队阻塞由PM/总监推动</p>
+
+  <div class="report-row">
+    <a class="feishu-link">📊 PM周报 <span class="report-time">周五17:00</span></a>
+    <a class="feishu-link" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;">📤 我的Session上报</a>
+    <a class="feishu-link" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;">📝 我的日报 <span class="report-time">每天20:00</span></a>
+  </div>
+
+  <div class="row2">
+    <div class="col box">
+      <h4>全部门 Token <span style="font-size:11px;color:#64748b;">(日/周/月)</span></h4>
+      <div class="token-row">
+        <div class="token-card"><div class="val" style="color:#fbbf24;">3.2M</div><div class="lbl">今日</div></div>
+        <div class="token-card"><div class="val" style="color:#fbbf24;">22.5M</div><div class="lbl">本周</div></div>
+        <div class="token-card"><div class="val" style="color:#fbbf24;">285M</div><div class="lbl">本月</div><div class="sub" style="color:#4ade80;">▼12%</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(#2563eb 0% 37%, #7c3aed 37% 58%, #059669 58% 67%, #fbbf24 67% 78%, #f87171 78% 90%, #fb923c 90% 100%);display:flex;align-items:center;justify-content:center;">
+          <div style="width:42px;height:42px;border-radius:50%;background:#1e293b;font-size:11px;font-weight:700;">22.5M</div>
+        </div>
+        <div>
+          <div class="legend"><span class="legend-dot" style="background:#2563eb;"></span>REQ-001 37%</div>
+          <div class="legend"><span class="legend-dot" style="background:#7c3aed;"></span>REQ-002 21%</div>
+          <div class="legend"><span class="legend-dot" style="background:#059669;"></span>REQ-003 9%</div>
+          <div class="legend"><span class="legend-dot" style="background:#fbbf24;"></span>REQ-004 11%</div>
+          <div class="legend"><span class="legend-dot" style="background:#f87171;"></span>REQ-005 12%</div>
+          <div class="legend"><span class="legend-dot" style="background:#fb923c;"></span>其他 10%</div>
+        </div>
+      </div>
+      <div class="meta-row">点击切换: 日/周/月 · 需求/团队/模型</div>
+    </div>
+
+    <div class="col box">
+      <h4>⭐ 重点关注需求</h4>
+      <table>
+        <tr><th>需求</th><th>飞书</th><th>AC</th><th>今日变化</th><th>进度</th><th>本周Token</th><th>Deadline</th></tr>
+        <tr><td>⭐ REQ-001</td><td><a class="doc-link">📄</a></td><td>5/7</td><td style="color:#4ade80;">T-101✓</td><td>71%</td><td>8.4M</td><td>07-30</td></tr>
+        <tr><td>⭐ REQ-005</td><td><a class="doc-link">📄</a></td><td>1/3</td><td style="color:#94a3b8;">-</td><td>33%</td><td>1.2M</td><td style="color:#f87171;">‼06-10</td></tr>
+        <tr><td>⭐ REQ-003</td><td><a class="doc-link">📄</a></td><td>4/6</td><td style="color:#4ade80;">UI完成</td><td>67%</td><td>2.1M</td><td>06-20</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="col box">
+      <h4>👀 其他需求</h4>
+      <table>
+        <tr><th>需求</th><th>飞书</th><th>创建者</th><th>AC</th><th>本周Token</th><th>Deadline</th></tr>
+        <tr><td>REQ-002</td><td><a class="doc-link">📄</a></td><td><span class="tag t-p">我</span></td><td>3/5</td><td>4.7M</td><td>08-15</td></tr>
+        <tr><td>REQ-004</td><td><a class="doc-link">📄</a></td><td><span class="tag t-b">TL</span></td><td>2/4</td><td>2.5M</td><td>07-01</td></tr>
+        <tr><td>REQ-006</td><td><a class="doc-link">📄</a></td><td><span class="tag t-p">我</span></td><td>1/1 ✓</td><td>-</td><td>06-05 ✓</td></tr>
+      </table>
+    </div>
+    <div class="col box">
+      <h4>Token 按模型 (本周)</h4>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:70px;height:70px;border-radius:50%;background:conic-gradient(#2563eb 0% 52%, #7c3aed 52% 78%, #059669 78% 95%, #fbbf24 95% 100%);display:flex;align-items:center;justify-content:center;">
+          <div style="width:36px;height:36px;border-radius:50%;background:#1e293b;"></div>
+        </div>
+        <div>
+          <div class="legend"><span class="legend-dot" style="background:#2563eb;"></span>Sonnet 11.7M</div>
+          <div class="legend"><span class="legend-dot" style="background:#7c3aed;"></span>Opus 5.9M</div>
+          <div class="legend"><span class="legend-dot" style="background:#059669;"></span>GPT-5 3.8M</div>
+          <div class="legend"><span class="legend-dot" style="background:#fbbf24;"></span>其他 1.1M</div>
+        </div>
+      </div>
+      <div class="alert" style="margin-top:12px;">🔴 REQ-005 deadline仅剩1天 — <strong>PM推动AI工程TL确认进度</strong></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 员工 ==================== -->
+<div id="emp" class="view">
+  <h2>🧑‍💻 张三 · AI工程</h2>
+  <p class="sub">TL·刘分配3任务 · 完成率85% · Token: 本周594K / 本月2.8M</p>
+
+  <div class="report-row">
+    <a class="feishu-link">📝 我的日报 <span class="report-time">每天20:00自动生成</span></a>
+    <a class="feishu-link">📊 我的周报 <span class="report-time">周五17:00自动生成</span></a>
+  </div>
+
+  <div class="row2">
+    <div class="col box">
+      <h4>📋 我的任务</h4>
+      <table>
+        <tr><th>任务</th><th>需求</th><th>飞书</th><th>依赖</th><th>等我的人</th><th>今日</th><th>本周</th><th>本月</th></tr>
+        <tr><td>T-101 ✓</td><td>REQ-001</td><td><a class="doc-link">📄</a></td><td>-</td><td style="color:#a78bfa;">T-102,T-103</td><td>80K</td><td>300K</td><td>1.5M</td></tr>
+        <tr><td>T-102 80%</td><td>REQ-001</td><td><a class="doc-link">📄</a></td><td>T-101✓</td><td style="color:#f87171;">T-104</td><td>39K</td><td>133K</td><td>820K</td></tr>
+        <tr><td>T-301 🟢</td><td>REQ-004</td><td><a class="doc-link">📄</a></td><td>-</td><td>-</td><td>9K</td><td>161K</td><td>480K</td></tr>
+      </table>
+      <div class="info" style="margin-top:8px;">⚠️ T-101已完成。T-102(李四)和T-103(赵六/推理加速)依赖你的输出。下游已自动通知。</div>
+    </div>
+    <div class="col box">
+      <h4>我的 Token 消耗</h4>
+      <div class="token-row">
+        <div class="token-card"><div class="val" style="color:#fbbf24;">128K</div><div class="lbl">今日</div></div>
+        <div class="token-card"><div class="val" style="color:#fbbf24;">594K</div><div class="lbl">本周</div></div>
+        <div class="token-card"><div class="val" style="color:#fbbf24;">2.8M</div><div class="lbl">本月</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:70px;height:70px;border-radius:50%;background:conic-gradient(#2563eb 0% 52%, #7c3aed 52% 75%, #64748b 75% 100%);display:flex;align-items:center;justify-content:center;">
+          <div style="width:36px;height:36px;border-radius:50%;background:#1e293b;font-size:10px;">594K</div>
+        </div>
+        <div>
+          <div class="legend"><span class="legend-dot" style="background:#2563eb;"></span>T-101 300K (52%)</div>
+          <div class="legend"><span class="legend-dot" style="background:#7c3aed;"></span>T-102 133K (23%)</div>
+          <div class="legend"><span class="legend-dot" style="background:#64748b;"></span>其他 161K (25%)</div>
+        </div>
+      </div>
+      <div class="meta-row">可切换: 日/周/月 · 任务/模型维度</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h4>🔒 Session 上报 <span style="font-size:11px;color:#64748b;">(AI自动关联任务，可手动修改 · 未勾选永不离机 · 撤回=物理删除)</span></h4>
+    <table>
+      <tr><th>☐</th><th>Session</th><th>时间</th><th>Token</th><th>AI匹配任务</th><th>匹配置信度</th></tr>
+      <tr><td><input type="checkbox" checked></td><td style="color:#38bdf8;">sess_4a2c1</td><td>09:00-09:52</td><td>80K</td><td>T-101 路由设计</td><td><span style="color:#4ade80;">高 95%</span></td></tr>
+      <tr><td><input type="checkbox" checked></td><td style="color:#38bdf8;">sess_b7f3d</td><td>10:15-11:30</td><td>39K</td><td>T-102 认证中间件</td><td><span style="color:#4ade80;">高 92%</span></td></tr>
+      <tr><td><input type="checkbox"></td><td style="color:#38bdf8;">sess_c8a2e</td><td>11:45-12:03</td><td>9K</td><td><span style="color:#94a3b8;">未匹配 (杂项)</span></td><td>-</td></tr>
+    </table>
+    <div class="meta-row">💡 数据保留6个月热存储 · 超期归档冷存储 · 撤回=立即物理删除</div>
+    <div style="margin-top:10px;text-align:right;"><span class="btn" style="font-size:12px;padding:6px 14px;">上报 2 个 →</span></div>
+  </div>
+</div>
+
+<!-- ==================== 流程 ==================== -->
+<div id="flow" class="view">
+  <h2>🔄 完整流程 & 关键规则</h2>
+
+  <div style="display:flex;align-items:center;gap:12px;padding:20px 0;">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;text-align:center;flex:1;">
+      <div style="width:24px;height:24px;border-radius:50%;background:#2563eb;color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-bottom:6px;">1</div>
+      <div style="font-size:14px;font-weight:700;">创建需求</div>
+      <div style="margin-top:8px;"><span class="tag t-d">总监</span> <span class="tag t-p">PM</span> <span class="tag t-b">TL</span></div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">→ AI自动生成AC(3-8条)</div>
+    </div>
+    <span style="color:#64748b;font-size:20px;">→</span>
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;text-align:center;flex:1;">
+      <div style="width:24px;height:24px;border-radius:50%;background:#2563eb;color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-bottom:6px;">2</div>
+      <div style="font-size:14px;font-weight:700;">TL拆解任务</div>
+      <div style="margin-top:8px;"><span class="tag t-b">TL</span></div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">分配+设依赖+关联AC</div>
+    </div>
+    <span style="color:#64748b;font-size:20px;">→</span>
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;text-align:center;flex:1;">
+      <div style="width:24px;height:24px;border-radius:50%;background:#2563eb;color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-bottom:6px;">3</div>
+      <div style="font-size:14px;font-weight:700;">执行+上报</div>
+      <div style="margin-top:8px;"><span class="tag t-g">全员</span></div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">AI自动匹配任务</div>
+    </div>
+    <span style="color:#64748b;font-size:20px;">→</span>
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;text-align:center;flex:1;">
+      <div style="width:24px;height:24px;border-radius:50%;background:#2563eb;color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-bottom:6px;">4</div>
+      <div style="font-size:14px;font-weight:700;">自动更新+报告</div>
+      <div style="margin-top:8px;"><span style="color:#4ade80;font-size:12px;">AC自动确认·进度更新</span></div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">日报20:00/周报周五17:00</div>
+    </div>
+  </div>
+
+  <div class="row2" style="margin-top:16px;">
+    <div class="col">
+      <div class="box"><h4>📋 关键规则</h4><div style="font-size:13px;line-height:2;">
+        · Session = 启动→结束，resume算新session<br/>
+        · 需求 = 有验收标准就算，不论大小<br/>
+        · 任务 = 无AC，只有完成/未完成<br/>
+        · Token = 只看原始量，不折现<br/>
+        · 活跃 = 当日≥1个已上报session<br/>
+        · AC确认 = 系统自动(任务全完→AC完成)<br/>
+        · TL手动关联任务→AC<br/>
+        · Session→任务 = AI自动匹配<br/>
+      </div></div>
+    </div>
+    <div class="col">
+      <div class="box"><h4>⏰ 时间规则</h4><div style="font-size:13px;line-height:2;">
+        · 日报生成：每天 20:00<br/>
+        · 周报生成：每周五 17:00<br/>
+        · 数据留存：6月热存储+冷归档<br/>
+        · 撤回 = 立即物理删除<br/>
+        · 沉寂警告：连续3天无session<br/>
+      </div></div>
+      <div class="box"><h4>🚨 升级路径</h4><div style="font-size:13px;line-height:2;">
+        · 短期阻塞：双方TL自行协商<br/>
+        · 超期未解决：PM协调推动<br/>
+        · 仍无法解决：升级到总监
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('sel'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  event.target.classList.add('sel');
+  document.getElementById(id).classList.add('on');
+}
+</script>
+</body>
+</html>
