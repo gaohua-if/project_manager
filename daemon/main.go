@@ -492,9 +492,6 @@ func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if strings.Contains(path, string(filepath.Separator)+"subagents"+string(filepath.Separator)) {
-			return nil
-		}
 		if !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
