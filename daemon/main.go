@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,26 +17,27 @@ import (
 )
 
 type Config struct {
-	APIURL       string            `yaml:"api_url"`
-	Token        string            `yaml:"token"`
-	ScanInterval string            `yaml:"scan_interval"`
-	LastUploaded map[string]string `yaml:"last_uploaded"`
+	APIURL     string `yaml:"api_url"`
+	Token      string `yaml:"token"`
+	ServerInfo string `yaml:"server_info,omitempty"`
 }
 
 type Event struct {
-	Type      string `json:"type"`
-	SessionID string `json:"sessionId"`
-	Timestamp string `json:"timestamp"`
-	Message   json.RawMessage `json:"message"`
+	Type      string          `json:"type"`
+	SessionID string          `json:"sessionId"`
+	Timestamp string          `json:"timestamp"`
+	Cwd       string          `json:"cwd,omitempty"`
+	Message   json.RawMessage `json:"message,omitempty"`
+	GitBranch string          `json:"gitBranch,omitempty"`
 }
 
-type AssistantMessage struct {
-	Model  string `json:"model"`
-	Usage  *Usage `json:"usage"`
+type AssistantMsg struct {
+	Model   string         `json:"model"`
+	Usage   *UsageInfo     `json:"usage"`
 	Content []ContentBlock `json:"content"`
 }
 
-type Usage struct {
+type UsageInfo struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 }
@@ -43,136 +45,457 @@ type Usage struct {
 type ContentBlock struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
+	Text string `json:"text"`
 }
 
-type ParsedSession struct {
-	SessionRef  string
-	StartedAt   time.Time
-	EndedAt     *time.Time
-	Model       string
-	Summary     *string
-	ToolCalls   map[string]int
-	GitCommits  []string
-	InputTokens  int64
-	OutputTokens int64
-	TotalTokens  int64
+type UserMsg struct {
+	Content []ContentBlock `json:"content"`
 }
 
-type UploadPayload struct {
-	Sessions []SessionPayload `json:"sessions"`
+type SessionInfo struct {
+	SessionRef string
+	FilePath   string
+	ProjectDir string
+	Cwd        string
+	GitBranch  string
+	StartedAt  time.Time
+	EndedAt    time.Time
+	Model      string
+	Summary    string
+	ToolCalls  map[string]int
+	InputTok   int64
+	OutputTok  int64
+	TotalTok   int64
+	NumLines   int
 }
 
-type SessionPayload struct {
-	SessionRef   string         `json:"session_ref"`
-	StartedAt    time.Time      `json:"started_at"`
-	EndedAt      *string        `json:"ended_at,omitempty"`
-	DurationSecs *int           `json:"duration_secs,omitempty"`
-	Model        string         `json:"model"`
-	Summary      *string        `json:"summary,omitempty"`
-	ToolCalls    map[string]int `json:"tool_calls,omitempty"`
-	GitCommits   []string       `json:"git_commits,omitempty"`
-	TokenUsage   *TokenPayload  `json:"token_usage,omitempty"`
+func (s *SessionInfo) Duration() time.Duration {
+	if s.EndedAt.IsZero() || s.StartedAt.IsZero() {
+		return 0
+	}
+	d := s.EndedAt.Sub(s.StartedAt)
+	if d < 0 {
+		return 0
+	}
+	return d.Round(time.Second)
 }
 
-type TokenPayload struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
-	TotalTokens  int64 `json:"total_tokens"`
+func (s *SessionInfo) FormatTokens() string {
+	return formatTokens(s.TotalTok)
 }
 
-const configPath = ".aidashboard-daemon.yaml"
+func formatTokens(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+const configFileName = ".aidashboard.yaml"
+
+func configPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, configFileName)
+}
+
+func loadConfig() *Config {
+	data, err := os.ReadFile(configPath())
+	if err != nil {
+		return &Config{}
+	}
+	var cfg Config
+	yaml.Unmarshal(data, &cfg)
+	return &cfg
+}
+
+func saveConfig(cfg *Config) {
+	data, _ := yaml.Marshal(cfg)
+	os.WriteFile(configPath(), data, 0600)
+}
+
+func requireAuth(cfg *Config) {
+	if cfg.Token == "" {
+		fmt.Println("Not logged in. Run: aidashboard login")
+		os.Exit(1)
+	}
+	if cfg.APIURL == "" {
+		fmt.Println("Server URL not set. Run: aidashboard login --server <url>")
+		os.Exit(1)
+	}
+}
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: aidashboard <command> [args]")
-		fmt.Println("Commands: config, upload, daemon")
-		os.Exit(1)
+		printUsage()
+		os.Exit(0)
 	}
 
 	switch os.Args[1] {
-	case "config":
-		cmdConfig()
-	case "upload":
-		cmdUpload()
-	case "daemon":
-		cmdDaemon()
+	case "login":
+		cmdLogin(os.Args[2:])
+	case "sessions", "ls":
+		cmdSessions(os.Args[2:])
+	case "upload", "push":
+		cmdUpload(os.Args[2:])
+	case "status":
+		cmdStatus()
+	case "help", "--help", "-h":
+		printUsage()
 	default:
-		fmt.Printf("Unknown command: %s\n", os.Args[1])
+		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
+		printUsage()
 		os.Exit(1)
 	}
 }
 
-func cmdConfig() {
-	cfg := loadConfig()
-	args := os.Args[2:]
-	for i := 0; i < len(args)-1; i += 2 {
-		switch args[i] {
-		case "--api-url":
-			cfg.APIURL = args[i+1]
-		case "--token":
-			cfg.Token = args[i+1]
-		case "--scan-interval":
-			cfg.ScanInterval = args[i+1]
-		}
-	}
-	saveConfig(cfg)
-	fmt.Println("Config saved to", configPath)
+func printUsage() {
+	fmt.Print(`aidashboard - CLI for uploading Claude Code sessions to AIDashboard
+
+Usage:
+  aidashboard <command> [options]
+
+Commands:
+  login    --server <url> --token <token>   Login with server URL and API token
+  sessions [--all] [--project <dir>]        List local Claude Code sessions
+  upload   [numbers...] [--all]             Upload sessions to server
+  status                                     Show current login status
+
+Examples:
+  # Login with platform token
+  aidashboard login --server http://localhost:8080/api/v1 --token eyJhbG...
+
+  # Login interactively (enter token when prompted)
+  aidashboard login --server http://localhost:8080/api/v1
+
+  # List recent sessions (last 48h)
+  aidashboard sessions
+
+  # List all sessions
+  aidashboard sessions --all
+
+  # Filter by project directory
+  aidashboard sessions --project project-manager
+
+  # Upload specific sessions by number
+  aidashboard upload 1 3 5
+
+  # Upload all recent sessions
+  aidashboard upload --all
+
+  # Interactive upload (shows picker)
+  aidashboard upload
+
+  # Check login status
+  aidashboard status
+
+Session logs location:
+  ~/.claude/projects/
+
+Documentation:
+  PRD:        See PRD.md in the project repository
+  Prototype:  See prototype.html in the project repository
+  API:        http://localhost:8080/health  (health check)
+`)
 }
 
-func cmdUpload() {
+// ---- login ----
+
+func cmdLogin(args []string) {
 	cfg := loadConfig()
-	if cfg.APIURL == "" || cfg.Token == "" {
-		log.Fatal("Run 'aidashboard config --api-url=... --token=...' first")
+
+	server := ""
+	token := ""
+	for i := 0; i < len(args)-1; i++ {
+		switch args[i] {
+		case "--server", "-s":
+			server = args[i+1]
+		case "--token", "-t":
+			token = args[i+1]
+		}
+	}
+
+	if server == "" && cfg.APIURL == "" {
+		fmt.Print("Server URL [http://localhost:8080/api/v1]: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		server = strings.TrimSpace(input)
+		if server == "" {
+			server = "http://localhost:8080/api/v1"
+		}
+	}
+	if server != "" {
+		cfg.APIURL = strings.TrimRight(server, "/")
+	}
+
+	if token == "" {
+		fmt.Print("Enter API token: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		token = strings.TrimSpace(input)
+	}
+
+	if token == "" {
+		fmt.Println("Error: token is required")
+		os.Exit(1)
+	}
+	cfg.Token = token
+
+	// Verify
+	resp, err := apiGet(cfg, "/auth/me")
+	if err != nil {
+		fmt.Printf("Login failed: %v\n", err)
+		fmt.Println("Check your token and server URL")
+		os.Exit(1)
+	}
+
+	var user struct {
+		Name string `json:"name"`
+		Role string `json:"role"`
+	}
+	json.Unmarshal(resp, &user)
+
+	cfg.ServerInfo = fmt.Sprintf("%s (%s)", user.Name, user.Role)
+	saveConfig(cfg)
+
+	fmt.Printf("Logged in as %s (%s) at %s\n", user.Name, user.Role, cfg.APIURL)
+	fmt.Printf("Config saved to %s\n", configPath())
+}
+
+// ---- sessions ----
+
+func cmdSessions(args []string) {
+	showAll := false
+	projectFilter := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all", "-a":
+			showAll = true
+		case "--project", "-p":
+			if i+1 < len(args) {
+				projectFilter = args[i+1]
+				i++
+			}
+		}
 	}
 
 	home, _ := os.UserHomeDir()
 	claudeDir := filepath.Join(home, ".claude", "projects")
 
-	sessions := scanAndParse(claudeDir)
+	sessions := scanSessions(claudeDir, showAll)
+	if projectFilter != "" {
+		var filtered []*SessionInfo
+		for _, s := range sessions {
+			if strings.Contains(s.ProjectDir, projectFilter) || strings.Contains(s.Cwd, projectFilter) {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
 	if len(sessions) == 0 {
-		fmt.Println("No new sessions found")
+		fmt.Println("No sessions found.")
+		fmt.Println()
+		fmt.Println("Claude Code session logs are stored at:")
+		fmt.Printf("  %s/\n", claudeDir)
+		fmt.Println()
+		fmt.Println("Each .jsonl file = one session. Sub-agent sessions are excluded.")
 		return
 	}
 
-	uploaded := upload(cfg, sessions)
-	fmt.Printf("Uploaded %d sessions\n", uploaded)
-}
+	// Header
+	fmt.Printf("\n  %-4s  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
+		"#", "Date", "Tokens", "Duration", "Model", "Project", "Summary")
+	fmt.Println("  " + strings.Repeat("-", 108))
 
-func cmdDaemon() {
-	cfg := loadConfig()
-	if cfg.APIURL == "" || cfg.Token == "" {
-		log.Fatal("Run 'aidashboard config --api-url=... --token=...' first")
+	for i, s := range sessions {
+		dateStr := s.StartedAt.Format("2006-01-02 15:04")
+		durStr := "-"
+		if d := s.Duration(); d > 0 {
+			durStr = fmt.Sprintf("%dm", int(d.Minutes()))
+		}
+		model := s.Model
+		if len(model) > 10 {
+			model = model[:7] + ".."
+		}
+		project := s.ProjectDir
+		if len(project) > 22 {
+			project = ".." + project[len(project)-20:]
+		}
+		summary := s.Summary
+		if len(summary) > 35 {
+			summary = summary[:32] + "..."
+		}
+
+		fmt.Printf("  %-4d  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
+			i+1, dateStr, s.FormatTokens(), durStr, model, project, summary)
 	}
 
-	interval := 5 * time.Minute
-	if cfg.ScanInterval != "" {
-		if d, err := time.ParseDuration(cfg.ScanInterval); err == nil {
-			interval = d
+	fmt.Printf("\n  Total: %d sessions\n", len(sessions))
+	fmt.Printf("  Session logs: %s/\n\n", claudeDir)
+}
+
+// ---- upload ----
+
+func cmdUpload(args []string) {
+	cfg := loadConfig()
+	requireAuth(cfg)
+
+	uploadAll := false
+	var selectedIdx []int
+
+	for _, a := range args {
+		if a == "--all" || a == "-a" {
+			uploadAll = true
+		} else if n, err := strconv.Atoi(a); err == nil {
+			selectedIdx = append(selectedIdx, n)
 		}
 	}
 
 	home, _ := os.UserHomeDir()
-	claudeDir := filepath.Join(home, ".claude", "projects")
+	sessions := scanSessions(filepath.Join(home, ".claude", "projects"), true)
 
-	fmt.Printf("Daemon started, scanning every %s\n", interval)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	if len(sessions) == 0 {
+		fmt.Println("No sessions found to upload.")
+		return
+	}
 
-	for {
-		sessions := scanAndParse(claudeDir)
-		if len(sessions) > 0 {
-			uploaded := upload(cfg, sessions)
-			fmt.Printf("[%s] Uploaded %d sessions\n", time.Now().Format("15:04:05"), uploaded)
+	var toUpload []*SessionInfo
+
+	if uploadAll {
+		toUpload = sessions
+	} else if len(selectedIdx) > 0 {
+		for _, idx := range selectedIdx {
+			if idx < 1 || idx > len(sessions) {
+				fmt.Printf("Invalid session number: %d (range 1-%d)\n", idx, len(sessions))
+				os.Exit(1)
+			}
+			toUpload = append(toUpload, sessions[idx-1])
 		}
-		<-ticker.C
+	} else {
+		// Interactive picker
+		fmt.Println("\nSelect sessions to upload:")
+		fmt.Println()
+		for i, s := range sessions {
+			dateStr := s.StartedAt.Format("2006-01-02 15:04")
+			summary := s.Summary
+			if len(summary) > 50 {
+				summary = summary[:47] + "..."
+			}
+			fmt.Printf("  %-3d  %s  %8s  %s\n", i+1, dateStr, s.FormatTokens(), summary)
+		}
+		fmt.Println()
+		fmt.Print("Enter session numbers (e.g. 1,3,5 or 'all'): ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		if input == "all" || input == "a" {
+			toUpload = sessions
+		} else {
+			for _, part := range strings.Split(input, ",") {
+				part = strings.TrimSpace(part)
+				if n, err := strconv.Atoi(part); err == nil && n >= 1 && n <= len(sessions) {
+					toUpload = append(toUpload, sessions[n-1])
+				}
+			}
+		}
+	}
+
+	if len(toUpload) == 0 {
+		fmt.Println("No sessions selected.")
+		return
+	}
+
+	fmt.Printf("\nUploading %d session(s) to %s ...\n\n", len(toUpload), cfg.APIURL)
+
+	okCount := 0
+	for _, s := range toUpload {
+		payload := buildUploadPayload(s)
+		body, _ := json.Marshal(map[string]any{"sessions": []any{payload}})
+
+		respBody, err := apiPost(cfg, "/sessions/batch", body)
+		if err != nil {
+			fmt.Printf("  [FAIL]  %-14s  %s  %v\n", s.SessionRef[:12], s.StartedAt.Format("15:04"), err)
+			continue
+		}
+
+		var result struct {
+			Results []struct {
+				SessionRef string `json:"session_ref"`
+				Status     string `json:"status"`
+			} `json:"results"`
+		}
+		json.Unmarshal(respBody, &result)
+
+		for _, r := range result.Results {
+			switch r.Status {
+			case "created":
+				fmt.Printf("  [OK]    %-14s  %s  %8s  %s\n",
+					s.SessionRef[:12], s.StartedAt.Format("15:04"), s.FormatTokens(), trunc(s.Summary, 40))
+				okCount++
+			case "duplicate":
+				fmt.Printf("  [SKIP]  %-14s  %s  (already uploaded)\n",
+					s.SessionRef[:12], s.StartedAt.Format("15:04"))
+			default:
+				fmt.Printf("  [%s]  %-14s  %s\n", r.Status, s.SessionRef[:12], s.StartedAt.Format("15:04"))
+			}
+		}
+	}
+
+	fmt.Printf("\nDone. %d/%d uploaded.\n", okCount, len(toUpload))
+	if okCount > 0 {
+		fmt.Printf("Dashboard: %s\n", strings.Replace(cfg.APIURL, "/api/v1", "", 1))
 	}
 }
 
-func scanAndParse(claudeDir string) []*ParsedSession {
-	var sessions []*ParsedSession
+// ---- status ----
+
+func cmdStatus() {
+	cfg := loadConfig()
+
+	if cfg.Token == "" {
+		fmt.Println("Not logged in.")
+		fmt.Println("\nRun: aidashboard login --server <url> --token <token>")
+		return
+	}
+
+	fmt.Printf("Server:  %s\n", cfg.APIURL)
+	fmt.Printf("Config:  %s\n", configPath())
+
+	if cfg.ServerInfo != "" {
+		fmt.Printf("User:    %s\n", cfg.ServerInfo)
+	}
+
+	resp, err := apiGet(cfg, "/auth/me")
+	if err != nil {
+		fmt.Printf("Status:  disconnected (%v)\n", err)
+		return
+	}
+	var user struct {
+		Name string `json:"name"`
+		Role string `json:"role"`
+	}
+	json.Unmarshal(resp, &user)
+	fmt.Printf("Status:  logged in as %s (%s)\n", user.Name, user.Role)
+}
+
+// ---- scanning ----
+
+func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
+	var sessions []*SessionInfo
 
 	filepath.WalkDir(claudeDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if strings.Contains(path, string(filepath.Separator)+"subagents"+string(filepath.Separator)) {
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
 
@@ -181,28 +504,50 @@ func scanAndParse(claudeDir string) []*ParsedSession {
 			return nil
 		}
 
-		if time.Since(info.ModTime()) > 24*time.Hour {
+		if !showAll && time.Since(info.ModTime()) > 48*time.Hour {
 			return nil
 		}
 
 		session := parseJSONL(path)
-		if session != nil && session.SessionRef != "" {
-			sessions = append(sessions, session)
+		if session == nil || session.SessionRef == "" {
+			return nil
 		}
+
+		rel, _ := filepath.Rel(claudeDir, path)
+		parts := strings.SplitN(rel, string(filepath.Separator), 2)
+		session.ProjectDir = decodeProjectDir(parts[0])
+		session.FilePath = path
+		sessions = append(sessions, session)
 		return nil
 	})
+
+	// Sort newest first
+	for i := 0; i < len(sessions); i++ {
+		for j := i + 1; j < len(sessions); j++ {
+			if sessions[j].StartedAt.After(sessions[i].StartedAt) {
+				sessions[i], sessions[j] = sessions[j], sessions[i]
+			}
+		}
+	}
 
 	return sessions
 }
 
-func parseJSONL(path string) *ParsedSession {
+func decodeProjectDir(dir string) string {
+	// -home-gh-project-manager -> /home/gh/project-manager
+	dir = strings.TrimPrefix(dir, "-")
+	parts := strings.Split(dir, "-")
+	return "/" + strings.Join(parts, "/")
+}
+
+func parseJSONL(path string) *SessionInfo {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
 
-	session := &ParsedSession{
+	s := &SessionInfo{
 		ToolCalls: make(map[string]int),
 	}
 
@@ -211,43 +556,51 @@ func parseJSONL(path string) *ParsedSession {
 	scanner.Buffer(buf, 10*1024*1024)
 
 	firstUserMsg := true
+	var lastTS time.Time
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
+		s.NumLines++
 
 		var event Event
-		if err := json.Unmarshal(line, &event); err != nil {
+		if json.Unmarshal(line, &event) != nil {
 			continue
 		}
 
-		switch event.Type {
-		case "summary":
-			if session.SessionRef == "" {
-				session.SessionRef = event.SessionID
-			}
+		if event.SessionID != "" && s.SessionRef == "" {
+			s.SessionRef = event.SessionID
+		}
 
-		case "user":
-			if session.SessionRef == "" {
-				session.SessionRef = event.SessionID
-			}
-			if firstUserMsg && session.Summary == nil {
-				var msg struct {
-					Content []struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"content"`
+		if event.Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, event.Timestamp); err == nil {
+				lastTS = t
+				if s.StartedAt.IsZero() {
+					s.StartedAt = t
 				}
+			}
+		}
+
+		if event.Cwd != "" && s.Cwd == "" {
+			s.Cwd = event.Cwd
+		}
+		if event.GitBranch != "" && s.GitBranch == "" {
+			s.GitBranch = event.GitBranch
+		}
+
+		switch event.Type {
+		case "user":
+			if firstUserMsg && s.Summary == "" {
+				var msg UserMsg
 				if json.Unmarshal(event.Message, &msg) == nil {
 					for _, c := range msg.Content {
 						if c.Type == "text" && c.Text != "" {
-							text := c.Text
-							if len(text) > 200 {
-								text = text[:200] + "..."
+							s.Summary = c.Text
+							if len(s.Summary) > 200 {
+								s.Summary = s.Summary[:197] + "..."
 							}
-							session.Summary = &text
 							break
 						}
 					}
@@ -256,118 +609,112 @@ func parseJSONL(path string) *ParsedSession {
 			}
 
 		case "assistant":
-			if session.SessionRef == "" {
-				session.SessionRef = event.SessionID
-			}
-			var msg AssistantMessage
+			var msg AssistantMsg
 			if json.Unmarshal(event.Message, &msg) == nil {
 				if msg.Model != "" && msg.Model != "<synthetic>" {
-					session.Model = msg.Model
+					s.Model = msg.Model
 				}
 				if msg.Usage != nil {
-					session.InputTokens += msg.Usage.InputTokens
-					session.OutputTokens += msg.Usage.OutputTokens
+					s.InputTok += msg.Usage.InputTokens
+					s.OutputTok += msg.Usage.OutputTokens
 				}
 				for _, c := range msg.Content {
-					if c.Type == "tool_use" {
-						session.ToolCalls[c.Name]++
+					if c.Type == "tool_use" && c.Name != "" {
+						s.ToolCalls[c.Name]++
 					}
 				}
 			}
 		}
 	}
 
-	session.TotalTokens = session.InputTokens + session.OutputTokens
+	s.TotalTok = s.InputTok + s.OutputTok
+	if !lastTS.IsZero() {
+		s.EndedAt = lastTS
+	}
 
-	if session.SessionRef == "" {
+	if s.SessionRef == "" {
 		return nil
 	}
-
-	session.StartedAt = time.Now().Add(-time.Minute)
-
-	if session.TotalTokens > 0 {
-		return session
-	}
-	return nil
+	return s
 }
 
-func upload(cfg *Config, sessions []*ParsedSession) int {
-	payload := UploadPayload{
-		Sessions: make([]SessionPayload, 0, len(sessions)),
+// ---- API helpers ----
+
+func apiGet(cfg *Config, path string) (json.RawMessage, error) {
+	req, err := http.NewRequest("GET", cfg.APIURL+path, nil)
+	if err != nil {
+		return nil, err
 	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	return doRequest(req)
+}
 
-	for _, s := range sessions {
-		var endedAt *string
-		var durationSecs *int
-		if s.EndedAt != nil {
-			t := s.EndedAt.Format(time.RFC3339)
-			endedAt = &t
-			d := int(s.EndedAt.Sub(s.StartedAt).Seconds())
-			durationSecs = &d
-		}
-
-		var tokenUsage *TokenPayload
-		if s.TotalTokens > 0 {
-			tokenUsage = &TokenPayload{
-				InputTokens:  s.InputTokens,
-				OutputTokens: s.OutputTokens,
-				TotalTokens:  s.TotalTokens,
-			}
-		}
-
-		payload.Sessions = append(payload.Sessions, SessionPayload{
-			SessionRef:   s.SessionRef,
-			StartedAt:    s.StartedAt,
-			EndedAt:      endedAt,
-			DurationSecs: durationSecs,
-			Model:        s.Model,
-			Summary:      s.Summary,
-			ToolCalls:    s.ToolCalls,
-			GitCommits:   s.GitCommits,
-			TokenUsage:   tokenUsage,
-		})
+func apiPost(cfg *Config, path string, body []byte) (json.RawMessage, error) {
+	req, err := http.NewRequest("POST", cfg.APIURL+path, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, err
 	}
-
-	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", cfg.APIURL+"/sessions/batch", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	return doRequest(req)
+}
 
-	resp, err := http.DefaultClient.Do(req)
+func doRequest(req *http.Request) (json.RawMessage, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Upload failed: %v", err)
-		return 0
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("Upload returned status %d", resp.StatusCode)
-		return 0
+	data, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("unauthorized - token may be expired or invalid")
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(data), 200))
 	}
 
-	return len(sessions)
+	return json.RawMessage(data), nil
 }
 
-func loadConfig() *Config {
-	home, _ := os.UserHomeDir()
-	data, err := os.ReadFile(filepath.Join(home, configPath))
-	if err != nil {
-		return &Config{
-			LastUploaded: make(map[string]string),
+func buildUploadPayload(s *SessionInfo) map[string]any {
+	p := map[string]any{
+		"session_ref": s.SessionRef,
+		"started_at":  s.StartedAt.Format(time.RFC3339),
+		"model":       s.Model,
+	}
+	if !s.EndedAt.IsZero() && !s.StartedAt.IsZero() {
+		p["ended_at"] = s.EndedAt.Format(time.RFC3339)
+		d := int(s.EndedAt.Sub(s.StartedAt).Seconds())
+		if d > 0 {
+			p["duration_secs"] = d
 		}
 	}
-	var cfg Config
-	if yaml.Unmarshal(data, &cfg) != nil {
-		return &Config{LastUploaded: make(map[string]string)}
+	if s.Summary != "" {
+		p["summary"] = s.Summary
 	}
-	if cfg.LastUploaded == nil {
-		cfg.LastUploaded = make(map[string]string)
+	if len(s.ToolCalls) > 0 {
+		p["tool_calls"] = s.ToolCalls
 	}
-	return &cfg
+	if s.TotalTok > 0 {
+		p["token_usage"] = map[string]int64{
+			"input_tokens":  s.InputTok,
+			"output_tokens": s.OutputTok,
+			"total_tokens":  s.TotalTok,
+		}
+	}
+	return p
 }
 
-func saveConfig(cfg *Config) {
-	home, _ := os.UserHomeDir()
-	data, _ := yaml.Marshal(cfg)
-	os.WriteFile(filepath.Join(home, configPath), data, 0600)
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-3] + "..."
+}
+
+func trunc(s string, n int) string {
+	return truncate(s, n)
 }
