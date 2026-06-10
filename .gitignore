@@ -1,0 +1,36 @@
+# Go
+api/bin/
+api/tmp/
+
+# Node
+web/node_modules/
+web/.next/
+web/out/
+
+# Environment
+.env
+.env.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+pgdata/
+
+# Daemon
+daemon/bin/
+daemon/tmp/
+
+# Build
+*.exe
+*.dll
+*.so
+*.dylib

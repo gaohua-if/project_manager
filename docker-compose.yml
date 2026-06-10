@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: aidashboard
+      POSTGRES_USER: aidashboard
+      POSTGRES_PASSWORD: devpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aidashboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: "postgres://aidashboard:devpassword@db:5432/aidashboard?sslmode=disable"
+      JWT_SECRET: "dev-jwt-secret-change-in-prod"
+      AI_API_URL: ""
+      AI_API_KEY: ""
+      AI_MODEL: ""
+      CORS_ORIGIN: "http://localhost:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8080/api/v1"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
