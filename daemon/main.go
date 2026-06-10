@@ -67,6 +67,7 @@ type SessionInfo struct {
 	OutputTok  int64
 	TotalTok   int64
 	NumLines   int
+	SubFiles   []string // subagent JSONL file paths
 }
 
 func (s *SessionInfo) Duration() time.Duration {
@@ -331,6 +332,9 @@ func cmdSessions(args []string) {
 
 		fmt.Printf("  %-4d  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
 			i+1, dateStr, s.FormatTokens(), durStr, model, project, summary)
+			if len(s.SubFiles) > 0 {
+				fmt.Printf("        %-38s %d sub-agent(s)\n", "", len(s.SubFiles))
+			}
 	}
 
 	fmt.Printf("\n  Total: %d sessions\n", len(sessions))
@@ -412,10 +416,21 @@ func cmdUpload(args []string) {
 
 	fmt.Printf("\nUploading %d session(s) to %s ...\n\n", len(toUpload), cfg.APIURL)
 
-	okCount := 0
+	totalUploaded := 0
+	totalSubs := 0
+
 	for _, s := range toUpload {
-		payload := buildUploadPayload(s)
-		body, _ := json.Marshal(map[string]any{"sessions": []any{payload}})
+		// Build batch: main session + all sub-agent sessions
+		batch := []any{buildUploadPayload(s)}
+		for _, subFile := range s.SubFiles {
+			sub := parseJSONL(subFile)
+			if sub != nil && sub.SessionRef != "" {
+				batch = append(batch, buildUploadPayload(sub))
+				totalSubs++
+			}
+		}
+
+		body, _ := json.Marshal(map[string]any{"sessions": batch})
 
 		respBody, err := apiPost(cfg, "/sessions/batch", body)
 		if err != nil {
@@ -424,6 +439,7 @@ func cmdUpload(args []string) {
 		}
 
 		var result struct {
+			Total   int `json:"total"`
 			Results []struct {
 				SessionRef string `json:"session_ref"`
 				Status     string `json:"status"`
@@ -431,23 +447,37 @@ func cmdUpload(args []string) {
 		}
 		json.Unmarshal(respBody, &result)
 
+		mainStatus := "unknown"
+		subCreated := 0
 		for _, r := range result.Results {
-			switch r.Status {
-			case "created":
-				fmt.Printf("  [OK]    %-14s  %s  %8s  %s\n",
-					s.SessionRef[:12], s.StartedAt.Format("15:04"), s.FormatTokens(), trunc(s.Summary, 40))
-				okCount++
-			case "duplicate":
-				fmt.Printf("  [SKIP]  %-14s  %s  (already uploaded)\n",
-					s.SessionRef[:12], s.StartedAt.Format("15:04"))
-			default:
-				fmt.Printf("  [%s]  %-14s  %s\n", r.Status, s.SessionRef[:12], s.StartedAt.Format("15:04"))
+			if r.SessionRef == s.SessionRef {
+				mainStatus = r.Status
 			}
+			if r.Status == "created" {
+				subCreated++
+			}
+		}
+
+		switch mainStatus {
+		case "created":
+			fmt.Printf("  [OK]    %-14s  %s  %8s  %s\n",
+				s.SessionRef[:12], s.StartedAt.Format("15:04"), s.FormatTokens(), trunc(s.Summary, 40))
+			totalUploaded++
+		case "duplicate":
+			fmt.Printf("  [SKIP]  %-14s  %s  (already uploaded)\n",
+				s.SessionRef[:12], s.StartedAt.Format("15:04"))
+		default:
+			fmt.Printf("  [%s]  %-14s  %s\n", mainStatus, s.SessionRef[:12], s.StartedAt.Format("15:04"))
+		}
+
+		if subCreated > 0 {
+			fmt.Printf("          └─ %d sub-agent(s) uploaded\n", subCreated)
+			totalSubs += subCreated
 		}
 	}
 
-	fmt.Printf("\nDone. %d/%d uploaded.\n", okCount, len(toUpload))
-	if okCount > 0 {
+	fmt.Printf("\nDone. %d main + %d sub-agent(s) uploaded.\n", totalUploaded, totalSubs)
+	if totalUploaded > 0 || totalSubs > 0 {
 		fmt.Printf("Dashboard: %s\n", strings.Replace(cfg.APIURL, "/api/v1", "", 1))
 	}
 }
@@ -492,6 +522,9 @@ func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
 		if err != nil || d.IsDir() {
 			return nil
 		}
+		if strings.Contains(path, string(filepath.Separator)+"subagents"+string(filepath.Separator)) {
+			return nil
+		}
 		if !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
@@ -514,6 +547,18 @@ func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
 		parts := strings.SplitN(rel, string(filepath.Separator), 2)
 		session.ProjectDir = decodeProjectDir(parts[0])
 		session.FilePath = path
+
+		// Collect subagent sessions from <session-id>/subagents/*.jsonl
+		sessionDir := strings.TrimSuffix(path, ".jsonl")
+		subDir := filepath.Join(sessionDir, "subagents")
+		if entries, err := os.ReadDir(subDir); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+					session.SubFiles = append(session.SubFiles, filepath.Join(subDir, e.Name()))
+				}
+			}
+		}
+
 		sessions = append(sessions, session)
 		return nil
 	})
