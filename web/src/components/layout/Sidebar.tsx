@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: string[] }>> = {
   director: [
     { label: "Dashboard", href: "/dashboard", roles: ["director"] },
+    { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
     { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
@@ -16,6 +17,7 @@ const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: stri
   ],
   pm: [
     { label: "Dashboard", href: "/dashboard", roles: ["pm"] },
+    { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
     { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
@@ -23,6 +25,7 @@ const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: stri
   ],
   team_leader: [
     { label: "Dashboard", href: "/dashboard", roles: ["team_leader"] },
+    { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
     { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
