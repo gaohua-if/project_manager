@@ -10,7 +10,7 @@ export default function RequirementsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    api.getRequirements().then(setRequirements).catch(() => {});
+    api.getRequirements().then((data) => setRequirements(Array.isArray(data) ? data : [])).catch(() => setRequirements([]));
   }, []);
 
   return (

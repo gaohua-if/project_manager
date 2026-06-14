@@ -97,11 +97,15 @@ func (h *AuthHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var users []model.User
+	users := []model.User{}
 	for rows.Next() {
 		var u model.User
 		rows.Scan(&u.ID, &u.Name, &u.Role, &u.TeamID, &u.TeamName)
 		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 	writeJSON(w, http.StatusOK, users)
 }

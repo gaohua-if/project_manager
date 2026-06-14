@@ -15,6 +15,23 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./api
@@ -28,8 +45,18 @@ services:
       AI_API_KEY: ""
       AI_MODEL: ""
       CORS_ORIGIN: "http://localhost:3000"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin123"
+      MINIO_BUCKET: "aidashboard"
+      MINIO_USE_SSL: "false"
+      MINIO_EXTERNAL_ENDPOINT: "http://localhost:9000"
+      REPORT_GENERATOR_URL: "http://consumer:8090"
+      TZ: "${TZ:-Asia/Shanghai}"
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   web:
@@ -43,5 +70,21 @@ services:
     depends_on:
       - api
 
+  consumer:
+    build:
+      context: ./daemon
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgres://aidashboard:devpassword@db:5432/aidashboard?sslmode=disable"
+      AIDASHBOARD_CLAUDE_TIMEOUT: "${AIDASHBOARD_CLAUDE_TIMEOUT:-10m}"
+      PORT: "8090"
+      TZ: "${TZ:-Asia/Shanghai}"
+    volumes:
+      - ${HOME}/.claude:/root/.claude
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  minio_data:

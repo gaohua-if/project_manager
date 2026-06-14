@@ -12,7 +12,7 @@ const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: stri
     { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
+    { label: "Products", href: "/products", roles: ["director", "team_leader", "employee"] },
     { label: "Reports", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
   ],
   pm: [
@@ -20,7 +20,7 @@ const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: stri
     { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
+    { label: "Products", href: "/products", roles: ["director", "team_leader", "employee"] },
     { label: "Reports", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
   ],
   team_leader: [
@@ -28,13 +28,13 @@ const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: stri
     { label: "Organization", href: "/organization", roles: ["director", "pm", "team_leader"] },
     { label: "Requirements", href: "/requirements", roles: ["director", "pm", "team_leader"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
+    { label: "Products", href: "/products", roles: ["director", "team_leader", "employee"] },
     { label: "Reports", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
   ],
   employee: [
     { label: "Dashboard", href: "/dashboard", roles: ["employee"] },
     { label: "Tasks", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "Sessions", href: "/sessions", roles: ["director", "team_leader", "employee"] },
+    { label: "Products", href: "/products", roles: ["director", "team_leader", "employee"] },
     { label: "Reports", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
   ],
 };
@@ -43,6 +43,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setUser(api.getUser());
@@ -78,6 +79,19 @@ export default function Sidebar() {
           ))}
       </nav>
       <div className="p-4 border-t border-border">
+        <button
+          onClick={() => {
+            const token = localStorage.getItem("token");
+            if (token) {
+              navigator.clipboard.writeText(token);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }
+          }}
+          className="text-sm text-dim hover:text-info transition-colors block mb-2"
+        >
+          {copied ? "Copied!" : "Copy Token"}
+        </button>
         <button
           onClick={() => {
             api.clearToken();

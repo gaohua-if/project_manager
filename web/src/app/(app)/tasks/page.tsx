@@ -2,16 +2,103 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import type { Task } from "@/lib/types";
+import type { Requirement, Task, User } from "@/lib/types";
 import Link from "next/link";
 
 export default function TasksPage() {
+  const [user] = useState(() => api.getUser());
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [filter, setFilter] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [title, setTitle] = useState("");
+  const [requirementId, setRequirementId] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueDate, setDueDate] = useState("");
+  const [acceptanceCriteriaIds, setAcceptanceCriteriaIds] = useState<number[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const isTeamLeader = user?.role === "team_leader";
 
   useEffect(() => {
-    api.getTasks(filter ? { status: filter } : undefined).then(setTasks).catch(() => {});
+    api.getTasks(filter ? { status: filter } : undefined).then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
   }, [filter]);
+
+  useEffect(() => {
+    if (!isTeamLeader) return;
+    Promise.all([
+      api.getRequirements(),
+      api.getUsers(),
+    ])
+      .then(([reqData, userData]) => {
+        setRequirements(Array.isArray(reqData) ? reqData : []);
+        setUsers(Array.isArray(userData) ? userData : []);
+      })
+      .catch(() => {
+        setRequirements([]);
+        setUsers([]);
+      });
+  }, [isTeamLeader]);
+
+  const teamEmployees = users.filter((u) => u.role === "employee" && u.team_id === user?.team_id);
+  const selectedRequirement = requirements.find((r) => r.id === requirementId);
+
+  const resetCreateForm = () => {
+    setTitle("");
+    setRequirementId("");
+    setAssigneeId("");
+    setPriority("medium");
+    setDueDate("");
+    setAcceptanceCriteriaIds([]);
+    setError("");
+  };
+
+  const handleRequirementChange = (nextRequirementId: string) => {
+    setRequirementId(nextRequirementId);
+    setAcceptanceCriteriaIds([]);
+  };
+
+  const toggleAcceptanceCriteria = (index: number) => {
+    setAcceptanceCriteriaIds((current) =>
+      current.includes(index) ? current.filter((item) => item !== index) : [...current, index].sort((a, b) => a - b)
+    );
+  };
+
+  const refreshTasks = () => {
+    api.getTasks(filter ? { status: filter } : undefined)
+      .then((data) => setTasks(Array.isArray(data) ? data : []))
+      .catch(() => setTasks([]));
+  };
+
+  const handleCreateTask = async () => {
+    if (!title.trim() || !requirementId || !assigneeId) {
+      setError("Title, requirement, and assignee are required.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.createTask({
+        requirement_id: requirementId,
+        title: title.trim(),
+        acceptance_criteria_ids: acceptanceCriteriaIds,
+        assignee_id: assigneeId,
+        priority,
+        due_date: dueDate || undefined,
+      });
+      resetCreateForm();
+      setShowCreate(false);
+      refreshTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create task.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div>
@@ -20,18 +107,142 @@ export default function TasksPage() {
           <h2 className="text-xl font-bold">Tasks</h2>
           <p className="text-sm text-muted">View and manage tasks</p>
         </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Status</option>
-          <option value="todo">Todo</option>
-          <option value="in_progress">In Progress</option>
-          <option value="done">Done</option>
-          <option value="blocked">Blocked</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {isTeamLeader && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreate((value) => !value);
+                setError("");
+              }}
+              className="bg-primary text-white rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+            >
+              {showCreate ? "Close" : "+ Create Task"}
+            </button>
+          )}
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">All Status</option>
+            <option value="todo">Todo</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
       </div>
+
+      {isTeamLeader && showCreate && (
+        <div className="bg-surface rounded-xl p-4 border border-border mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs font-medium text-muted mb-1">Task title</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Implement API pagination"
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-medium text-muted mb-1">Requirement</span>
+              <select
+                value={requirementId}
+                onChange={(e) => handleRequirementChange(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select requirement</option>
+                {requirements.map((requirement) => (
+                  <option key={requirement.id} value={requirement.id}>{requirement.title}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-medium text-muted mb-1">Assignee</span>
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select employee</option>
+                {teamEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>{employee.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs font-medium text-muted mb-1">Priority</span>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-muted mb-1">Due date</span>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </label>
+            </div>
+          </div>
+
+          {selectedRequirement && selectedRequirement.acceptance_criteria.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-muted mb-2">Acceptance criteria</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {selectedRequirement.acceptance_criteria.map((criterion, index) => (
+                  <label key={`${selectedRequirement.id}-${index}`} className="flex items-start gap-2 rounded-lg border border-border bg-background/60 p-3 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={acceptanceCriteriaIds.includes(index)}
+                      onChange={() => toggleAcceptanceCriteria(index)}
+                      className="mt-0.5 accent-blue-500"
+                    />
+                    <span>{criterion}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetCreateForm();
+                setShowCreate(false);
+              }}
+              className="px-4 py-2 text-sm text-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateTask}
+              disabled={submitting || !title.trim() || !requirementId || !assigneeId}
+              className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {submitting ? "Creating..." : "Create and assign"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-surface rounded-xl border border-border">
         <table className="w-full text-sm">

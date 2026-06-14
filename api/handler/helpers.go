@@ -48,3 +48,13 @@ func parseTimePtr(s string) *time.Time {
 	}
 	return &t
 }
+
+func truncateForError(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if n <= 3 {
+		return s[:n]
+	}
+	return s[:n-3] + "..."
+}

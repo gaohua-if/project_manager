@@ -199,6 +199,36 @@ class ApiClient {
     })
   }
 
+  getSessionLogURL(sessionId: string): string {
+    return `${API_BASE}/sessions/${sessionId}/log`
+  }
+
+  // Documents
+  async getDocuments(params?: Record<string, string>) {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : ""
+    return this.request<import("./types").Document[]>(`/documents${qs}`)
+  }
+
+  async createDocument(data: { title: string; url: string; description?: string; task_id?: string }) {
+    return this.request<import("./types").Document>("/documents", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateDocument(id: string, data: Record<string, unknown>) {
+    return this.request<import("./types").Document[]>(`/documents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteDocument(id: string) {
+    return this.request<{ status: string }>(`/documents/${id}`, {
+      method: "DELETE",
+    })
+  }
+
   // Reports
   async getReports(params?: Record<string, string>) {
     const qs = params ? "?" + new URLSearchParams(params).toString() : ""
@@ -209,12 +239,47 @@ class ApiClient {
     return this.request<import("./types").DailyReport>("/reports/today")
   }
 
+  async generateTodayReport() {
+    return this.request<import("./types").DailyReport>("/reports/today/generate", {
+      method: "POST",
+    })
+  }
+
   async getReport(id: string) {
     return this.request<import("./types").DailyReport>(`/reports/${id}`)
   }
 
   async updateReport(id: string, data: { content?: string; feishu_doc_url?: string }) {
     return this.request<import("./types").DailyReport>(`/reports/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Team Reports
+  async getTeamMemberReports(date: string) {
+    return this.request<import("./types").TeamMemberReport[]>(
+      `/reports/team/members?date=${encodeURIComponent(date)}`
+    )
+  }
+
+  async getTeamReportToday() {
+    return this.request<import("./types").TeamReport>("/reports/team/today")
+  }
+
+  async generateTeamReport() {
+    return this.request<import("./types").TeamReport>("/reports/team/today/generate", {
+      method: "POST",
+    })
+  }
+
+  async getTeamReports(params?: Record<string, string>) {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : ""
+    return this.request<import("./types").TeamReport[]>(`/reports/team${qs}`)
+  }
+
+  async updateTeamReport(id: string, data: { content?: string; feishu_doc_url?: string }) {
+    return this.request<import("./types").TeamReport>(`/reports/team/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     })

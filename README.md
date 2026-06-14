@@ -328,6 +328,36 @@ Done. 1 main + 2 sub-agent(s) uploaded.
 Dashboard: http://localhost:8080
 ```
 
+### serve — 服务端 AI 日报生成器
+
+`serve` 是服务端 report-generator 微服务：用户先在各自机器上用 `aidashboard upload` 把 Claude Code session 上传到平台；用户在 Web Reports 页面点击 **Generate AI Report** 后，API 调用该服务从 PostgreSQL 拉取当前用户当天已上报的 session 数据，执行 `claude -p` 生成 Markdown 日报，并写回 `daily_reports`。用户随后可以在页面中编辑 AI 生成的日报草稿。
+
+```bash
+# 本地调试 report-generator。需要能访问平台数据库，并且服务端已配置 claude 登录态。
+DATABASE_URL="postgres://aidashboard:devpassword@localhost:5432/aidashboard?sslmode=disable" \
+PORT=8090 aidashboard serve
+```
+
+Docker Compose 启动完整服务：
+
+```bash
+docker compose up -d
+```
+
+report-generator 环境变量：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `DATABASE_URL` | 平台 PostgreSQL 连接串 | 无，服务端模式必填 |
+| `AIDASHBOARD_CLAUDE_BIN` | Claude CLI 命令 | `claude` |
+| `AIDASHBOARD_CLAUDE_TIMEOUT` | `claude -p` 超时时间 | `10m` |
+| `PORT` | report-generator HTTP 端口 | `8090` |
+| `TZ` | API 与消费者使用的本地时区 | `Asia/Shanghai` |
+
+API 通过 `REPORT_GENERATOR_URL` 调用 report-generator，Compose 默认值为 `http://consumer:8090`。
+
+Compose 的 `consumer` 服务会把服务端主机 `${HOME}/.claude` 挂载到容器 `/root/.claude`，只用于复用服务端 Claude Code 登录配置；它不会读取用户机器上的 session log。
+
 ### status — 查看登录状态
 
 ```bash

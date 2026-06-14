@@ -7,11 +7,12 @@ import type { Session, Task } from "@/lib/types";
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState("");
 
   useEffect(() => {
-    api.getSessions({ date }).then(setSessions).catch(() => {});
-    api.getTasks().then(setTasks).catch(() => {});
+    const params = date ? { date } : undefined;
+    api.getSessions(params).then((data) => setSessions(Array.isArray(data) ? data : [])).catch(() => setSessions([]));
+    api.getTasks().then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
   }, [date]);
 
   const handleOverrideTask = async (sessionId: string, taskId: string | null) => {
@@ -29,6 +30,26 @@ export default function SessionsPage() {
     } catch {}
   };
 
+  const handleViewLog = async (sessionId: string) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const url = api.getSessionLogURL(sessionId);
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("download failed");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${sessionId}.jsonl`;
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      alert("Raw log not available");
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -36,17 +57,28 @@ export default function SessionsPage() {
           <h2 className="text-xl font-bold">Sessions</h2>
           <p className="text-sm text-muted">View and manage uploaded Claude Code sessions</p>
         </div>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          {date && (
+            <button
+              type="button"
+              onClick={() => setDate("")}
+              className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-muted hover:text-foreground"
+            >
+              All
+            </button>
+          )}
+        </div>
       </div>
 
       {sessions.length === 0 ? (
         <div className="bg-surface rounded-xl p-8 border border-border text-center">
-          <p className="text-muted">No sessions found for {date}</p>
+          <p className="text-muted">{date ? `No sessions uploaded on ${date}` : "No sessions found"}</p>
           <p className="text-xs text-dim mt-2">Upload sessions using the CLI daemon: aidashboard upload</p>
         </div>
       ) : (
@@ -55,11 +87,11 @@ export default function SessionsPage() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left text-muted font-medium p-3 text-xs">Session</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Time</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">Started</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">Uploaded</th>
                 <th className="text-left text-muted font-medium p-3 text-xs">Model</th>
                 <th className="text-left text-muted font-medium p-3 text-xs">Duration</th>
                 <th className="text-left text-muted font-medium p-3 text-xs">Matched Task</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Confidence</th>
                 <th className="text-left text-muted font-medium p-3 text-xs">Actions</th>
               </tr>
             </thead>
@@ -73,8 +105,14 @@ export default function SessionsPage() {
                     )}
                   </td>
                   <td className="p-3 text-muted text-xs">
+                    {new Date(s.started_at).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
+                    {" "}
                     {new Date(s.started_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
-                    {s.duration_secs && ` (${Math.floor(s.duration_secs / 60)}m)`}
+                  </td>
+                  <td className="p-3 text-muted text-xs">
+                    {new Date(s.uploaded_at).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
+                    {" "}
+                    {new Date(s.uploaded_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                   </td>
                   <td className="p-3 text-muted text-xs">{s.model}</td>
                   <td className="p-3 text-muted text-xs">
@@ -104,12 +142,22 @@ export default function SessionsPage() {
                     )}
                   </td>
                   <td className="p-3">
-                    <button
-                      onClick={() => handleWithdraw(s.id)}
-                      className="text-xs text-danger hover:underline"
-                    >
-                      Withdraw
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {s.raw_log_url && (
+                        <button
+                          onClick={() => handleViewLog(s.id)}
+                          className="text-xs text-info hover:underline"
+                        >
+                          View Log
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleWithdraw(s.id)}
+                        className="text-xs text-danger hover:underline"
+                      >
+                        Withdraw
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

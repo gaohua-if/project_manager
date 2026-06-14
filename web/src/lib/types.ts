@@ -65,6 +65,7 @@ export interface Session {
   id: string
   session_ref: string
   user_id: string
+  user_name: string
   agent_type: string
   started_at: string
   ended_at?: string
@@ -77,6 +78,7 @@ export interface Session {
   task_title?: string
   requirement_id?: string
   match_confidence?: number
+  raw_log_url?: string
   uploaded_at: string
 }
 
@@ -93,8 +95,44 @@ export interface DailyReport {
   updated_at: string
 }
 
+export interface TeamReport {
+  id: string
+  team_id: string
+  team_name: string
+  leader_id: string
+  leader_name: string
+  report_date: string
+  content: string
+  feishu_doc_url?: string
+  member_report_ids: string[]
+  session_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface TeamMemberReport {
+  user_id: string
+  user_name: string
+  report_id?: string
+  content: string
+  has_report: boolean
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T
   error?: string
+}
+
+export interface Document {
+  id: string
+  user_id: string
+  user_name: string
+  title: string
+  url: string
+  description?: string
+  task_id?: string
+  task_title?: string
+  requirement_id?: string
+  uploaded_at: string
 }

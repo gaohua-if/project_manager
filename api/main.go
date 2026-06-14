@@ -7,6 +7,7 @@ import (
 	"github.com/aidashboard/api/config"
 	"github.com/aidashboard/api/db"
 	"github.com/aidashboard/api/handler"
+	"github.com/aidashboard/api/storage"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 )
@@ -26,11 +27,23 @@ func main() {
 	}
 	log.Println("Migrations complete")
 
+	var minioStore *storage.MinioStorage
+	if cfg.MinioConfigured() {
+		minioStore, err = storage.NewMinioStorage(cfg)
+		if err != nil {
+			log.Fatalf("Failed to init MinIO storage: %v", err)
+		}
+		log.Println("MinIO storage ready")
+	} else {
+		log.Println("MinIO not configured, raw log upload disabled")
+	}
+
 	authH := handler.NewAuthHandler(database, cfg.JWTSecret)
 	reqH := handler.NewRequirementHandler(database)
 	taskH := handler.NewTaskHandler(database)
-	sessionH := handler.NewSessionHandler(database)
-	reportH := handler.NewReportHandler(database)
+	sessionH := handler.NewSessionHandler(database, minioStore)
+	reportH := handler.NewReportHandler(database, cfg.ReportGeneratorURL)
+	docH := handler.NewDocumentHandler(database)
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
@@ -67,13 +80,26 @@ func main() {
 		r.Post("/sessions/batch", sessionH.BatchUpload)
 		r.Get("/sessions", sessionH.List)
 		r.Get("/sessions/{id}", sessionH.Get)
+		r.Get("/sessions/{id}/log", sessionH.DownloadLog)
 		r.Put("/sessions/{id}/task", sessionH.UpdateTask)
 		r.Delete("/sessions/{id}", sessionH.Withdraw)
 
+		r.Get("/documents", docH.List)
+		r.Post("/documents", docH.Create)
+		r.Put("/documents/{id}", docH.Update)
+		r.Delete("/documents/{id}", docH.Delete)
+
 		r.Get("/reports", reportH.List)
 		r.Get("/reports/today", reportH.GetOrCreateToday)
+		r.Post("/reports/today/generate", reportH.GenerateToday)
 		r.Get("/reports/{id}", reportH.Get)
 		r.Put("/reports/{id}", reportH.Update)
+
+		r.Get("/reports/team/members", reportH.ListTeamMemberReports)
+		r.Get("/reports/team/today", reportH.GetTeamReportToday)
+		r.Post("/reports/team/today/generate", reportH.GenerateTeamReport)
+		r.Get("/reports/team", reportH.ListTeamReports)
+		r.Put("/reports/team/{id}", reportH.UpdateTeamReport)
 	})
 
 	log.Printf("Starting API server on :%s", cfg.Port)

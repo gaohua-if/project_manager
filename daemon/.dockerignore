@@ -1,0 +1,4 @@
+aidashboard
+daemon
+*.test
+tmp/

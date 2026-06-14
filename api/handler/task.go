@@ -71,7 +71,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var tasks []model.Task
+	tasks := []model.Task{}
 	for rows.Next() {
 		var t model.Task
 		var acStr string
@@ -87,6 +87,10 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		t.AssigneeName = nullStringPtr(assigneeName)
 		t.DueDate = nullStringPtr(dueDate)
 		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 
 	writeJSON(w, http.StatusOK, tasks)
@@ -145,9 +149,50 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement_id and title required"})
 		return
 	}
+	if u.TeamID == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "team leader must belong to a team"})
+		return
+	}
+	if req.AssigneeID == nil || *req.AssigneeID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "assignee_id is required"})
+		return
+	}
+	if req.Priority == "" {
+		req.Priority = "medium"
+	}
+
+	var assigneeOK bool
+	err := h.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM users
+			WHERE id = $1 AND role = 'employee' AND team_id = $2
+		)`, *req.AssigneeID, *u.TeamID).Scan(&assigneeOK)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !assigneeOK {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "assignee must be an employee in your team"})
+		return
+	}
+
+	var requirementOK bool
+	err = h.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM requirement_teams
+			WHERE requirement_id = $1 AND team_id = $2
+		)`, req.RequirementID, *u.TeamID).Scan(&requirementOK)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !requirementOK {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement is not assigned to your team"})
+		return
+	}
 
 	var taskID string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO tasks (requirement_id, title, acceptance_criteria_ids, assignee_id, creator_tl_id, priority, due_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 		req.RequirementID, req.Title, intArrayToPG(req.AcceptanceCriteriaIDs),

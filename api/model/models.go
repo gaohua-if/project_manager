@@ -65,6 +65,7 @@ type Session struct {
 	ID              string    `json:"id"`
 	SessionRef      string    `json:"session_ref"`
 	UserID          string    `json:"user_id"`
+	UserName         string    `json:"user_name"`
 	AgentType       string    `json:"agent_type"`
 	StartedAt       time.Time `json:"started_at"`
 	EndedAt         *time.Time `json:"ended_at,omitempty"`
@@ -195,9 +196,64 @@ type UpdateReportRequest struct {
 	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
 }
 
+type TeamReport struct {
+	ID              string    `json:"id"`
+	TeamID          string    `json:"team_id"`
+	TeamName        string    `json:"team_name"`
+	LeaderID        string    `json:"leader_id"`
+	LeaderName      string    `json:"leader_name"`
+	ReportDate      string    `json:"report_date"`
+	Content         string    `json:"content"`
+	FeishuDocURL    *string   `json:"feishu_doc_url,omitempty"`
+	MemberReportIDs []string  `json:"member_report_ids"`
+	SessionIDs      []string  `json:"session_ids"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type TeamMemberReport struct {
+	UserID   string  `json:"user_id"`
+	UserName string  `json:"user_name"`
+	ReportID *string `json:"report_id,omitempty"`
+	Content  string  `json:"content"`
+	HasReport bool   `json:"has_report"`
+}
+
+type UpdateTeamReportRequest struct {
+	Content      *string `json:"content,omitempty"`
+	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
+}
+
 type ACStatus struct {
 	Index      int    `json:"index"`
 	Text       string `json:"text"`
 	Completed  bool   `json:"completed"`
 	LinkedTasks []string `json:"linked_tasks,omitempty"`
+}
+
+type Document struct {
+	ID            string    `json:"id"`
+	UserID        string    `json:"user_id"`
+	UserName      string    `json:"user_name"`
+	Title         string    `json:"title"`
+	URL           string    `json:"url"`
+	Description   *string   `json:"description,omitempty"`
+	TaskID        *string   `json:"task_id,omitempty"`
+	TaskTitle     *string   `json:"task_title,omitempty"`
+	RequirementID *string   `json:"requirement_id,omitempty"`
+	UploadedAt    time.Time `json:"uploaded_at"`
+}
+
+type CreateDocumentRequest struct {
+	Title       string  `json:"title"`
+	URL         string  `json:"url"`
+	Description *string `json:"description,omitempty"`
+	TaskID      *string `json:"task_id,omitempty"`
+}
+
+type UpdateDocumentRequest struct {
+	Title       *string `json:"title,omitempty"`
+	URL         *string `json:"url,omitempty"`
+	Description *string `json:"description,omitempty"`
+	TaskID      *string `json:"task_id,omitempty"`
 }

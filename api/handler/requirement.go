@@ -57,7 +57,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var reqs []model.Requirement
+	reqs := []model.Requirement{}
 	for rows.Next() {
 		var req model.Requirement
 		var acStr string
@@ -70,6 +70,10 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 		req.Deadline = nullStringPtr(deadline)
 		req.AcceptanceCriteria = parseTextArray(acStr)
 		reqs = append(reqs, req)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 
 	for i := range reqs {
@@ -238,7 +242,7 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	acItems := parseTextArray(acStr)
-	var statuses []model.ACStatus
+	statuses := []model.ACStatus{}
 
 	for i, text := range acItems {
 		rows, err := h.db.Query(`
@@ -262,6 +266,11 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 			if status != "done" {
 				allDone = false
 			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			statuses = append(statuses, model.ACStatus{Index: i, Text: text, Completed: false})
+			continue
 		}
 		rows.Close()
 

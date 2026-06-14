@@ -14,8 +14,8 @@ export default function RequirementDetailPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     api.getRequirement(id).then(setReq).catch(() => {});
-    api.getAC(id).then(setAcStatuses).catch(() => {});
-    api.getTasks({ requirement_id: id }).then(setTasks).catch(() => {});
+    api.getAC(id).then((data) => setAcStatuses(Array.isArray(data) ? data : [])).catch(() => setAcStatuses([]));
+    api.getTasks({ requirement_id: id }).then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
   }, [id]);
 
   if (!req) {
@@ -116,7 +116,7 @@ export default function RequirementDetailPage({ params }: { params: Promise<{ id
             acceptanceCriteria={req.acceptance_criteria}
             onCreated={() => {
               setShowCreateTask(false);
-              api.getTasks({ requirement_id: id }).then(setTasks).catch(() => {});
+              api.getTasks({ requirement_id: id }).then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
             }}
           />
         )}

@@ -15,11 +15,11 @@ export default function DashboardPage() {
     if (!u) return;
     setUser(u);
 
-    api.getRequirements().then(setRequirements).catch(() => {});
+    api.getRequirements().then((data) => setRequirements(Array.isArray(data) ? data : [])).catch(() => setRequirements([]));
     if (u.role === "employee") {
-      api.getTasks().then(setTasks).catch(() => {});
+      api.getTasks().then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
     } else if (u.role === "team_leader") {
-      api.getTasks().then(setTasks).catch(() => {});
+      api.getTasks().then((data) => setTasks(Array.isArray(data) ? data : [])).catch(() => setTasks([]));
     }
   }, []);
 
