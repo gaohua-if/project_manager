@@ -8,17 +8,17 @@ const ROLE_ORDER: User["role"][] = ["director", "pm", "team_leader", "employee"]
 
 const ROLE_META: Record<User["role"], { label: string; description: string; tone: string }> = {
   director: {
-    label: "总监",
+    label: "部门总监",
     description: "部门全局负责人",
     tone: "text-info border-info/30 bg-info/10",
   },
   pm: {
-    label: "PM",
+    label: "产品经理",
     description: "需求与验收负责人",
     tone: "text-purple border-purple/30 bg-purple/10",
   },
   team_leader: {
-    label: "Team Leader",
+    label: "团队负责人",
     description: "团队任务分解与交付负责人",
     tone: "text-warning border-warning/30 bg-warning/10",
   },
@@ -58,7 +58,7 @@ export default function OrganizationPage() {
         if (!cancelled) setUsers(Array.isArray(data) ? data : []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load organization");
+        if (!cancelled) setError(err instanceof Error ? err.message : "加载组织信息失败");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -103,8 +103,8 @@ export default function OrganizationPage() {
   if (!authReady) {
     return (
       <div>
-        <h2 className="text-xl font-bold mb-2">Organization</h2>
-        <p className="text-sm text-muted">Loading organization access...</p>
+        <h2 className="text-xl font-bold mb-2">组织</h2>
+        <p className="text-sm text-muted">加载组织信息中...</p>
       </div>
     );
   }
@@ -112,8 +112,8 @@ export default function OrganizationPage() {
   if (!canManage) {
     return (
       <div>
-        <h2 className="text-xl font-bold mb-2">Organization</h2>
-        <p className="text-sm text-muted">Only directors, PMs, and team leaders can view organization management.</p>
+        <h2 className="text-xl font-bold mb-2">组织</h2>
+        <p className="text-sm text-muted">仅总监、PM 和团队负责人可查看组织信息。</p>
       </div>
     );
   }
@@ -121,8 +121,8 @@ export default function OrganizationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold">Organization</h2>
-        <p className="text-sm text-muted mt-1">Manage visibility across directors, PMs, team leaders, and engineers.</p>
+        <h2 className="text-xl font-bold">组织</h2>
+        <p className="text-sm text-muted mt-1">跨总监、PM、团队负责人、工程师的全景视图。</p>
       </div>
 
       {error && (
@@ -147,8 +147,8 @@ export default function OrganizationPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold">Teams</h3>
-          <span className="text-xs text-muted">{loading ? "Loading..." : `${teams.length} teams`}</span>
+          <h3 className="text-base font-semibold">团队</h3>
+          <span className="text-xs text-muted">{loading ? "加载中..." : `${teams.length} 个团队`}</span>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
           {teams.map((team) => (
@@ -156,23 +156,23 @@ export default function OrganizationPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="font-semibold">{team.name}</h4>
-                  <p className="mt-1 text-xs text-muted">{team.members.length} members</p>
+                  <p className="mt-1 text-xs text-muted">{team.members.length} 名成员</p>
                 </div>
                 <span className="rounded-full bg-border px-2 py-1 text-xs text-muted">
-                  {team.engineers.length} engineers
+                  {team.engineers.length} 名工程师
                 </span>
               </div>
               <div className="mt-4 space-y-3">
                 <div>
-                  <div className="mb-1 text-xs uppercase text-dim">Team Leader</div>
+                  <div className="mb-1 text-xs uppercase text-dim">团队负责人</div>
                   <div className="text-sm text-foreground">
-                    {team.leaders.length > 0 ? team.leaders.map((u) => u.name).join(", ") : "Unassigned"}
+                    {team.leaders.length > 0 ? team.leaders.map((u) => u.name).join(", ") : "未分配"}
                   </div>
                 </div>
                 <div>
-                  <div className="mb-1 text-xs uppercase text-dim">Engineers</div>
+                  <div className="mb-1 text-xs uppercase text-dim">工程师</div>
                   <div className="text-sm text-muted">
-                    {team.engineers.length > 0 ? team.engineers.map((u) => u.name).join(", ") : "No engineers"}
+                    {team.engineers.length > 0 ? team.engineers.map((u) => u.name).join(", ") : "暂无工程师"}
                   </div>
                 </div>
               </div>
@@ -180,7 +180,7 @@ export default function OrganizationPage() {
           ))}
           {!loading && teams.length === 0 && (
             <div className="rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-              No teams found.
+              暂无团队。
             </div>
           )}
         </div>
@@ -188,16 +188,16 @@ export default function OrganizationPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold">Members</h3>
-          <span className="text-xs text-muted">{loading ? "Loading..." : `${users.length} users`}</span>
+          <h3 className="text-base font-semibold">成员</h3>
+          <span className="text-xs text-muted">{loading ? "加载中..." : `${users.length} 位用户`}</span>
         </div>
         <div className="overflow-hidden rounded-lg border border-border bg-surface">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-background/60 text-xs uppercase text-dim">
               <tr>
-                <th className="px-4 py-3 font-semibold">Name</th>
-                <th className="px-4 py-3 font-semibold">Role</th>
-                <th className="px-4 py-3 font-semibold">Team</th>
+                <th className="px-4 py-3 font-semibold">姓名</th>
+                <th className="px-4 py-3 font-semibold">角色</th>
+                <th className="px-4 py-3 font-semibold">团队</th>
               </tr>
             </thead>
             <tbody>
@@ -215,7 +215,7 @@ export default function OrganizationPage() {
               {!loading && users.length === 0 && (
                 <tr>
                   <td className="px-4 py-6 text-center text-muted" colSpan={3}>
-                    No users found.
+                    暂无用户。
                   </td>
                 </tr>
               )}

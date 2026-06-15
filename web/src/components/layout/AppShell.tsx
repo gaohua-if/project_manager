@@ -20,7 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="h-screen flex items-center justify-center bg-background text-muted">
-        Loading...
+        加载中...
       </div>
     );
   }

@@ -136,3 +136,56 @@ export interface Document {
   requirement_id?: string
   uploaded_at: string
 }
+
+export interface TokenGroup {
+  key: string
+  label: string
+  value: number
+  percent: number
+}
+
+export interface TokenPoint {
+  date: string
+  value: number
+}
+
+export interface TokenAggregation {
+  total: number
+  input_sum: number
+  output_sum: number
+  groups: TokenGroup[]
+  series: TokenPoint[]
+  period: string
+  group_by: string
+}
+
+export interface MemberStat {
+  user_id: string
+  user_name: string
+  active: boolean
+  last_active?: string
+  idle_days: number
+}
+
+export interface TeamStat {
+  team_id: string
+  team_name: string
+  active: number
+  total: number
+  members: MemberStat[]
+}
+
+export interface IdleWarning {
+  user_id: string
+  user_name: string
+  team_name: string
+  idle_days: number
+}
+
+export interface TeamActivity {
+  teams: TeamStat[]
+  idle_warnings: IdleWarning[]
+}
+
+export type TokenPeriod = "today" | "week" | "month" | "range"
+export type TokenGroupBy = "team" | "user" | "requirement" | "task" | "model"

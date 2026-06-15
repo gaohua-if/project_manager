@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/aidashboard/api/model"
+	"github.com/aidashboard/api/service"
 	"github.com/aidashboard/api/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/lib/pq"
@@ -18,10 +20,11 @@ import (
 type SessionHandler struct {
 	db    *sql.DB
 	store *storage.MinioStorage
+	ai    *service.AIClient
 }
 
-func NewSessionHandler(db *sql.DB, store *storage.MinioStorage) *SessionHandler {
-	return &SessionHandler{db: db, store: store}
+func NewSessionHandler(db *sql.DB, store *storage.MinioStorage, ai *service.AIClient) *SessionHandler {
+	return &SessionHandler{db: db, store: store, ai: ai}
 }
 
 func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +282,8 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		h.matchTaskAsync(sessionID, u.ID, su.Summary)
+
 		results = append(results, result{SessionRef: su.SessionRef, ID: sessionID, Status: status})
 	}
 
@@ -309,6 +314,66 @@ func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.Se
 		return err
 	}
 	return tx.Commit()
+}
+
+// matchTaskAsync runs AI task-matching inline (kept simple — claude CLI blocks the upload briefly).
+// Failures are non-fatal: the session is still recorded with NULL task_id.
+func (h *SessionHandler) matchTaskAsync(sessionID, userID string, summary *string) {
+	if h.ai == nil {
+		return
+	}
+	if summary == nil || *summary == "" {
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT id, title FROM tasks
+		WHERE assignee_id = $1 AND status IN ('todo','in_progress')`, userID)
+	if err != nil {
+		log.Printf("matchTaskAsync: query tasks failed: %v", err)
+		return
+	}
+	var tasks []service.TaskBrief
+	for rows.Next() {
+		var tb service.TaskBrief
+		if err := rows.Scan(&tb.ID, &tb.Title); err != nil {
+			rows.Close()
+			return
+		}
+		tasks = append(tasks, tb)
+	}
+	rows.Close()
+	if len(tasks) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	match, err := h.ai.MatchSessionToTask(ctx, *summary, tasks)
+	if err != nil {
+		log.Printf("AI match session->task failed (session=%s): %v", sessionID, err)
+		return
+	}
+	if match.TaskID == "" || match.Confidence < 0.7 {
+		return
+	}
+
+	var reqID *string
+	h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", match.TaskID).Scan(&reqID)
+
+	_, err = h.db.Exec(`
+		UPDATE sessions SET task_id = $1, requirement_id = $2, match_confidence = $3 WHERE id = $4`,
+		match.TaskID, reqID, match.Confidence, sessionID)
+	if err != nil {
+		log.Printf("matchTaskAsync: update session failed: %v", err)
+		return
+	}
+
+	if _, err := h.db.Exec(`
+		UPDATE token_usage SET task_id = $1, requirement_id = $2 WHERE session_id = $3`,
+		match.TaskID, reqID, sessionID); err != nil {
+		log.Printf("matchTaskAsync: update token_usage failed: %v", err)
+	}
 }
 
 func (h *SessionHandler) DownloadLog(w http.ResponseWriter, r *http.Request) {

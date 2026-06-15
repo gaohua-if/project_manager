@@ -23,7 +23,7 @@ export default function SessionsPage() {
   };
 
   const handleWithdraw = async (sessionId: string) => {
-    if (!confirm("Withdraw this session? This will permanently delete it.")) return;
+    if (!confirm("撤回此 session?此操作将永久删除。")) return;
     try {
       await api.withdrawSession(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -46,7 +46,7 @@ export default function SessionsPage() {
       link.click();
       URL.revokeObjectURL(blobUrl);
     } catch {
-      alert("Raw log not available");
+      alert("原始日志不可用");
     }
   };
 
@@ -54,8 +54,8 @@ export default function SessionsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold">Sessions</h2>
-          <p className="text-sm text-muted">View and manage uploaded Claude Code sessions</p>
+          <h2 className="text-xl font-bold">Session 管理</h2>
+          <p className="text-sm text-muted">查看和上报的 Claude Code session</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -70,7 +70,7 @@ export default function SessionsPage() {
               onClick={() => setDate("")}
               className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-muted hover:text-foreground"
             >
-              All
+              全部
             </button>
           )}
         </div>
@@ -78,8 +78,8 @@ export default function SessionsPage() {
 
       {sessions.length === 0 ? (
         <div className="bg-surface rounded-xl p-8 border border-border text-center">
-          <p className="text-muted">{date ? `No sessions uploaded on ${date}` : "No sessions found"}</p>
-          <p className="text-xs text-dim mt-2">Upload sessions using the CLI daemon: aidashboard upload</p>
+          <p className="text-muted">{date ? `${date} 当日无上报 session` : "暂无 session"}</p>
+          <p className="text-xs text-dim mt-2">使用 CLI daemon 上报:aidashboard upload</p>
         </div>
       ) : (
         <div className="bg-surface rounded-xl border border-border">
@@ -87,12 +87,13 @@ export default function SessionsPage() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left text-muted font-medium p-3 text-xs">Session</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Started</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Uploaded</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Model</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Duration</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Matched Task</th>
-                <th className="text-left text-muted font-medium p-3 text-xs">Actions</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">开始时间</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">上报时间</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">模型</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">时长</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">匹配任务</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">置信度</th>
+                <th className="text-left text-muted font-medium p-3 text-xs">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -116,7 +117,7 @@ export default function SessionsPage() {
                   </td>
                   <td className="p-3 text-muted text-xs">{s.model}</td>
                   <td className="p-3 text-muted text-xs">
-                    {s.duration_secs ? `${Math.floor(s.duration_secs / 60)}m ${s.duration_secs % 60}s` : "-"}
+                    {s.duration_secs ? `${Math.floor(s.duration_secs / 60)}分 ${s.duration_secs % 60}秒` : "-"}
                   </td>
                   <td className="p-3">
                     <select
@@ -124,7 +125,7 @@ export default function SessionsPage() {
                       onChange={(e) => handleOverrideTask(s.id, e.target.value || null)}
                       className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      <option value="">Not matched</option>
+                      <option value="">未匹配</option>
                       {tasks.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.title}
@@ -148,14 +149,14 @@ export default function SessionsPage() {
                           onClick={() => handleViewLog(s.id)}
                           className="text-xs text-info hover:underline"
                         >
-                          View Log
+                          查看日志
                         </button>
                       )}
                       <button
                         onClick={() => handleWithdraw(s.id)}
                         className="text-xs text-danger hover:underline"
                       >
-                        Withdraw
+                        撤回
                       </button>
                     </div>
                   </td>

@@ -24,24 +24,24 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   if (!task) {
-    return <div className="text-muted">Loading...</div>;
+    return <div className="text-muted">加载中...</div>;
   }
 
   return (
     <div>
       <Link href="/tasks" className="text-muted hover:text-foreground text-sm">
-        &larr; Tasks
+        &larr; 任务
       </Link>
 
       <div className="flex items-start justify-between mt-2 mb-4">
         <div>
           <h2 className="text-xl font-bold">{task.title}</h2>
           <p className="text-sm text-muted mt-1">
-            Requirement:{" "}
+            所属需求:{" "}
             <Link href={`/requirements/${task.requirement_id}`} className="text-info hover:underline">
               {task.requirement_title}
             </Link>
-            &middot; Created by TL &middot; Assignee: {task.assignee_name || "Unassigned"}
+            &middot; 由 TL 创建 &middot; 负责人: {task.assignee_name || "未分配"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -51,7 +51,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               disabled={updating}
               className="bg-success text-black px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
             >
-              Mark Done
+              标记完成
             </button>
           )}
           {task.status === "done" && (
@@ -60,7 +60,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               disabled={updating}
               className="bg-border text-foreground px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
             >
-              Reopen
+              重新打开
             </button>
           )}
         </div>
@@ -69,22 +69,22 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       <div className="grid grid-cols-2 gap-4">
         {/* Details */}
         <div className="bg-surface rounded-xl p-4 border border-border">
-          <h4 className="text-sm font-semibold text-muted mb-3">Details</h4>
+          <h4 className="text-sm font-semibold text-muted mb-3">详情</h4>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted">Status</span>
+              <span className="text-muted">状态</span>
               <StatusBadge status={task.status} />
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">Priority</span>
-              <span>{task.priority}</span>
+              <span className="text-muted">优先级</span>
+              <span>{priorityLabel(task.priority)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">Due Date</span>
+              <span className="text-muted">截止日期</span>
               <span>{task.due_date || "-"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">Linked AC</span>
+              <span className="text-muted">关联 AC</span>
               <span>{task.acceptance_criteria_ids?.map((i) => `AC${i + 1}`).join(", ") || "-"}</span>
             </div>
           </div>
@@ -92,10 +92,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* Dependencies */}
         <div className="bg-surface rounded-xl p-4 border border-border">
-          <h4 className="text-sm font-semibold text-muted mb-3">Dependencies</h4>
+          <h4 className="text-sm font-semibold text-muted mb-3">依赖关系</h4>
           {task.dependencies && task.dependencies.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-xs text-dim">Depends on:</p>
+              <p className="text-xs text-dim">依赖于:</p>
               {task.dependencies.map((d) => (
                 <div key={d.task_id} className="flex items-center gap-2 text-sm">
                   <StatusBadge status={d.status} />
@@ -104,11 +104,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               ))}
             </div>
           ) : (
-            <p className="text-sm text-dim">No dependencies</p>
+            <p className="text-sm text-dim">无依赖</p>
           )}
           {task.blocking && task.blocking.length > 0 && (
             <div className="space-y-2 mt-3">
-              <p className="text-xs text-dim">Blocking:</p>
+              <p className="text-xs text-dim">阻塞了:</p>
               {task.blocking.map((d) => (
                 <div key={d.task_id} className="flex items-center gap-2 text-sm">
                   <StatusBadge status={d.status} />
@@ -130,5 +130,20 @@ function StatusBadge({ status }: { status: string }) {
     done: "bg-green-900/40 text-success",
     blocked: "bg-red-900/40 text-danger",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || ""}`}>{status}</span>;
+  const labels: Record<string, string> = {
+    todo: "待办",
+    in_progress: "进行中",
+    done: "已完成",
+    blocked: "已阻塞",
+  };
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || ""}`}>{labels[status] || status}</span>;
+}
+
+function priorityLabel(priority: string): string {
+  const labels: Record<string, string> = {
+    low: "低",
+    medium: "中",
+    high: "高",
+  };
+  return labels[priority] || priority;
 }

@@ -257,3 +257,57 @@ type UpdateDocumentRequest struct {
 	Description *string `json:"description,omitempty"`
 	TaskID      *string `json:"task_id,omitempty"`
 }
+
+type UpdateACRequest struct {
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+}
+
+type TokenAggregation struct {
+	Total      int64        `json:"total"`
+	InputSum   int64        `json:"input_sum"`
+	OutputSum  int64        `json:"output_sum"`
+	Groups     []TokenGroup `json:"groups"`
+	Series     []TokenPoint `json:"series"`
+	Period     string       `json:"period"`
+	GroupBy    string       `json:"group_by"`
+}
+
+type TokenGroup struct {
+	Key     string  `json:"key"`
+	Label   string  `json:"label"`
+	Value   int64   `json:"value"`
+	Percent float64 `json:"percent"`
+}
+
+type TokenPoint struct {
+	Date  string `json:"date"`
+	Value int64  `json:"value"`
+}
+
+type TeamActivity struct {
+	Teams        []TeamStat     `json:"teams"`
+	IdleWarnings []IdleWarning  `json:"idle_warnings"`
+}
+
+type TeamStat struct {
+	TeamID   string       `json:"team_id"`
+	TeamName string       `json:"team_name"`
+	Active   int          `json:"active"`
+	Total    int          `json:"total"`
+	Members  []MemberStat `json:"members"`
+}
+
+type MemberStat struct {
+	UserID     string  `json:"user_id"`
+	UserName   string  `json:"user_name"`
+	Active     bool    `json:"active"`
+	LastActive *string `json:"last_active,omitempty"`
+	IdleDays   int     `json:"idle_days"`
+}
+
+type IdleWarning struct {
+	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
+	TeamName string `json:"team_name"`
+	IdleDays int    `json:"idle_days"`
+}

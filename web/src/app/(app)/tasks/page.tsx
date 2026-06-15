@@ -75,7 +75,7 @@ export default function TasksPage() {
 
   const handleCreateTask = async () => {
     if (!title.trim() || !requirementId || !assigneeId) {
-      setError("Title, requirement, and assignee are required.");
+      setError("标题、需求和负责人为必填项。");
       return;
     }
 
@@ -94,7 +94,7 @@ export default function TasksPage() {
       setShowCreate(false);
       refreshTasks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task.");
+      setError(err instanceof Error ? err.message : "创建任务失败。");
     } finally {
       setSubmitting(false);
     }
@@ -104,8 +104,8 @@ export default function TasksPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold">Tasks</h2>
-          <p className="text-sm text-muted">View and manage tasks</p>
+          <h2 className="text-xl font-bold">任务</h2>
+          <p className="text-sm text-muted">查看和管理任务</p>
         </div>
         <div className="flex items-center gap-2">
           {isTeamLeader && (
@@ -117,7 +117,7 @@ export default function TasksPage() {
               }}
               className="bg-primary text-white rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
             >
-              {showCreate ? "Close" : "+ Create Task"}
+              {showCreate ? "关闭" : "+ 创建任务"}
             </button>
           )}
           <select
@@ -125,11 +125,11 @@ export default function TasksPage() {
             onChange={(e) => setFilter(e.target.value)}
             className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           >
-            <option value="">All Status</option>
-            <option value="todo">Todo</option>
-            <option value="in_progress">In Progress</option>
-            <option value="done">Done</option>
-            <option value="blocked">Blocked</option>
+            <option value="">全部状态</option>
+            <option value="todo">待办</option>
+            <option value="in_progress">进行中</option>
+            <option value="done">已完成</option>
+            <option value="blocked">已阻塞</option>
           </select>
         </div>
       </div>
@@ -138,23 +138,23 @@ export default function TasksPage() {
         <div className="bg-surface rounded-xl p-4 border border-border mb-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <label className="block">
-              <span className="block text-xs font-medium text-muted mb-1">Task title</span>
+              <span className="block text-xs font-medium text-muted mb-1">任务标题</span>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Implement API pagination"
+                placeholder="例如:实现 API 分页"
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </label>
 
             <label className="block">
-              <span className="block text-xs font-medium text-muted mb-1">Requirement</span>
+              <span className="block text-xs font-medium text-muted mb-1">所属需求</span>
               <select
                 value={requirementId}
                 onChange={(e) => handleRequirementChange(e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select requirement</option>
+                <option value="">选择需求</option>
                 {requirements.map((requirement) => (
                   <option key={requirement.id} value={requirement.id}>{requirement.title}</option>
                 ))}
@@ -162,13 +162,13 @@ export default function TasksPage() {
             </label>
 
             <label className="block">
-              <span className="block text-xs font-medium text-muted mb-1">Assignee</span>
+              <span className="block text-xs font-medium text-muted mb-1">负责人</span>
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select employee</option>
+                <option value="">选择工程师</option>
                 {teamEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>{employee.name}</option>
                 ))}
@@ -177,19 +177,19 @@ export default function TasksPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-xs font-medium text-muted mb-1">Priority</span>
+                <span className="block text-xs font-medium text-muted mb-1">优先级</span>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
                   className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
+                  <option value="low">低</option>
+                  <option value="medium">中</option>
+                  <option value="high">高</option>
                 </select>
               </label>
               <label className="block">
-                <span className="block text-xs font-medium text-muted mb-1">Due date</span>
+                <span className="block text-xs font-medium text-muted mb-1">截止日期</span>
                 <input
                   type="date"
                   value={dueDate}
@@ -202,7 +202,7 @@ export default function TasksPage() {
 
           {selectedRequirement && selectedRequirement.acceptance_criteria.length > 0 && (
             <div className="mt-4">
-              <p className="text-xs font-medium text-muted mb-2">Acceptance criteria</p>
+              <p className="text-xs font-medium text-muted mb-2">验收标准</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {selectedRequirement.acceptance_criteria.map((criterion, index) => (
                   <label key={`${selectedRequirement.id}-${index}`} className="flex items-start gap-2 rounded-lg border border-border bg-background/60 p-3 text-xs text-muted">
@@ -230,7 +230,7 @@ export default function TasksPage() {
               }}
               className="px-4 py-2 text-sm text-muted hover:text-foreground"
             >
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -238,7 +238,7 @@ export default function TasksPage() {
               disabled={submitting || !title.trim() || !requirementId || !assigneeId}
               className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
             >
-              {submitting ? "Creating..." : "Create and assign"}
+              {submitting ? "创建中..." : "创建并分配"}
             </button>
           </div>
         </div>
@@ -248,18 +248,18 @@ export default function TasksPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left text-muted font-medium p-3 text-xs">Task</th>
-              <th className="text-left text-muted font-medium p-3 text-xs">Requirement</th>
-              <th className="text-left text-muted font-medium p-3 text-xs">Assignee</th>
-              <th className="text-left text-muted font-medium p-3 text-xs">Status</th>
-              <th className="text-left text-muted font-medium p-3 text-xs">Priority</th>
-              <th className="text-left text-muted font-medium p-3 text-xs">Due</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">任务</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">所属需求</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">负责人</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">状态</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">优先级</th>
+              <th className="text-left text-muted font-medium p-3 text-xs">截止</th>
             </tr>
           </thead>
           <tbody>
             {tasks.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-dim">No tasks found</td>
+                <td colSpan={6} className="p-6 text-center text-dim">暂无任务</td>
               </tr>
             ) : (
               tasks.map((t) => (
@@ -291,7 +291,13 @@ function StatusBadge({ status }: { status: string }) {
     done: "bg-green-900/40 text-success",
     blocked: "bg-red-900/40 text-danger",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || ""}`}>{status}</span>;
+  const labels: Record<string, string> = {
+    todo: "待办",
+    in_progress: "进行中",
+    done: "已完成",
+    blocked: "已阻塞",
+  };
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || ""}`}>{labels[status] || status}</span>;
 }
 
 function PriorityBadge({ priority }: { priority: string }) {
@@ -300,5 +306,10 @@ function PriorityBadge({ priority }: { priority: string }) {
     medium: "bg-yellow-900/40 text-warning",
     high: "bg-orange-900/40 text-orange-400",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[priority] || ""}`}>{priority}</span>;
+  const labels: Record<string, string> = {
+    low: "低",
+    medium: "中",
+    high: "高",
+  };
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${styles[priority] || ""}`}>{labels[priority] || priority}</span>;
 }

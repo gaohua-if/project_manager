@@ -3,19 +3,22 @@ package handler
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/aidashboard/api/model"
+	"github.com/aidashboard/api/service"
 	"github.com/go-chi/chi/v5"
 )
 
 type RequirementHandler struct {
 	db *sql.DB
+	ai *service.AIClient
 }
 
-func NewRequirementHandler(db *sql.DB) *RequirementHandler {
-	return &RequirementHandler{db: db}
+func NewRequirementHandler(db *sql.DB, ai *service.AIClient) *RequirementHandler {
+	return &RequirementHandler{db: db, ai: ai}
 }
 
 func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +133,15 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ac := []string{"(AI will generate acceptance criteria)"}
+	if h.ai != nil {
+		generated, err := h.ai.GenerateAcceptanceCriteria(r.Context(), req.Title, req.Description)
+		if err != nil {
+			log.Printf("AI generate AC failed (will use fallback): %v", err)
+		}
+		if len(generated) > 0 {
+			ac = generated
+		}
+	}
 
 	var reqID string
 	err := h.db.QueryRow(`
@@ -284,6 +296,49 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, statuses)
+}
+
+func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u == nil || (u.Role != "director" && u.Role != "pm" && u.Role != "team_leader") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only director/pm/tl can regenerate AC"})
+		return
+	}
+
+	var title, description string
+	err := h.db.QueryRow("SELECT title, description FROM requirements WHERE id = $1", id).Scan(&title, &description)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.ai == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AI service not configured"})
+		return
+	}
+
+	ac, err := h.ai.GenerateAcceptanceCriteria(r.Context(), title, description)
+	if err != nil {
+		log.Printf("AI regenerate AC failed: %v", err)
+	}
+	if len(ac) == 0 {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI returned no acceptance criteria"})
+		return
+	}
+
+	_, err = h.db.Exec("UPDATE requirements SET acceptance_criteria = $1, updated_at = now() WHERE id = $2",
+		arrayToTextArray(ac), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"acceptance_criteria": ac})
 }
 
 func (h *RequirementHandler) loadTeams(req *model.Requirement) {

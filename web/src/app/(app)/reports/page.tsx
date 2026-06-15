@@ -22,7 +22,6 @@ export default function ReportsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
 
-  // Team report state
   const [activeTab, setActiveTab] = useState<"team" | "members">("team");
   const [teamReport, setTeamReport] = useState<TeamReport | null>(null);
   const [teamReports, setTeamReports] = useState<TeamReport[]>([]);
@@ -58,16 +57,17 @@ export default function ReportsPage() {
 
   const isLeader = role === "team_leader" || role === "pm" || role === "director";
   const isTeamLeader = role === "team_leader";
+  const isDirector = role === "director";
 
   const grouped = useMemo(() => {
-    if (!isLeader || isTeamLeader) return null;
+    if (!isDirector && !isLeader) return null;
     const byDate: Record<string, DailyReport[]> = {};
     for (const r of reports) {
       if (!byDate[r.report_date]) byDate[r.report_date] = [];
       byDate[r.report_date].push(r);
     }
     return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a));
-  }, [reports, isLeader, isTeamLeader]);
+  }, [reports, isLeader, isDirector]);
 
   const startEdit = (report: DailyReport) => {
     setEditingId(report.id);
@@ -98,7 +98,7 @@ export default function ReportsPage() {
         return [report, ...prev];
       });
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "Failed to generate report");
+      setGenerateError(err instanceof Error ? err.message : "生成报告失败");
     } finally {
       setIsGenerating(false);
     }
@@ -116,7 +116,7 @@ export default function ReportsPage() {
         return [tr, ...prev];
       });
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "Failed to generate team report");
+      setGenerateError(err instanceof Error ? err.message : "生成团队报告失败");
     } finally {
       setIsGeneratingTeam(false);
     }
@@ -142,21 +142,21 @@ export default function ReportsPage() {
     } catch {}
   };
 
-  // Employee view
+  // 员工视图
   if (!isLeader) {
     return (
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-bold">Daily Reports</h2>
-            <p className="text-sm text-muted">View and edit your daily reports</p>
+            <h2 className="text-xl font-bold">个人日报</h2>
+            <p className="text-sm text-muted">查看和编辑你的日报</p>
           </div>
           <button
             onClick={generateTodayReport}
             disabled={isGenerating}
             className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
           >
-            {isGenerating ? "Generating..." : "Generate AI Report"}
+            {isGenerating ? "生成中..." : "生成 AI 日报"}
           </button>
         </div>
         {generateError && (
@@ -166,7 +166,7 @@ export default function ReportsPage() {
         )}
         {reports.length === 0 ? (
           <div className="bg-surface rounded-xl p-8 border border-border text-center">
-            <p className="text-muted">No reports yet.</p>
+            <p className="text-muted">暂无报告。</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -176,19 +176,19 @@ export default function ReportsPage() {
                   <div>
                     <h3 className="font-semibold">{report.report_date}</h3>
                     <p className="text-xs text-muted">
-                      {report.user_name} &middot; {report.edited ? "Edited" : "Auto-generated"}
+                      {report.user_name} &middot; {report.edited ? "已编辑" : "自动生成"}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     {report.feishu_doc_url && (
                       <a href={report.feishu_doc_url} target="_blank" rel="noopener noreferrer"
                         className="bg-blue-900/40 text-info px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                        Feishu Doc
+                        飞书文档
                       </a>
                     )}
                     <button onClick={() => editingId === report.id ? saveEdit() : startEdit(report)}
                       className="bg-border text-foreground px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                      {editingId === report.id ? "Save" : "Edit"}
+                      {editingId === report.id ? "保存" : "编辑"}
                     </button>
                   </div>
                 </div>
@@ -197,7 +197,7 @@ export default function ReportsPage() {
                     <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground h-48 focus:outline-none focus:ring-2 focus:ring-primary" />
                     <div>
-                      <label className="block text-xs text-muted mb-1">Feishu Doc URL</label>
+                      <label className="block text-xs text-muted mb-1">飞书文档 URL</label>
                       <input type="url" value={editFeishuUrl} onChange={(e) => setEditFeishuUrl(e.target.value)}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
                     </div>
@@ -213,14 +213,14 @@ export default function ReportsPage() {
     );
   }
 
-  // Team Leader view
+  // 团队负责人视图
   if (isTeamLeader) {
     return (
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-bold">Team Reports</h2>
-            <p className="text-sm text-muted">Generate team daily report and view member reports</p>
+            <h2 className="text-xl font-bold">团队日报</h2>
+            <p className="text-sm text-muted">生成团队日报并查看成员日报</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -228,7 +228,7 @@ export default function ReportsPage() {
               disabled={isGenerating}
               className="bg-border text-foreground px-4 py-2 rounded-lg text-sm font-semibold hover:brightness-125 disabled:opacity-60 transition-colors"
             >
-              {isGenerating ? "Generating..." : "Generate My Report"}
+              {isGenerating ? "生成中..." : "生成我的日报"}
             </button>
           </div>
         </div>
@@ -239,7 +239,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Tab bar */}
         <div className="flex gap-1 mb-6 bg-surface rounded-lg p-1 border border-border w-fit">
           <button
             onClick={() => setActiveTab("team")}
@@ -247,7 +246,7 @@ export default function ReportsPage() {
               activeTab === "team" ? "bg-primary text-white" : "text-muted hover:text-foreground"
             }`}
           >
-            Team Daily Report
+            团队日报
           </button>
           <button
             onClick={() => setActiveTab("members")}
@@ -255,19 +254,19 @@ export default function ReportsPage() {
               activeTab === "members" ? "bg-primary text-white" : "text-muted hover:text-foreground"
             }`}
           >
-            Member Reports
+            成员日报
           </button>
         </div>
 
         {activeTab === "team" ? (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Today&apos;s Team Report</h3>
+              <h3 className="text-lg font-semibold">今日团队日报</h3>
               <div className="flex gap-2">
                 {teamReport && !editingTeamReport && (
                   <button onClick={startEditTeamReport}
                     className="bg-border text-foreground px-3 py-1.5 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                    Edit
+                    编辑
                   </button>
                 )}
                 <button
@@ -275,7 +274,7 @@ export default function ReportsPage() {
                   disabled={isGeneratingTeam}
                   className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
                 >
-                  {isGeneratingTeam ? "Generating..." : "Generate Team Report"}
+                  {isGeneratingTeam ? "生成中..." : "生成团队日报"}
                 </button>
               </div>
             </div>
@@ -288,7 +287,7 @@ export default function ReportsPage() {
                   {teamReport.feishu_doc_url && (
                     <a href={teamReport.feishu_doc_url} target="_blank" rel="noopener noreferrer"
                       className="bg-blue-900/40 text-info px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                      Feishu Doc
+                      飞书文档
                     </a>
                   )}
                 </div>
@@ -297,18 +296,18 @@ export default function ReportsPage() {
                     <textarea value={teamEditContent} onChange={(e) => setTeamEditContent(e.target.value)}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground h-64 focus:outline-none focus:ring-2 focus:ring-primary" />
                     <div>
-                      <label className="block text-xs text-muted mb-1">Feishu Doc URL</label>
+                      <label className="block text-xs text-muted mb-1">飞书文档 URL</label>
                       <input type="url" value={teamEditFeishuUrl} onChange={(e) => setTeamEditFeishuUrl(e.target.value)}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
                     </div>
                     <div className="flex gap-2">
                       <button onClick={saveTeamReport}
                         className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:opacity-90 transition">
-                        Save
+                        保存
                       </button>
                       <button onClick={() => setEditingTeamReport(false)}
                         className="bg-border text-foreground px-4 py-1.5 rounded-lg text-sm font-semibold hover:brightness-125 transition">
-                        Cancel
+                        取消
                       </button>
                     </div>
                   </div>
@@ -318,14 +317,13 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className="bg-surface rounded-xl p-8 border border-border text-center mb-6">
-                <p className="text-muted">No team report generated yet. Click &quot;Generate Team Report&quot; to create one.</p>
+                <p className="text-muted">尚未生成团队日报,点击 &quot;生成团队日报&quot; 创建。</p>
               </div>
             )}
 
-            {/* Historical team reports */}
             {teamReports.length > 1 && (
               <div>
-                <h3 className="text-lg font-semibold mb-3">History</h3>
+                <h3 className="text-lg font-semibold mb-3">历史日报</h3>
                 <div className="space-y-3">
                   {teamReports.filter((r) => r.id !== teamReport?.id).map((tr) => (
                     <details key={tr.id} className="bg-surface rounded-xl border border-border">
@@ -340,10 +338,9 @@ export default function ReportsPage() {
             )}
           </div>
         ) : (
-          /* Members tab */
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <label className="text-sm text-muted">Date:</label>
+              <label className="text-sm text-muted">日期:</label>
               <input
                 type="date"
                 value={memberDate}
@@ -354,7 +351,7 @@ export default function ReportsPage() {
 
             {memberReports.length === 0 ? (
               <div className="bg-surface rounded-xl p-8 border border-border text-center">
-                <p className="text-muted">No team members found.</p>
+                <p className="text-muted">未找到团队成员。</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -364,18 +361,18 @@ export default function ReportsPage() {
                       <span className="text-sm font-semibold text-info">{mr.user_name}</span>
                       {mr.has_report ? (
                         <span className="inline-flex items-center gap-1 text-xs text-success bg-green-900/40 px-2 py-0.5 rounded-full">
-                          Submitted
+                          已提交
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs text-dim bg-border px-2 py-0.5 rounded-full">
-                          Not submitted
+                          未提交
                         </span>
                       )}
                     </div>
                     {mr.has_report ? (
                       <div className="text-sm whitespace-pre-wrap text-muted leading-relaxed">{mr.content}</div>
                     ) : (
-                      <p className="text-sm text-dim italic">No report for this date.</p>
+                      <p className="text-sm text-dim italic">该日期暂无报告。</p>
                     )}
                   </div>
                 ))}
@@ -387,20 +384,40 @@ export default function ReportsPage() {
     );
   }
 
-  // Director / PM view (existing grouped layout)
+  // 总监视图:生成部门日报,可切换小组日报/员工日报两个 Tab
+  if (isDirector) {
+    return (
+      <DirectorReportsView
+        reports={reports}
+        grouped={grouped}
+        editingId={editingId}
+        editContent={editContent}
+        editFeishuUrl={editFeishuUrl}
+        setEditContent={setEditContent}
+        setEditFeishuUrl={setEditFeishuUrl}
+        startEdit={startEdit}
+        saveEdit={saveEdit}
+        isGenerating={isGenerating}
+        generateError={generateError}
+        onGenerateDept={generateTodayReport}
+      />
+    );
+  }
+
+  // PM 视图(沿用原分组)
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold">Team Reports</h2>
-          <p className="text-sm text-muted">View team members&apos; reports and generate department summary</p>
+          <h2 className="text-xl font-bold">日报</h2>
+          <p className="text-sm text-muted">查看团队成员日报</p>
         </div>
         <button
           onClick={generateTodayReport}
           disabled={isGenerating}
           className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
         >
-          {isGenerating ? "Generating..." : "Generate Dept Report"}
+          {isGenerating ? "生成中..." : "生成我的日报"}
         </button>
       </div>
       {generateError && (
@@ -411,7 +428,7 @@ export default function ReportsPage() {
 
       {reports.length === 0 ? (
         <div className="bg-surface rounded-xl p-8 border border-border text-center">
-          <p className="text-muted">No reports yet.</p>
+          <p className="text-muted">暂无报告。</p>
         </div>
       ) : grouped ? (
         <div className="space-y-6">
@@ -424,36 +441,18 @@ export default function ReportsPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <span className="text-sm font-semibold text-info">{report.user_name}</span>
-                        <span className="text-xs text-dim ml-2">{report.edited ? "Edited" : "Auto-generated"}</span>
+                        <span className="text-xs text-dim ml-2">{report.edited ? "已编辑" : "自动生成"}</span>
                       </div>
                       <div className="flex gap-2">
                         {report.feishu_doc_url && (
                           <a href={report.feishu_doc_url} target="_blank" rel="noopener noreferrer"
                             className="bg-blue-900/40 text-info px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                            Feishu Doc
+                            飞书文档
                           </a>
-                        )}
-                        {role === "director" && (
-                          <button onClick={() => editingId === report.id ? saveEdit() : startEdit(report)}
-                            className="bg-border text-foreground px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
-                            {editingId === report.id ? "Save" : "Edit"}
-                          </button>
                         )}
                       </div>
                     </div>
-                    {editingId === report.id ? (
-                      <div className="space-y-3">
-                        <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
-                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground h-48 focus:outline-none focus:ring-2 focus:ring-primary" />
-                        <div>
-                          <label className="block text-xs text-muted mb-1">Feishu Doc URL</label>
-                          <input type="url" value={editFeishuUrl} onChange={(e) => setEditFeishuUrl(e.target.value)}
-                            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-sm whitespace-pre-wrap text-muted leading-relaxed">{report.content}</div>
-                    )}
+                    <div className="text-sm whitespace-pre-wrap text-muted leading-relaxed">{report.content}</div>
                   </div>
                 ))}
               </div>
@@ -461,6 +460,282 @@ export default function ReportsPage() {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DirectorReportsView({
+  reports,
+  grouped,
+  editingId,
+  editContent,
+  editFeishuUrl,
+  setEditContent,
+  setEditFeishuUrl,
+  startEdit,
+  saveEdit,
+  isGenerating,
+  generateError,
+  onGenerateDept,
+}: {
+  reports: DailyReport[];
+  grouped: Array<[string, DailyReport[]]> | null;
+  editingId: string | null;
+  editContent: string;
+  editFeishuUrl: string;
+  setEditContent: (v: string) => void;
+  setEditFeishuUrl: (v: string) => void;
+  startEdit: (r: DailyReport) => void;
+  saveEdit: () => void;
+  isGenerating: boolean;
+  generateError: string;
+  onGenerateDept: () => void;
+}) {
+  const [tab, setTab] = useState<"teams" | "employees">("teams");
+  const [deptContent, setDeptContent] = useState("");
+  const [deptDate, setDeptDate] = useState(new Date().toISOString().split("T")[0]);
+  const [deptGenerating, setDeptGenerating] = useState(false);
+  const [deptEdited, setDeptEdited] = useState(false);
+  const [deptError, setDeptError] = useState("");
+
+  const generateDept = async () => {
+    setDeptGenerating(true);
+    setDeptError("");
+    try {
+      const r = await api.generateTodayReport();
+      setDeptContent(r.content);
+      setDeptEdited(false);
+    } catch (err) {
+      setDeptError(err instanceof Error ? err.message : "生成部门日报失败");
+    } finally {
+      setDeptGenerating(false);
+    }
+  };
+
+  // 首次进入时,聚合当日员工日报作为部门日报草稿
+  useEffect(() => {
+    if (!deptContent && grouped && grouped.length > 0) {
+      const todayKey = new Date().toISOString().split("T")[0];
+      const todayEntry = grouped.find(([d]) => d === todayKey);
+      const list = todayEntry ? todayEntry[1] : grouped[0][1];
+      if (list.length > 0) {
+        const summary = list
+          .map((r) => `### ${r.user_name}\n${r.content}`)
+          .join("\n\n---\n\n");
+        setDeptContent(`# 部门日报 ${todayKey}\n\n本部门共 ${list.length} 份成员日报。\n\n---\n\n${summary}`);
+      }
+    }
+  }, [grouped, deptContent]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-bold">部门报告</h2>
+          <p className="text-sm text-muted">生成部门日报,下方可查看小组日报与员工日报</p>
+        </div>
+      </div>
+
+      {generateError && (
+        <div className="mb-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          {generateError}
+        </div>
+      )}
+
+      {/* 顶部:部门日报(始终可见) */}
+      <div className="bg-surface rounded-xl p-4 border border-border mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold">🏢 部门日报</h3>
+          <div className="flex gap-2 items-center">
+            <input
+              type="date"
+              value={deptDate}
+              onChange={(e) => setDeptDate(e.target.value)}
+              className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              onClick={generateDept}
+              disabled={deptGenerating}
+              className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+            >
+              {deptGenerating ? "生成中..." : "🤖 生成部门日报"}
+            </button>
+          </div>
+        </div>
+        {deptError && <p className="text-sm text-danger mb-3">{deptError}</p>}
+        <textarea
+          value={deptContent}
+          onChange={(e) => { setDeptContent(e.target.value); setDeptEdited(true); }}
+          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground h-64 focus:outline-none focus:ring-2 focus:ring-primary"
+          placeholder='点击 "🤖 生成部门日报" 由 AI 汇总各部门日报,或在此手动编辑...'
+        />
+        {deptEdited && <p className="text-xs text-warning mt-2">已手动编辑</p>}
+      </div>
+
+      {/* 下方:两个 Tab */}
+      <div className="flex gap-1 mb-4 bg-surface rounded-lg p-1 border border-border w-fit">
+        <button
+          onClick={() => setTab("teams")}
+          className={`px-4 py-2 rounded-md text-sm font-semibold ${tab === "teams" ? "bg-primary text-white" : "text-muted hover:text-foreground"}`}
+        >
+          小组日报
+        </button>
+        <button
+          onClick={() => setTab("employees")}
+          className={`px-4 py-2 rounded-md text-sm font-semibold ${tab === "employees" ? "bg-primary text-white" : "text-muted hover:text-foreground"}`}
+        >
+          员工日报
+        </button>
+      </div>
+
+      {tab === "teams" && <TeamReportsTab />}
+      {tab === "employees" && (
+        <EmployeeReportsTab
+          grouped={grouped}
+          reports={reports}
+          editingId={editingId}
+          editContent={editContent}
+          editFeishuUrl={editFeishuUrl}
+          setEditContent={setEditContent}
+          setEditFeishuUrl={setEditFeishuUrl}
+          startEdit={startEdit}
+          saveEdit={saveEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+function TeamReportsTab() {
+  const [list, setList] = useState<TeamReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    api.getTeamReports({ from: weekAgo, to: today })
+      .then((d) => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="text-muted text-sm">加载中...</p>;
+  if (list.length === 0) {
+    return (
+      <div className="bg-surface rounded-xl p-8 border border-border text-center">
+        <p className="text-muted">暂无团队日报。各团队 TL 可在其 Reports 页面生成。</p>
+      </div>
+    );
+  }
+
+  const byDate: Record<string, TeamReport[]> = {};
+  for (const r of list) {
+    if (!byDate[r.report_date]) byDate[r.report_date] = [];
+    byDate[r.report_date].push(r);
+  }
+  const entries = Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a));
+
+  return (
+    <div className="space-y-6">
+      {entries.map(([date, rs]) => (
+        <div key={date}>
+          <h3 className="text-sm font-bold text-foreground mb-3">{date}</h3>
+          <div className="space-y-3">
+            {rs.map((r) => (
+              <div key={r.id} className="bg-surface rounded-xl p-4 border border-border">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm font-semibold text-info">{r.team_name}</span>
+                  <span className="text-xs text-dim">由 {r.leader_name} 生成</span>
+                  {r.feishu_doc_url && (
+                    <a href={r.feishu_doc_url} target="_blank" rel="noopener noreferrer"
+                      className="bg-blue-900/40 text-info px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
+                      飞书文档
+                    </a>
+                  )}
+                </div>
+                <div className="text-sm whitespace-pre-wrap text-muted leading-relaxed">{r.content}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmployeeReportsTab({
+  grouped,
+  reports,
+  editingId,
+  editContent,
+  editFeishuUrl,
+  setEditContent,
+  setEditFeishuUrl,
+  startEdit,
+  saveEdit,
+}: {
+  grouped: Array<[string, DailyReport[]]> | null;
+  reports: DailyReport[];
+  editingId: string | null;
+  editContent: string;
+  editFeishuUrl: string;
+  setEditContent: (v: string) => void;
+  setEditFeishuUrl: (v: string) => void;
+  startEdit: (r: DailyReport) => void;
+  saveEdit: () => void;
+}) {
+  if (reports.length === 0) {
+    return (
+      <div className="bg-surface rounded-xl p-8 border border-border text-center">
+        <p className="text-muted">暂无员工日报。</p>
+      </div>
+    );
+  }
+  if (!grouped) return null;
+
+  return (
+    <div className="space-y-6">
+      {grouped.map(([date, dateReports]) => (
+        <div key={date}>
+          <h3 className="text-sm font-bold text-foreground mb-3">{date}</h3>
+          <div className="space-y-3">
+            {dateReports.map((report) => (
+              <div key={report.id} className="bg-surface rounded-xl p-4 border border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <span className="text-sm font-semibold text-info">{report.user_name}</span>
+                    <span className="text-xs text-dim ml-2">{report.edited ? "已编辑" : "自动生成"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {report.feishu_doc_url && (
+                      <a href={report.feishu_doc_url} target="_blank" rel="noopener noreferrer"
+                        className="bg-blue-900/40 text-info px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
+                        飞书文档
+                      </a>
+                    )}
+                    <button onClick={() => editingId === report.id ? saveEdit() : startEdit(report)}
+                      className="bg-border text-foreground px-3 py-1 rounded-lg text-xs font-semibold hover:brightness-125 transition">
+                      {editingId === report.id ? "保存" : "编辑"}
+                    </button>
+                  </div>
+                </div>
+                {editingId === report.id ? (
+                  <div className="space-y-3">
+                    <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground h-48 focus:outline-none focus:ring-2 focus:ring-primary" />
+                    <div>
+                      <label className="block text-xs text-muted mb-1">飞书文档 URL</label>
+                      <input type="url" value={editFeishuUrl} onChange={(e) => setEditFeishuUrl(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm whitespace-pre-wrap text-muted leading-relaxed">{report.content}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

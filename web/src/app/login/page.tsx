@@ -27,7 +27,7 @@ export default function LoginPage() {
           { name: "钱七", role: "employee" },
         ]);
       })
-      .catch(() => setError("Cannot connect to API server"));
+      .catch(() => setError("无法连接到 API 服务"));
   }, []);
 
   const handleLogin = async () => {
@@ -38,7 +38,7 @@ export default function LoginPage() {
       await api.login(selected);
       router.push("/dashboard");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Login failed");
+      setError(e instanceof Error ? e.message : "登录失败");
       setLoading(false);
     }
   };
@@ -48,14 +48,14 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="bg-surface rounded-xl p-8 border border-border">
           <h1 className="text-2xl font-bold text-center mb-2">AIDashboard</h1>
-          <p className="text-sm text-muted text-center mb-6">Select user to login</p>
+          <p className="text-sm text-muted text-center mb-6">请选择用户登录</p>
 
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
             className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
           >
-            <option value="">-- Select User --</option>
+            <option value="">-- 选择用户 --</option>
             {users.map((u) => (
               <option key={u.name} value={u.name}>
                 {u.name} ({roleLabel(u.role)})
@@ -70,7 +70,7 @@ export default function LoginPage() {
             disabled={!selected || loading}
             className="w-full bg-primary text-white py-3 rounded-lg font-semibold disabled:opacity-50 hover:bg-blue-700 transition-colors"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "登录中..." : "登录"}
           </button>
         </div>
       </div>
@@ -80,10 +80,10 @@ export default function LoginPage() {
 
 function roleLabel(role: string): string {
   const labels: Record<string, string> = {
-    director: "Director",
-    pm: "PM",
-    team_leader: "TL",
-    employee: "Engineer",
+    director: "部门总监",
+    pm: "产品经理",
+    team_leader: "团队负责人",
+    employee: "工程师",
   };
   return labels[role] || role;
 }

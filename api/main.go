@@ -7,6 +7,7 @@ import (
 	"github.com/aidashboard/api/config"
 	"github.com/aidashboard/api/db"
 	"github.com/aidashboard/api/handler"
+	"github.com/aidashboard/api/service"
 	"github.com/aidashboard/api/storage"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -39,11 +40,14 @@ func main() {
 	}
 
 	authH := handler.NewAuthHandler(database, cfg.JWTSecret)
-	reqH := handler.NewRequirementHandler(database)
+	aiClient := service.NewAIClient()
+	reqH := handler.NewRequirementHandler(database, aiClient)
 	taskH := handler.NewTaskHandler(database)
-	sessionH := handler.NewSessionHandler(database, minioStore)
+	sessionH := handler.NewSessionHandler(database, minioStore, aiClient)
 	reportH := handler.NewReportHandler(database, cfg.ReportGeneratorURL)
 	docH := handler.NewDocumentHandler(database)
+	tokenH := handler.NewTokenHandler(database)
+	teamH := handler.NewTeamHandler(database)
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
@@ -68,6 +72,7 @@ func main() {
 		r.Get("/requirements/{id}", reqH.Get)
 		r.Put("/requirements/{id}", reqH.Update)
 		r.Get("/requirements/{id}/ac", reqH.GetAC)
+		r.Post("/requirements/{id}/regenerate-ac", reqH.RegenerateAC)
 
 		r.Get("/tasks", taskH.List)
 		r.Post("/tasks", taskH.Create)
@@ -100,6 +105,9 @@ func main() {
 		r.Post("/reports/team/today/generate", reportH.GenerateTeamReport)
 		r.Get("/reports/team", reportH.ListTeamReports)
 		r.Put("/reports/team/{id}", reportH.UpdateTeamReport)
+
+		r.Get("/tokens", tokenH.Aggregate)
+		r.Get("/teams/activity", teamH.Activity)
 	})
 
 	log.Printf("Starting API server on :%s", cfg.Port)

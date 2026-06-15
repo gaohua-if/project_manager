@@ -284,6 +284,30 @@ class ApiClient {
       body: JSON.stringify(data),
     })
   }
+
+  // Tokens
+  async getTokens(params?: {
+    period?: import("./types").TokenPeriod
+    from?: string
+    to?: string
+    group_by?: import("./types").TokenGroupBy
+  }) {
+    const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : ""
+    return this.request<import("./types").TokenAggregation>(`/tokens${qs}`)
+  }
+
+  // Team activity
+  async getTeamActivity(date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : ""
+    return this.request<import("./types").TeamActivity>(`/teams/activity${qs}`)
+  }
+
+  // Regenerate AC via AI
+  async regenerateAC(id: string) {
+    return this.request<{ acceptance_criteria: string[] }>(`/requirements/${id}/regenerate-ac`, {
+      method: "POST",
+    })
+  }
 }
 
 export const api = new ApiClient()
