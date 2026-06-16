@@ -43,9 +43,12 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 			}
 
 			user := &model.User{
-				ID:     claims["id"].(string),
-				Name:   claims["name"].(string),
-				Role:   claims["role"].(string),
+				ID:   claims["id"].(string),
+				Name: claims["name"].(string),
+				Role: claims["role"].(string),
+			}
+			if eid, ok := claims["employee_id"].(string); ok {
+				user.EmployeeID = eid
 			}
 			if tid, ok := claims["team_id"].(string); ok && tid != "" {
 				user.TeamID = &tid
@@ -75,4 +78,16 @@ func requireRoles(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// AdminOnly gates a route to the admin role. Use as middleware on chi sub-routers.
+func AdminOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := getUser(r)
+		if u == nil || u.Role != "admin" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

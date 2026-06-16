@@ -9,13 +9,14 @@ type Team struct {
 }
 
 type User struct {
-	ID        string  `json:"id"`
-	FeishuID  *string `json:"feishu_id,omitempty"`
-	Name      string  `json:"name"`
-	Role      string  `json:"role"`
-	TeamID    *string `json:"team_id,omitempty"`
-	TeamName  *string `json:"team_name,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	EmployeeID string    `json:"employee_id"`
+	Email      string    `json:"email"`
+	Name       string    `json:"name"`
+	Role       string    `json:"role"`
+	TeamID     *string   `json:"team_id,omitempty"`
+	TeamName   *string   `json:"team_name,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Requirement struct {
@@ -112,12 +113,30 @@ type DailyReport struct {
 // Request/Response types
 
 type LoginRequest struct {
-	Name string `json:"name"`
+	EmployeeID string `json:"employee_id"`
+	Password   string `json:"password"`
 }
 
 type LoginResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`
+}
+
+type RegisterRequest struct {
+	EmployeeID string `json:"employee_id"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+}
+
+type AdminUpdateUserRequest struct {
+	Role     *string `json:"role,omitempty"`
+	TeamID   *string `json:"team_id,omitempty"`
+	ClearTeam bool   `json:"clear_team,omitempty"`
+}
+
+type AdminResetPasswordRequest struct {
+	Password string `json:"password"`
 }
 
 type CreateRequirementRequest struct {
@@ -182,9 +201,12 @@ type SessionUpload struct {
 }
 
 type TokenUpload struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
-	TotalTokens  int64 `json:"total_tokens"`
+	InputTokens         int64    `json:"input_tokens"`
+	OutputTokens        int64    `json:"output_tokens"`
+	CacheCreationTokens int64    `json:"cache_creation_tokens"`
+	CacheReadTokens     int64    `json:"cache_read_tokens"`
+	TotalTokens         int64    `json:"total_tokens"`
+	Models              []string `json:"models,omitempty"`
 }
 
 type UpdateSessionTaskRequest struct {
@@ -263,13 +285,28 @@ type UpdateACRequest struct {
 }
 
 type TokenAggregation struct {
-	Total      int64        `json:"total"`
-	InputSum   int64        `json:"input_sum"`
-	OutputSum  int64        `json:"output_sum"`
-	Groups     []TokenGroup `json:"groups"`
-	Series     []TokenPoint `json:"series"`
-	Period     string       `json:"period"`
-	GroupBy    string       `json:"group_by"`
+	Total             int64        `json:"total"`
+	InputSum          int64        `json:"input_sum"`
+	OutputSum         int64        `json:"output_sum"`
+	CacheCreationSum  int64        `json:"cache_creation_sum"`
+	CacheReadSum      int64        `json:"cache_read_sum"`
+	Groups            []TokenGroup `json:"groups"`
+	Series            []TokenPoint `json:"series"`
+	Period            string       `json:"period"`
+	GroupBy           string       `json:"group_by"`
+}
+
+type SessionTokens struct {
+	SessionID           string    `json:"session_id"`
+	SessionRef          string    `json:"session_ref"`
+	AgentType           string    `json:"agent_type"`
+	Models              []string  `json:"models"`
+	StartedAt           time.Time `json:"started_at"`
+	InputTokens         int64     `json:"input_tokens"`
+	OutputTokens        int64     `json:"output_tokens"`
+	CacheCreationTokens int64     `json:"cache_creation_tokens"`
+	CacheReadTokens     int64     `json:"cache_read_tokens"`
+	TotalTokens         int64     `json:"total_tokens"`
 }
 
 type TokenGroup struct {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aidashboard/api/model"
+	"github.com/lib/pq"
 )
 
 type TokenHandler struct {
@@ -55,17 +56,21 @@ func (h *TokenHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	endIdx := argIdx
 	argIdx++
 
-	where := "WHERE tu.recorded_at >= $" + strconv.Itoa(startIdx) + " AND tu.recorded_at < ($" + strconv.Itoa(endIdx) + " + INTERVAL '1 day')"
+	where := "WHERE tu.recorded_at >= $" + strconv.Itoa(startIdx) + "::timestamptz AND tu.recorded_at < ($" + strconv.Itoa(endIdx) + "::date + INTERVAL '1 day')"
 	if scope != "" {
 		where += " AND " + scope
 	}
 
 	// Totals
-	var total, inputSum, outputSum int64
+	var total, inputSum, outputSum, cacheCreateSum, cacheReadSum int64
 	err = h.db.QueryRow(`
-		SELECT COALESCE(SUM(tu.total_tokens),0), COALESCE(SUM(tu.input_tokens),0), COALESCE(SUM(tu.output_tokens),0)
+		SELECT COALESCE(SUM(tu.total_tokens),0),
+		       COALESCE(SUM(tu.input_tokens),0),
+		       COALESCE(SUM(tu.output_tokens),0),
+		       COALESCE(SUM(tu.cache_creation_tokens),0),
+		       COALESCE(SUM(tu.cache_read_tokens),0)
 		FROM token_usage tu
-		`+where, args...).Scan(&total, &inputSum, &outputSum)
+		`+where, args...).Scan(&total, &inputSum, &outputSum, &cacheCreateSum, &cacheReadSum)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -86,14 +91,97 @@ func (h *TokenHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, model.TokenAggregation{
-		Total:     total,
-		InputSum:  inputSum,
-		OutputSum: outputSum,
-		Groups:    groups,
-		Series:    series,
-		Period:    period,
-		GroupBy:   groupBy,
+		Total:            total,
+		InputSum:         inputSum,
+		OutputSum:        outputSum,
+		CacheCreationSum: cacheCreateSum,
+		CacheReadSum:     cacheReadSum,
+		Groups:           groups,
+		Series:           series,
+		Period:           period,
+		GroupBy:          groupBy,
 	})
+}
+
+// ListSessionTokens returns per-session token breakdown for the requesting user
+// (or their team / whole org depending on role). Filters: ?from=&to= (YYYY-MM-DD),
+// default = current month.
+func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+	if from == "" || to == "" {
+		now := time.Now()
+		firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		from = firstOfMonth.Format("2006-01-02")
+		to = now.Format("2006-01-02")
+	}
+
+	scope, scopeArgs, _ := buildTokenScope(u)
+	args := append([]any{}, scopeArgs...)
+	args = append(args, from)
+	fromIdx := len(args)
+	args = append(args, to)
+	toIdx := len(args)
+
+	where := "WHERE DATE(s.started_at) >= $" + strconv.Itoa(fromIdx) +
+		" AND DATE(s.started_at) <= $" + strconv.Itoa(toIdx)
+	if scope != "" {
+		where += " AND " + scope
+	}
+
+	q := `
+		SELECT s.id, s.session_ref, s.agent_type,
+		       CASE WHEN s.models <> '{}' THEN s.models ELSE ARRAY[s.model] END,
+		       s.started_at,
+		       COALESCE(tu.input_tokens, 0),
+		       COALESCE(tu.output_tokens, 0),
+		       COALESCE(tu.cache_creation_tokens, 0),
+		       COALESCE(tu.cache_read_tokens, 0),
+		       COALESCE(tu.total_tokens,
+		                COALESCE(tu.input_tokens,0) + COALESCE(tu.output_tokens,0)
+		                 + COALESCE(tu.cache_creation_tokens,0) + COALESCE(tu.cache_read_tokens,0))
+		FROM sessions s
+		LEFT JOIN LATERAL (
+			SELECT * FROM token_usage tu WHERE tu.session_id = s.id LIMIT 1
+		) tu ON true
+		` + where + `
+		ORDER BY s.started_at DESC`
+
+	rows, err := h.db.Query(q, args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	out := []model.SessionTokens{}
+	for rows.Next() {
+		var s model.SessionTokens
+		var models pq.StringArray
+		if err := rows.Scan(&s.SessionID, &s.SessionRef, &s.AgentType, &models,
+			&s.StartedAt, &s.InputTokens, &s.OutputTokens,
+			&s.CacheCreationTokens, &s.CacheReadTokens, &s.TotalTokens); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		s.Models = []string(models)
+		if s.Models == nil {
+			s.Models = []string{}
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // buildTokenScope returns the role-scoped WHERE fragment for the current user.

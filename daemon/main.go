@@ -57,8 +57,10 @@ type AssistantMsg struct {
 }
 
 type UsageInfo struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
+	InputTokens              int64 `json:"input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
 }
 
 type ContentBlock struct {
@@ -72,21 +74,24 @@ type UserMsg struct {
 }
 
 type SessionInfo struct {
-	SessionRef string
-	FilePath   string
-	ProjectDir string
-	Cwd        string
-	GitBranch  string
-	StartedAt  time.Time
-	EndedAt    time.Time
-	Model      string
-	Summary    string
-	ToolCalls  map[string]int
-	InputTok   int64
-	OutputTok  int64
-	TotalTok   int64
-	NumLines   int
-	SubFiles   []string // subagent JSONL file paths
+	SessionRef   string
+	FilePath     string
+	ProjectDir   string
+	Cwd          string
+	GitBranch    string
+	StartedAt    time.Time
+	EndedAt      time.Time
+	Model        string
+	Models       []string // distinct models seen, in insertion order
+	Summary      string
+	ToolCalls    map[string]int
+	InputTok     int64
+	OutputTok    int64
+	CacheCreateTok int64
+	CacheReadTok int64
+	TotalTok     int64
+	NumLines     int
+	SubFiles     []string // subagent JSONL file paths
 }
 
 func (s *SessionInfo) Duration() time.Duration {
@@ -1506,10 +1511,13 @@ func parseJSONL(path string) *SessionInfo {
 			if json.Unmarshal(event.Message, &msg) == nil {
 				if msg.Model != "" && msg.Model != "<synthetic>" {
 					s.Model = msg.Model
+					s.Models = appendDistinct(s.Models, msg.Model)
 				}
 				if msg.Usage != nil {
 					s.InputTok += msg.Usage.InputTokens
 					s.OutputTok += msg.Usage.OutputTokens
+					s.CacheCreateTok += msg.Usage.CacheCreationInputTokens
+					s.CacheReadTok += msg.Usage.CacheReadInputTokens
 				}
 				for _, c := range msg.Content {
 					if c.Type == "tool_use" && c.Name != "" {
@@ -1520,7 +1528,7 @@ func parseJSONL(path string) *SessionInfo {
 		}
 	}
 
-	s.TotalTok = s.InputTok + s.OutputTok
+	s.TotalTok = s.InputTok + s.OutputTok + s.CacheCreateTok + s.CacheReadTok
 	if !lastTS.IsZero() {
 		s.EndedAt = lastTS
 	}
@@ -1602,11 +1610,16 @@ func buildUploadPayload(s *SessionInfo) map[string]any {
 		p["tool_calls"] = s.ToolCalls
 	}
 	if s.TotalTok > 0 {
-		p["token_usage"] = map[string]int64{
-			"input_tokens":  s.InputTok,
-			"output_tokens": s.OutputTok,
-			"total_tokens":  s.TotalTok,
+		p["token_usage"] = map[string]any{
+			"input_tokens":            s.InputTok,
+			"output_tokens":           s.OutputTok,
+			"cache_creation_tokens":   s.CacheCreateTok,
+			"cache_read_tokens":       s.CacheReadTok,
+			"total_tokens":            s.TotalTok,
 		}
+	}
+	if len(s.Models) > 0 {
+		p["models"] = s.Models
 	}
 	return p
 }
@@ -1616,6 +1629,15 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func appendDistinct(list []string, v string) []string {
+	for _, item := range list {
+		if item == v {
+			return list
+		}
+	}
+	return append(list, v)
 }
 
 func trunc(s string, n int) string {

@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/aidashboard/api/config"
 	"github.com/aidashboard/api/db"
@@ -60,12 +61,20 @@ func main() {
 	})
 
 	r.Post("/api/v1/auth/login", authH.Login)
+	r.Post("/api/v1/auth/register", authH.Register)
+	r.Get("/api/v1/users", authH.ListUsers)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(handler.AuthMiddleware(cfg.JWTSecret))
 
 		r.Get("/auth/me", authH.Me)
-		r.Get("/users", authH.ListUsers)
+		r.Get("/teams", authH.ListTeams)
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(handler.AdminOnly)
+			r.Put("/users/{id}", authH.AdminUpdateUser)
+			r.Post("/users/{id}/reset-password", authH.AdminResetPassword)
+		})
 
 		r.Get("/requirements", reqH.List)
 		r.Post("/requirements", reqH.Create)
@@ -107,6 +116,7 @@ func main() {
 		r.Put("/reports/team/{id}", reportH.UpdateTeamReport)
 
 		r.Get("/tokens", tokenH.Aggregate)
+		r.Get("/tokens/sessions", tokenH.ListSessionTokens)
 		r.Get("/teams/activity", teamH.Activity)
 	})
 
@@ -117,9 +127,29 @@ func main() {
 }
 
 func corsMiddleware(origin string) func(http.Handler) http.Handler {
+	allowedOrigins := map[string]bool{}
+	defaultOrigin := ""
+	for _, item := range strings.Split(origin, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			if defaultOrigin == "" {
+				defaultOrigin = item
+			}
+			allowedOrigins[item] = true
+		}
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
+			requestOrigin := r.Header.Get("Origin")
+			if allowedOrigins["*"] {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else if allowedOrigins[requestOrigin] {
+				w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
+				w.Header().Set("Vary", "Origin")
+			} else if defaultOrigin != "" && requestOrigin == "" {
+				w.Header().Set("Access-Control-Allow-Origin", defaultOrigin)
+			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			if r.Method == "OPTIONS" {

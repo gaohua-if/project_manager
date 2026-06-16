@@ -41,8 +41,14 @@ Migrations run automatically on API startup. To re-seed: `docker compose down -v
 
 ## Architecture: things you need to know before editing
 
-### Authentication is name-only JWT (no passwords)
-`POST /api/v1/auth/login` accepts `{"name": "张三"}` and returns a JWT containing `id`, `name`, `role`, `team_id`. The frontend stores the token in `localStorage` under `token` and the decoded user under `user`. Default users are seeded in `api/db/migrations/002_seed.sql`. There is no real credential check — this is an internal tool; do not add password logic without discussing the deployment model.
+### Authentication is employee_id + bcrypt password
+`POST /api/v1/auth/login` accepts `{"employee_id":"zhangsan","password":"..."}` and verifies the password against `users.password_hash` with `bcrypt.CompareHashAndPassword`. On success it returns a JWT containing `id`, `employee_id`, `name`, `role`, `team_id`. The frontend stores the token in `localStorage` under `token` and the decoded user under `user`.
+
+Self-registration is open: `POST /api/v1/auth/register` takes `employee_id` / `name` / `email` / `password`, creates a user with `role='employee'` and `team_id=NULL`, and returns a token immediately. New users cannot see anything beyond their own data until an admin assigns them a team / promotes their role.
+
+Migration `api/db/migrations/005_user_auth.sql` adds the `employee_id` / `email` / `password_hash` columns, expands the role CHECK to include `admin`, backfills the seeded users from `002_seed.sql` with default credentials (工号 = pinyin slug, password = `Changeme123!`), and idempotently inserts a fixed admin (`employee_id='admin'`, password `Admin@123!`).
+
+The `admin` role bypasses all role-scoped filters — handlers branch on `u.Role` and let `admin` fall through to the unscoped default (same as `director`). Admin-only endpoints (`PUT /admin/users/{id}`, `POST /admin/users/{id}/reset-password`) are gated by `handler.AdminOnly` middleware in `api/main.go`.
 
 ### Authorization is enforced **inside SQL**, not just middleware
 `api/handler/middleware.go` exposes `requireRoles` but most list endpoints do NOT use it. Instead, handlers like `RequirementHandler.List`, `SessionHandler.List`, and the token/report handlers branch on `u.Role` and append different `WHERE` clauses:

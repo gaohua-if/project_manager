@@ -7,35 +7,48 @@ import type { User } from "@/lib/types";
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS: Record<string, Array<{ label: string; href: string; roles: string[] }>> = {
+  admin: [
+    { label: "Dashboard", href: "/dashboard", roles: ["admin"] },
+    { label: "组织", href: "/organization", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "需求", href: "/requirements", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "任务", href: "/tasks", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "我的工作", href: "/products", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "Token 明细", href: "/tokens", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+    { label: "报告", href: "/reports", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+  ],
   director: [
     { label: "Dashboard", href: "/dashboard", roles: ["director"] },
-    { label: "组织", href: "/organization", roles: ["director", "pm", "team_leader"] },
-    { label: "需求", href: "/requirements", roles: ["director", "pm", "team_leader"] },
-    { label: "任务", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "我的工作", href: "/products", roles: ["director", "team_leader", "employee"] },
-    { label: "报告", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
+    { label: "组织", href: "/organization", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "需求", href: "/requirements", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "任务", href: "/tasks", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "我的工作", href: "/products", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "Token 明细", href: "/tokens", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+    { label: "报告", href: "/reports", roles: ["admin", "director", "team_leader", "employee", "pm"] },
   ],
   pm: [
     { label: "Dashboard", href: "/dashboard", roles: ["pm"] },
-    { label: "组织", href: "/organization", roles: ["director", "pm", "team_leader"] },
-    { label: "需求", href: "/requirements", roles: ["director", "pm", "team_leader"] },
-    { label: "任务", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "我的工作", href: "/products", roles: ["director", "team_leader", "employee"] },
-    { label: "报告", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
+    { label: "组织", href: "/organization", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "需求", href: "/requirements", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "任务", href: "/tasks", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "我的工作", href: "/products", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "Token 明细", href: "/tokens", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+    { label: "报告", href: "/reports", roles: ["admin", "director", "team_leader", "employee", "pm"] },
   ],
   team_leader: [
     { label: "Dashboard", href: "/dashboard", roles: ["team_leader"] },
-    { label: "组织", href: "/organization", roles: ["director", "pm", "team_leader"] },
-    { label: "需求", href: "/requirements", roles: ["director", "pm", "team_leader"] },
-    { label: "任务", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "我的工作", href: "/products", roles: ["director", "team_leader", "employee"] },
-    { label: "报告", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
+    { label: "组织", href: "/organization", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "需求", href: "/requirements", roles: ["admin", "director", "pm", "team_leader"] },
+    { label: "任务", href: "/tasks", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "我的工作", href: "/products", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "Token 明细", href: "/tokens", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+    { label: "报告", href: "/reports", roles: ["admin", "director", "team_leader", "employee", "pm"] },
   ],
   employee: [
     { label: "Dashboard", href: "/dashboard", roles: ["employee"] },
-    { label: "任务", href: "/tasks", roles: ["director", "team_leader", "employee"] },
-    { label: "我的工作", href: "/products", roles: ["director", "team_leader", "employee"] },
-    { label: "报告", href: "/reports", roles: ["director", "team_leader", "employee", "pm"] },
+    { label: "任务", href: "/tasks", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "我的工作", href: "/products", roles: ["admin", "director", "team_leader", "employee"] },
+    { label: "Token 明细", href: "/tokens", roles: ["admin", "director", "team_leader", "employee", "pm"] },
+    { label: "报告", href: "/reports", roles: ["admin", "director", "team_leader", "employee", "pm"] },
   ],
 };
 
@@ -108,6 +121,7 @@ export default function Sidebar() {
 
 function roleLabel(role: string): string {
   const labels: Record<string, string> = {
+    admin: "管理员",
     director: "部门总监",
     pm: "产品经理",
     team_leader: "团队负责人",

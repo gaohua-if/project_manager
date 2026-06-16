@@ -1,7 +1,9 @@
 export interface User {
   id: string
+  employee_id: string
+  email: string
   name: string
-  role: "director" | "team_leader" | "pm" | "employee"
+  role: "admin" | "director" | "team_leader" | "pm" | "employee"
   team_id?: string
   team_name?: string
 }
@@ -153,10 +155,25 @@ export interface TokenAggregation {
   total: number
   input_sum: number
   output_sum: number
+  cache_creation_sum: number
+  cache_read_sum: number
   groups: TokenGroup[]
   series: TokenPoint[]
   period: string
   group_by: string
+}
+
+export interface SessionTokens {
+  session_id: string
+  session_ref: string
+  agent_type: string
+  models: string[]
+  started_at: string
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
 }
 
 export interface MemberStat {

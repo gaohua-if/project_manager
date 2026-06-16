@@ -44,7 +44,7 @@ services:
       AI_API_URL: ""
       AI_API_KEY: ""
       AI_MODEL: ""
-      CORS_ORIGIN: "http://localhost:3000"
+      CORS_ORIGIN: "http://localhost:3000,http://192.168.28.113:3000"
       MINIO_ENDPOINT: "minio:9000"
       MINIO_ACCESS_KEY: "minioadmin"
       MINIO_SECRET_KEY: "minioadmin123"
@@ -66,7 +66,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8080/api/v1"
+      NEXT_PUBLIC_API_URL: "http://192.168.28.113:8080/api/v1"
     depends_on:
       - api
 

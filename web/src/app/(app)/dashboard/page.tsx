@@ -11,6 +11,7 @@ export default function DashboardPage() {
   if (!user) return null;
 
   switch (user.role) {
+    case "admin":
     case "director":
       return <DirectorDashboard user={user} />;
     case "team_leader":

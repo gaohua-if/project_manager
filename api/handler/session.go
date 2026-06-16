@@ -226,11 +226,12 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 
 		if err == sql.ErrNoRows {
 			err := h.db.QueryRow(`
-				INSERT INTO sessions (session_ref, user_id, agent_type, started_at, ended_at, duration_secs, model, summary, tool_calls_json, git_commits)
-				VALUES ($1, $2, 'claude_code', $3, $4, $5, $6, $7, $8, $9)
+				INSERT INTO sessions (session_ref, user_id, agent_type, started_at, ended_at, duration_secs, model, summary, tool_calls_json, git_commits, models)
+				VALUES ($1, $2, 'claude_code', $3, $4, $5, $6, $7, $8, $9, $10)
 				RETURNING id`,
 				su.SessionRef, u.ID, su.StartedAt, su.EndedAt, su.DurationSecs,
 				su.Model, su.Summary, toolCallsJSON, gitCommits,
+				pq.Array(sessionModels(su)),
 			).Scan(&sessionID)
 			if err != nil {
 				results = append(results, result{SessionRef: su.SessionRef, Status: "error: " + err.Error()})
@@ -241,10 +242,11 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 			_, err := h.db.Exec(`
 				UPDATE sessions
 				SET started_at = $3, ended_at = $4, duration_secs = $5, model = $6,
-					summary = $7, tool_calls_json = $8, git_commits = $9, uploaded_at = now()
+					summary = $7, tool_calls_json = $8, git_commits = $9, models = $10, uploaded_at = now()
 				WHERE id = $1 AND user_id = $2`,
 				sessionID, u.ID, su.StartedAt, su.EndedAt, su.DurationSecs,
 				su.Model, su.Summary, toolCallsJSON, gitCommits,
+				pq.Array(sessionModels(su)),
 			)
 			if err != nil {
 				results = append(results, result{SessionRef: su.SessionRef, ID: sessionID, Status: "error: " + err.Error()})
@@ -293,6 +295,19 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// sessionModels returns the model list to persist for a session upload:
+// the daemon-reported distinct models if present, otherwise a single-element
+// fallback so the column is never empty for sessions that report a model.
+func sessionModels(su model.SessionUpload) []string {
+	if su.TokenUsage != nil && len(su.TokenUsage.Models) > 0 {
+		return su.TokenUsage.Models
+	}
+	if su.Model != "" {
+		return []string{su.Model}
+	}
+	return []string{}
+}
+
 func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.SessionUpload) error {
 	tx, err := h.db.Begin()
 	if err != nil {
@@ -303,14 +318,28 @@ func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.Se
 	if _, err := tx.Exec("DELETE FROM token_usage WHERE session_id = $1", sessionID); err != nil {
 		return err
 	}
+
+	models := su.TokenUsage.Models
+	if len(models) == 0 {
+		models = []string{su.Model}
+	}
+
 	if _, err := tx.Exec(`
-		INSERT INTO token_usage (session_id, user_id, task_id, requirement_id, agent_type, model, input_tokens, output_tokens, total_tokens)
-		SELECT $1, $2, s.task_id, s.requirement_id, 'claude_code', $3, $4, $5, $6
+		INSERT INTO token_usage (session_id, user_id, task_id, requirement_id, agent_type, model,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, models)
+		SELECT $1, $2, s.task_id, s.requirement_id, 'claude_code', $3,
+			$4, $5, $6, $7, $8, $9
 		FROM sessions s
 		WHERE s.id = $1`,
 		sessionID, userID, su.Model,
-		su.TokenUsage.InputTokens, su.TokenUsage.OutputTokens, su.TokenUsage.TotalTokens,
+		su.TokenUsage.InputTokens, su.TokenUsage.OutputTokens,
+		su.TokenUsage.CacheCreationTokens, su.TokenUsage.CacheReadTokens,
+		su.TokenUsage.TotalTokens, pq.Array(models),
 	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET models = $2 WHERE id = $1 AND (models IS NULL OR models = '{}')`,
+		sessionID, pq.Array(models)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -392,7 +421,7 @@ func (h *SessionHandler) DownloadLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if u.Role != "director" && u.ID != ownerID {
+	if u.Role != "director" && u.Role != "admin" && u.ID != ownerID {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -459,7 +488,7 @@ func (h *SessionHandler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if u.Role != "director" && u.ID != ownerID {
+	if u.Role != "director" && u.Role != "admin" && u.ID != ownerID {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}

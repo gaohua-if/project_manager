@@ -68,14 +68,21 @@ class ApiClient {
     return res.json()
   }
 
-  async login(name: string) {
+  async login(employeeId: string, password: string) {
     const res = await this.request<{ token: string; user: User }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ employee_id: employeeId, password }),
     })
     this.setToken(res.token)
     this.setUser(res.user)
     return res
+  }
+
+  async register(data: { employee_id: string; name: string; email: string; password: string }) {
+    return this.request<{ token: string; user: User }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
   }
 
   async getMe() {
@@ -84,6 +91,24 @@ class ApiClient {
 
   async getUsers() {
     return this.request<User[]>("/users")
+  }
+
+  async getTeams() {
+    return this.request<import("./types").Team[]>("/teams")
+  }
+
+  async adminUpdateUser(id: string, data: { role?: string; team_id?: string; clear_team?: boolean }) {
+    return this.request<User>(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async adminResetPassword(id: string, password: string) {
+    return this.request<{ status: string }>(`/admin/users/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    })
   }
 
   // Requirements
@@ -294,6 +319,11 @@ class ApiClient {
   }) {
     const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : ""
     return this.request<import("./types").TokenAggregation>(`/tokens${qs}`)
+  }
+
+  async getSessionTokens(params?: { from?: string; to?: string }) {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : ""
+    return this.request<import("./types").SessionTokens[]>(`/tokens/sessions${qs}`)
   }
 
   // Team activity
