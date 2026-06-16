@@ -1,4 +1,4 @@
-# AIDashboard — PRD/原型 与 实现 差距分析
+# Aida — PRD/原型 与 实现 差距分析
 
 > 对照 `PRD.md` 与 `prototype.html`,对当前 `api/`、`web/`、`daemon/` 三端实现的审计。
 > 日期: 2026-06-14

@@ -1,0 +1,106 @@
+/* Copy these list-page rules with list-page.tsx and rename the resource-list prefix. */
+.resource-list .page-panel__body {
+  gap: 18px;
+}
+
+.resource-list .table-layout {
+  --table-layout-w-lg: 344px;
+  --table-layout-select-md: 132px;
+  --table-layout-control-height: 38px;
+  --table-layout-control-inner-height: 36px;
+
+  border-color: #e5edf6;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.035);
+}
+
+.resource-list .table-layout__toolbar {
+  padding: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.06) 0, rgba(37, 99, 235, 0) 30%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-bottom-color: #eef3f8;
+}
+
+.resource-list .table-layout__operations {
+  gap: 8px;
+}
+
+.resource-list__create.ant-btn {
+  height: 38px;
+  padding-inline: 14px;
+  border-radius: 9px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.resource-list .table-layout .ant-input,
+.resource-list .table-layout .ant-input-affix-wrapper,
+.resource-list .table-layout .ant-input-search,
+.resource-list .table-layout .ant-input-search .ant-input-group,
+.resource-list .table-layout .ant-input-search .ant-input-wrapper,
+.resource-list .table-layout .ant-select-single .ant-select-selector,
+.resource-list .table-layout .ant-input-search .ant-input,
+.resource-list .table-layout .ant-input-search .ant-input-search-button {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-color: #dfe8f2 !important;
+  border-radius: 9px;
+}
+
+.resource-list .table-layout .ant-input-search .ant-input-group > input.ant-input,
+.resource-list .table-layout .ant-input-search .ant-input-group > .ant-input-affix-wrapper,
+.resource-list .table-layout .ant-input-search .ant-input-compact-first-item {
+  border-start-end-radius: 0 !important;
+  border-end-end-radius: 0 !important;
+}
+
+.resource-list .table-layout .ant-input-search .ant-input-group-addon {
+  width: 38px;
+  padding: 0 !important;
+  background: transparent;
+}
+
+.resource-list .table-layout .ant-input-search .ant-input-search-button,
+.resource-list .table-layout .ant-input-search .ant-input-search-btn {
+  width: 38px;
+  min-width: 38px;
+  margin-left: -1px;
+  border-color: #dfe8f2 !important;
+  border-start-start-radius: 0 !important;
+  border-end-start-radius: 0 !important;
+  border-start-end-radius: 9px !important;
+  border-end-end-radius: 9px !important;
+}
+
+.resource-list .table-layout__body > .ant-table-wrapper {
+  padding: 10px 14px 0;
+}
+
+.resource-list .ant-table-thead > tr > th {
+  height: 44px;
+}
+
+.resource-list .ant-table-tbody > tr > td {
+  height: 50px;
+}
+
+.resource-list__name-link {
+  color: #1677ff;
+  font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+  .resource-list .table-layout__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-list .table-layout__search {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .resource-list .table-layout__search-group {
+    justify-content: flex-start;
+  }
+}

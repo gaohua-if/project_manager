@@ -1,0 +1,9 @@
+services:
+  aihub-frontend-starter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - ./public/config.js:/usr/share/nginx/html/config.js:ro

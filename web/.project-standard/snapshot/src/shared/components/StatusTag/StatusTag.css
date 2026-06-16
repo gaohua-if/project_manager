@@ -1,0 +1,37 @@
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  margin-inline-end: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  border: 0;
+  border-radius: 999px;
+}
+
+.status-tag--success {
+  color: var(--aihub-color-success);
+  background: var(--aihub-color-success-bg);
+}
+
+.status-tag--processing {
+  color: var(--aihub-color-processing);
+  background: var(--aihub-color-processing-bg);
+}
+
+.status-tag--warning {
+  color: var(--aihub-color-warning);
+  background: var(--aihub-color-warning-bg);
+}
+
+.status-tag--danger {
+  color: var(--aihub-color-danger);
+  background: var(--aihub-color-danger-bg);
+}
+
+.status-tag--neutral {
+  color: var(--aihub-color-neutral);
+  background: var(--aihub-color-neutral-bg);
+}

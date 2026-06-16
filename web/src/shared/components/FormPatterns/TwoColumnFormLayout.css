@@ -1,0 +1,43 @@
+.two-column-form-layout {
+  display: flex;
+  justify-content: space-between;
+  gap: 48px;
+}
+
+.two-column-form-layout__column {
+  flex: 1 1 0;
+  width: 50%;
+  min-width: 300px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.two-column-form-layout__column:first-child {
+  flex-grow: 1.08;
+}
+
+.two-column-form-layout__column:last-child {
+  flex-grow: 0.92;
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+  .two-column-form-layout {
+    gap: 32px;
+  }
+
+  .two-column-form-layout__column {
+    min-width: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .two-column-form-layout {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .two-column-form-layout__column {
+    width: 100%;
+    min-width: 0;
+  }
+}

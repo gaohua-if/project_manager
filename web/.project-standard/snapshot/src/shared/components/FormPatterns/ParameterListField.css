@@ -1,0 +1,125 @@
+.parameter-list-field {
+  padding: 12px 12px 14px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--aihub-color-border);
+  border-radius: var(--aihub-radius-lg);
+}
+
+.parameter-list-field__rows {
+  overflow: visible;
+}
+
+.parameter-list-field__row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  margin-bottom: 8px !important;
+}
+
+.parameter-list-field__row.is-dragging {
+  background: var(--aihub-color-primary-bg);
+  border: 1px dashed var(--aihub-color-primary);
+  border-radius: var(--aihub-radius-md);
+}
+
+.parameter-list-field__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 32px;
+  margin-right: 8px;
+  color: var(--aihub-color-text-tertiary);
+  font-size: 16px;
+  line-height: 32px;
+  position: relative;
+  cursor: grab;
+}
+
+.parameter-list-field__handle:active {
+  cursor: grabbing;
+}
+
+.parameter-list-field__key {
+  width: 200px !important;
+  margin-bottom: 0;
+}
+
+.parameter-list-field__required {
+  width: 120px !important;
+  margin-bottom: 0;
+  margin-left: 8px;
+}
+
+.parameter-list-field__colon {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.parameter-list-field__desc {
+  width: 240px !important;
+  margin-bottom: 0;
+  margin-left: 8px;
+}
+
+.parameter-list-field__path {
+  width: 160px !important;
+  margin-bottom: 0;
+  margin-left: 8px;
+}
+
+.parameter-list-field__type {
+  width: 120px !important;
+  margin-bottom: 0;
+  margin-left: 8px;
+}
+
+.parameter-list-field__add {
+  margin: 8px 0 0;
+}
+
+.parameter-list-field__add .ant-btn {
+  color: var(--aihub-color-text-secondary);
+  background: #fff;
+  border-style: dashed;
+  border-color: var(--aihub-color-border-strong);
+}
+
+.parameter-list-field__add .ant-form-item {
+  margin-bottom: 0 !important;
+}
+
+.parameter-list-field .ant-form-item {
+  margin-bottom: 0 !important;
+}
+
+.parameter-list-field__legend {
+  color: var(--aihub-color-text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .parameter-list-field__row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .parameter-list-field__handle,
+  .parameter-list-field__colon {
+    display: none;
+  }
+
+  .parameter-list-field__key,
+  .parameter-list-field__required,
+  .parameter-list-field__desc,
+  .parameter-list-field__path,
+  .parameter-list-field__type {
+    width: 100% !important;
+    margin-left: 0;
+  }
+}

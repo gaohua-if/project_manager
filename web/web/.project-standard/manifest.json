@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "plugin": "aihub-frontend",
+  "pluginVersion": "0.1.29",
+  "templateVersion": "0.1.29",
+  "templateDigest": "60d86f7f15eb1ff98d3c33c474a8a80af82b4d6fd12dc3b6c82f632b0970b76a",
+  "source": "embedded-plugin",
+  "createdAt": "2026-06-16T05:50:02Z",
+  "updatedAt": "2026-06-16T05:50:02Z"
+}

@@ -1,13 +1,13 @@
 # 日报生成流程
 
-本文档说明 AIDashboard 中 Claude Code session 日报的端到端生成流程。当前设计采用用户手动触发模式：用户机器只负责上传 session，用户在 Web 端点击生成日报，服务端 report-generator 微服务调用 `claude -p` 生成草稿，用户随后可以编辑保存。
+本文档说明 Aida 中 Claude Code session 日报的端到端生成流程。当前设计采用用户手动触发模式：用户机器只负责上传 session，用户在 Web 端点击生成日报，服务端 report-generator 微服务调用 `claude -p` 生成草稿，用户随后可以编辑保存。
 
 ## 参与组件
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
 | Claude Code | 用户机器或用户服务器 | 产生本地 session log |
-| `aidashboard upload` | 用户机器或用户服务器 | 扫描并上传本人的 session 数据 |
+| `aida upload` | 用户机器或用户服务器 | 扫描并上传本人的 session 数据 |
 | Go API | 服务端 | 接收 session 上报，写入 PostgreSQL |
 | PostgreSQL | 服务端 | 存储用户、session、token、任务、日报数据 |
 | `consumer` / report-generator | 服务端独立容器 | 接收 API 的手动生成请求，调用 `claude -p` 生成日报 |
@@ -20,7 +20,7 @@
         |
         | 生成 ~/.claude/projects/*.jsonl
         v
-aidashboard upload
+aida upload
         |
         | POST /api/v1/sessions/batch
         v
@@ -48,7 +48,7 @@ Web Dashboard 展示日报
 用户在自己的机器或服务器上运行：
 
 ```bash
-aidashboard upload --all
+aida upload --all
 ```
 
 CLI 会扫描用户本机：
@@ -132,8 +132,8 @@ report-generator 使用服务端环境变量：
 | 变量 | 说明 |
 |------|------|
 | `DATABASE_URL` | PostgreSQL 连接串，服务端模式必填 |
-| `AIDASHBOARD_CLAUDE_BIN` | Claude CLI 命令，默认 `claude` |
-| `AIDASHBOARD_CLAUDE_TIMEOUT` | Claude 生成超时时间，默认 `10m` |
+| `AIDA_CLAUDE_BIN` | Claude CLI 命令，默认 `claude` |
+| `AIDA_CLAUDE_TIMEOUT` | Claude 生成超时时间，默认 `10m` |
 | `PORT` | report-generator HTTP 端口，默认 `8090` |
 | `TZ` | 时区，默认 `Asia/Shanghai` |
 
@@ -268,7 +268,7 @@ Authorization: Bearer <user-token>
 推荐部署方式：
 
 1. API、DB、Web 常驻运行。
-2. 用户机器定期或手动执行 `aidashboard upload --all`。
+2. 用户机器定期或手动执行 `aida upload --all`。
 3. 用户在 Reports 页面手动点击 Generate AI Report。
 4. 用户检查 AI 草稿并手动编辑保存。
 5. 如果希望生成昨天或指定日期日报，可以后续扩展 API/Web 支持选择 `report_date`。

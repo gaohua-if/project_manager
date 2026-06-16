@@ -1,0 +1,127 @@
+/* Copy these feature-local layout rules with the Table CRUD page blueprint. */
+.resource-form-wrap .form-page-wrap__inner.is-card {
+  container: resource-form / inline-size;
+}
+
+.resource-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 28px;
+}
+
+.resource-form__grid--simple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.resource-form__full-row {
+  grid-column: 1 / -1;
+}
+
+.resource-form__advanced-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.resource-form__anchor {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  align-self: start;
+  gap: 6px;
+}
+
+.resource-form__advanced-main,
+.resource-form__steps,
+.resource-form__step-body {
+  display: grid;
+  gap: 16px;
+}
+
+.resource-form__section,
+.resource-form__step-panel {
+  padding: 16px;
+  border: 1px solid var(--aihub-color-border);
+  border-radius: 8px;
+}
+
+.resource-form__step-panel[hidden] {
+  display: none !important;
+}
+
+.resource-form__step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--aihub-color-border);
+}
+
+.resource-form-wrap .form-submit-button {
+  padding: 16px 0 20px;
+  margin: 0;
+}
+
+@container resource-form (max-width: 980px) {
+  .resource-form__grid,
+  .resource-form__grid--simple {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-form__advanced-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-form__anchor {
+    position: static;
+  }
+}
+.resource-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.resource-detail__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  background: #ffffff;
+  border: 1px solid var(--aihub-color-border);
+  border-radius: var(--aihub-radius-md);
+}
+
+.resource-detail__hero h1,
+.resource-detail__hero p {
+  margin: 0;
+}
+
+.resource-detail__hero p {
+  margin-top: 6px;
+  color: var(--aihub-color-text-secondary);
+}
+
+.resource-detail__hero-side {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 14px;
+}
+
+.resource-detail__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .resource-detail__hero {
+    flex-direction: column;
+  }
+
+  .resource-detail__hero-side {
+    width: 100%;
+    justify-items: start;
+  }
+}

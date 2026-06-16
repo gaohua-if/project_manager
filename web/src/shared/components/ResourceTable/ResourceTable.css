@@ -1,0 +1,27 @@
+.resource-actions {
+  white-space: nowrap;
+}
+
+.resource-action.ant-btn-link {
+  height: 28px;
+  padding-inline: 5px;
+  color: var(--aihub-color-primary);
+  font-size: 13px;
+}
+
+.resource-action.ant-btn-link:hover {
+  color: var(--aihub-color-primary-hover);
+  background: var(--aihub-color-primary-bg);
+}
+
+.resource-action--danger.ant-btn-link {
+  color: var(--aihub-color-danger);
+}
+
+.resource-action-more.ant-btn-link {
+  color: var(--aihub-color-text-secondary);
+}
+
+.ant-table-wrapper .ant-table-placeholder > td {
+  padding: 42px 16px !important;
+}

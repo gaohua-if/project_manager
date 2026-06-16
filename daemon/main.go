@@ -74,24 +74,24 @@ type UserMsg struct {
 }
 
 type SessionInfo struct {
-	SessionRef   string
-	FilePath     string
-	ProjectDir   string
-	Cwd          string
-	GitBranch    string
-	StartedAt    time.Time
-	EndedAt      time.Time
-	Model        string
-	Models       []string // distinct models seen, in insertion order
-	Summary      string
-	ToolCalls    map[string]int
-	InputTok     int64
-	OutputTok    int64
+	SessionRef     string
+	FilePath       string
+	ProjectDir     string
+	Cwd            string
+	GitBranch      string
+	StartedAt      time.Time
+	EndedAt        time.Time
+	Model          string
+	Models         []string // distinct models seen, in insertion order
+	Summary        string
+	ToolCalls      map[string]int
+	InputTok       int64
+	OutputTok      int64
 	CacheCreateTok int64
-	CacheReadTok int64
-	TotalTok     int64
-	NumLines     int
-	SubFiles     []string // subagent JSONL file paths
+	CacheReadTok   int64
+	TotalTok       int64
+	NumLines       int
+	SubFiles       []string // subagent JSONL file paths
 }
 
 func (s *SessionInfo) Duration() time.Duration {
@@ -119,15 +119,27 @@ func formatTokens(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
 
-const configFileName = ".aidashboard.yaml"
+const (
+	configFileName       = ".aida.yaml"
+	legacyConfigFileName = ".aidashboard.yaml"
+)
 
 func configPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, configFileName)
 }
 
+func legacyConfigPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, legacyConfigFileName)
+}
+
 func loadConfig() *Config {
-	data, err := os.ReadFile(configPath())
+	path := configPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		data, err = os.ReadFile(legacyConfigPath())
+	}
 	if err != nil {
 		return configFromEnv(&Config{})
 	}
@@ -137,10 +149,14 @@ func loadConfig() *Config {
 }
 
 func configFromEnv(cfg *Config) *Config {
-	if v := os.Getenv("AIDASHBOARD_API_URL"); v != "" {
+	if v := os.Getenv("AIDA_API_URL"); v != "" {
+		cfg.APIURL = strings.TrimRight(v, "/")
+	} else if v := os.Getenv("AIDASHBOARD_API_URL"); v != "" {
 		cfg.APIURL = strings.TrimRight(v, "/")
 	}
-	if v := os.Getenv("AIDASHBOARD_TOKEN"); v != "" {
+	if v := os.Getenv("AIDA_TOKEN"); v != "" {
+		cfg.Token = v
+	} else if v := os.Getenv("AIDASHBOARD_TOKEN"); v != "" {
 		cfg.Token = v
 	}
 	return cfg
@@ -153,11 +169,11 @@ func saveConfig(cfg *Config) {
 
 func requireAuth(cfg *Config) {
 	if cfg.Token == "" {
-		fmt.Println("Not logged in. Run: aidashboard login")
+		fmt.Println("Not logged in. Run: aida login")
 		os.Exit(1)
 	}
 	if cfg.APIURL == "" {
-		fmt.Println("Server URL not set. Run: aidashboard login --server <url>")
+		fmt.Println("Server URL not set. Run: aida login --server <url>")
 		os.Exit(1)
 	}
 }
@@ -191,10 +207,10 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Print(`aidashboard - CLI for uploading Claude Code sessions to AIDashboard
+	fmt.Print(`aida - CLI for uploading Claude Code sessions to Aida
 
 Usage:
-  aidashboard <command> [options]
+  aida <command> [options]
 
 Commands:
   login    --server <url> --token <token>   Login with server URL and API token
@@ -206,34 +222,34 @@ Commands:
 
 Examples:
   # Login with platform token
-  aidashboard login --server http://localhost:8080/api/v1 --token eyJhbG...
+  aida login --server http://localhost:8080/api/v1 --token eyJhbG...
 
   # Login interactively (enter token when prompted)
-  aidashboard login --server http://localhost:8080/api/v1
+  aida login --server http://localhost:8080/api/v1
 
   # List recent sessions (last 48h)
-  aidashboard sessions
+  aida sessions
 
   # List all sessions
-  aidashboard sessions --all
+  aida sessions --all
 
   # Filter by project directory
-  aidashboard sessions --project project-manager
+  aida sessions --project project-manager
 
   # Upload specific sessions by number
-  aidashboard upload 1 3 5
+  aida upload 1 3 5
 
   # Upload all recent sessions
-  aidashboard upload --all
+  aida upload --all
 
   # Run the server-side report generator
-  DATABASE_URL=postgres://... PORT=8090 aidashboard serve
+  DATABASE_URL=postgres://... PORT=8090 aida serve
 
   # Interactive upload (shows picker)
-  aidashboard upload
+  aida upload
 
   # Check login status
-  aidashboard status
+  aida status
 
 Session logs location:
   ~/.claude/projects/
@@ -624,27 +640,27 @@ func loadConsumerConfig() ConsumerConfig {
 		ClaudeBin:     "claude",
 		ClaudeTimeout: 10 * time.Minute,
 	}
-	if v := os.Getenv("AIDASHBOARD_CLAUDE_DIR"); v != "" {
+	if v := envFirst("AIDA_CLAUDE_DIR", "AIDASHBOARD_CLAUDE_DIR"); v != "" {
 		cfg.ClaudeDir = v
 	}
-	if v := os.Getenv("AIDASHBOARD_PROJECT"); v != "" {
+	if v := envFirst("AIDA_PROJECT", "AIDASHBOARD_PROJECT"); v != "" {
 		cfg.ProjectFilter = v
 	}
-	if v := os.Getenv("AIDASHBOARD_DAILY_AT"); v != "" {
+	if v := envFirst("AIDA_DAILY_AT", "AIDASHBOARD_DAILY_AT"); v != "" {
 		cfg.DailyAt = v
 	}
-	if v := os.Getenv("AIDASHBOARD_RUN_ON_START"); v != "" {
+	if v := envFirst("AIDA_RUN_ON_START", "AIDASHBOARD_RUN_ON_START"); v != "" {
 		cfg.RunOnStart = v != "0" && strings.ToLower(v) != "false"
 	}
-	if v := os.Getenv("AIDASHBOARD_REPORT_DATE_OFFSET"); v != "" {
+	if v := envFirst("AIDA_REPORT_DATE_OFFSET", "AIDASHBOARD_REPORT_DATE_OFFSET"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.ReportOffset = n
 		}
 	}
-	if v := os.Getenv("AIDASHBOARD_CLAUDE_BIN"); v != "" {
+	if v := envFirst("AIDA_CLAUDE_BIN", "AIDASHBOARD_CLAUDE_BIN"); v != "" {
 		cfg.ClaudeBin = v
 	}
-	if v := os.Getenv("AIDASHBOARD_CLAUDE_TIMEOUT"); v != "" {
+	if v := envFirst("AIDA_CLAUDE_TIMEOUT", "AIDASHBOARD_CLAUDE_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.ClaudeTimeout = d
 		}
@@ -655,7 +671,7 @@ func loadConsumerConfig() ConsumerConfig {
 func runConsumerOnce(cfg *Config, consumerCfg ConsumerConfig) error {
 	targetDate := time.Now().AddDate(0, 0, consumerCfg.ReportOffset).Format("2006-01-02")
 	if targetDate != time.Now().Format("2006-01-02") {
-		return fmt.Errorf("AIDASHBOARD_REPORT_DATE_OFFSET is not supported by the current API; use 0 for today's report")
+		return fmt.Errorf("AIDA_REPORT_DATE_OFFSET is not supported by the current API; use 0 for today's report")
 	}
 	if consumerCfg.DatabaseURL != "" {
 		return runServerConsumerOnce(consumerCfg, targetDate)
@@ -783,33 +799,32 @@ func cmdServeReports(args []string) {
 		})
 	})
 
-
-		mux.HandleFunc("/reports/team/generate", func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-			var req teamReportGenerateRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
-				return
-			}
-			if req.TeamID == "" || req.LeaderID == "" {
-				writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "team_id and leader_id are required"})
-				return
-			}
-			if req.ReportDate == "" {
-				req.ReportDate = time.Now().Format("2006-01-02")
-			}
-			reportID, err := generateServerTeamReport(db, cfg, req.TeamID, req.LeaderID, req.ReportDate)
-			if err != nil {
-				writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-				return
-			}
-			writePlainJSON(w, http.StatusOK, map[string]any{
-				"report_id": reportID,
-			})
+	mux.HandleFunc("/reports/team/generate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req teamReportGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.TeamID == "" || req.LeaderID == "" {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "team_id and leader_id are required"})
+			return
+		}
+		if req.ReportDate == "" {
+			req.ReportDate = time.Now().Format("2006-01-02")
+		}
+		reportID, err := generateServerTeamReport(db, cfg, req.TeamID, req.LeaderID, req.ReportDate)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, map[string]any{
+			"report_id": reportID,
 		})
+	})
 	fmt.Printf("[report-generator] listening on :%s tz=%s\n", cfg.Port, cfg.TimeZone)
 	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
 		fmt.Printf("Report generator failed: %v\n", err)
@@ -1307,6 +1322,15 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func envFirst(keys ...string) string {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func shortRef(ref string) string {
 	if len(ref) <= 12 {
 		return ref
@@ -1345,7 +1369,7 @@ func cmdStatus() {
 
 	if cfg.Token == "" {
 		fmt.Println("Not logged in.")
-		fmt.Println("\nRun: aidashboard login --server <url> --token <token>")
+		fmt.Println("\nRun: aida login --server <url> --token <token>")
 		return
 	}
 
@@ -1611,11 +1635,11 @@ func buildUploadPayload(s *SessionInfo) map[string]any {
 	}
 	if s.TotalTok > 0 {
 		p["token_usage"] = map[string]any{
-			"input_tokens":            s.InputTok,
-			"output_tokens":           s.OutputTok,
-			"cache_creation_tokens":   s.CacheCreateTok,
-			"cache_read_tokens":       s.CacheReadTok,
-			"total_tokens":            s.TotalTok,
+			"input_tokens":          s.InputTok,
+			"output_tokens":         s.OutputTok,
+			"cache_creation_tokens": s.CacheCreateTok,
+			"cache_read_tokens":     s.CacheReadTok,
+			"total_tokens":          s.TotalTok,
 		}
 	}
 	if len(s.Models) > 0 {

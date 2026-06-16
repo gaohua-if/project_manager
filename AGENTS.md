@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains AIDashboard: a Go API, Go CLI daemon, PostgreSQL schema, and Next.js web dashboard.
+This repository contains Aida: a Go API, Go CLI daemon, PostgreSQL schema, and Next.js web dashboard.
 
 - `api/`: Go HTTP API using `chi`; handlers are in `api/handler`, models in `api/model`, config in `api/config`, and migrations/seeds in `api/db/migrations`.
 - `daemon/`: Go CLI for scanning and uploading Claude Code session data; packages live under `cmd`, `config`, `scanner`, and `uploader`.
@@ -14,7 +14,7 @@ This repository contains AIDashboard: a Go API, Go CLI daemon, PostgreSQL schema
 - `docker compose up -d`: start PostgreSQL, API, and web services.
 - `docker compose up -d db`: start only the database for API development.
 - `cd api && go run main.go`: run the API locally. Set `DATABASE_URL`, `JWT_SECRET`, and `PORT` when needed.
-- `cd daemon && go build -o aidashboard .`: build the CLI binary.
+- `cd daemon && go build -o aida .`: build the CLI binary.
 - `cd web && pnpm dev`: run the web dashboard locally.
 - `cd web && pnpm build`: build the production Next.js app.
 - `cd web && pnpm lint`: run ESLint for the frontend.

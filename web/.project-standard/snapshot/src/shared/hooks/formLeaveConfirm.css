@@ -1,0 +1,94 @@
+.form-leave-confirm-modal.ant-modal {
+  width: 372px !important;
+  padding: 20px 22px !important;
+  background: #ffffff;
+  border: 1px solid #e5edf6;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-body-wrapper {
+  width: 100%;
+  padding: 0 !important;
+  margin: -14px 0 !important;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-body {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin: 0 !important;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-title {
+  color: #172033;
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-content {
+  grid-column: 2;
+  max-width: none;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-body > .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 50%;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.form-leave-confirm-modal .ant-modal-confirm-btns .ant-btn + .ant-btn {
+  margin-inline-start: 0;
+}
+
+.form-leave-confirm-modal__leave {
+  min-width: 72px;
+  height: 36px;
+  color: #475569;
+  background: #fff;
+  border-color: #d8e3ef;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.form-leave-confirm-modal__leave:not(:disabled):not(.ant-btn-disabled):hover {
+  color: #b42318;
+  background: #fff5f5;
+  border-color: #f0a5a0;
+}
+
+.form-leave-confirm-modal__continue {
+  min-width: 92px;
+  height: 36px;
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.form-leave-confirm-modal__continue:not(:disabled):not(.ant-btn-disabled):hover {
+  color: #fff;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}

@@ -1,0 +1,41 @@
+.danger-confirm-modal .ant-modal-content {
+  border-radius: var(--aihub-radius-xl);
+  box-shadow: var(--aihub-shadow-modal);
+}
+
+.danger-confirm-modal .ant-modal-confirm-title {
+  color: var(--aihub-color-text-primary);
+  font-weight: 600;
+}
+
+.danger-confirm-modal .ant-modal-confirm-content {
+  color: var(--aihub-color-text-secondary);
+}
+
+.danger-confirm-modal .ant-modal-confirm-body > .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--aihub-color-danger);
+  background: var(--aihub-color-danger-bg);
+  border-radius: 50%;
+}
+
+.danger-confirm-modal__cancel {
+  color: var(--aihub-color-text-primary);
+  border-color: var(--aihub-color-border-strong);
+}
+
+.danger-confirm-modal__ok.ant-btn-dangerous {
+  color: #fff;
+  background: var(--aihub-color-danger);
+  border-color: var(--aihub-color-danger);
+  box-shadow: none;
+}
+
+.danger-confirm-modal__ok.ant-btn-dangerous:not(:disabled):not(.ant-btn-disabled):hover {
+  background: var(--aihub-color-danger-hover);
+  border-color: var(--aihub-color-danger-hover);
+}

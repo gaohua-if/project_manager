@@ -1,4 +1,4 @@
-# AIDashboard 存储结构设计
+# Aida 存储结构设计
 
 > 本文聚焦数据如何落盘与流动。产品流程见 `PRD.md`,日报生成见 `DAILY_REPORT_FLOW.md` / `TEAM_REPORT_FLOW.md`。
 
@@ -12,7 +12,7 @@
 │  ~/.claude/projects/<encoded-project>/<session-id>.jsonl        │
 │  ~/.claude/projects/<encoded-project>/<session-id>/subagents/*  │
 └──────────────────────────────┬──────────────────────────────────┘
-                               │ aidashboard upload (multipart)
+                               │ aida upload (multipart)
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Go API (:8080)                          │
@@ -286,7 +286,7 @@ sessions/<user_id>/<session_ref>.jsonl
 
 ~/.claude/projects/<encoded>/
   <sid>.jsonl          ──┐
-  <sid>/subagents/*.jsonl │  aidashboard upload
+  <sid>/subagents/*.jsonl │  aida upload
                           │  扫描 → 解析 → 构造 multipart
                           ▼
                   POST /api/v1/sessions/batch

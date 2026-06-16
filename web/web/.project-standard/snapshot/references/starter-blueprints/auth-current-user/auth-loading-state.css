@@ -1,0 +1,70 @@
+.auth-loading {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+.auth-loading__progress {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  background: var(--aihub-color-split);
+}
+
+.auth-loading__progress::after {
+  position: absolute;
+  inset: 0;
+  width: 34%;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--aihub-color-primary), transparent);
+  animation: auth-loading-progress 1.25s ease-in-out infinite;
+}
+
+.auth-loading__heading {
+  display: flex;
+  justify-content: space-between;
+}
+
+.auth-loading__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.auth-loading__metric,
+.auth-loading__surface {
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid var(--aihub-color-border);
+  border-radius: var(--aihub-radius-md);
+}
+
+@keyframes auth-loading-progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-loading__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-loading__metric:nth-child(n + 2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-loading__progress::after {
+    animation: none;
+  }
+}

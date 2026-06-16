@@ -1,4 +1,4 @@
-# AIDashboard — PRD & Architecture Design
+# Aida — PRD & Architecture Design
 
 ## 1. 背景与目标
 

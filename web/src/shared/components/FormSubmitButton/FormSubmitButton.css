@@ -1,0 +1,33 @@
+.form-submit-button {
+  padding-top: 16px;
+  margin-top: 6px;
+  border-top: 1px solid var(--aihub-color-border);
+}
+
+.form-submit-button .ant-btn {
+  min-width: 88px;
+  height: 36px;
+  border-radius: var(--aihub-radius-sm);
+}
+
+.form-submit-button__inner {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.form-submit-button[data-align="left"] .form-submit-button__inner {
+  justify-content: flex-start;
+}
+
+.form-submit-button.is-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding: 8px 16px 10px;
+  margin: 0 -24px -24px;
+  background: rgba(255, 255, 255, 0.94);
+  border-top-color: var(--aihub-color-border);
+  box-shadow: 0 -4px 10px rgba(31, 42, 68, 0.04);
+  backdrop-filter: saturate(140%) blur(6px);
+}
