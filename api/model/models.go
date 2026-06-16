@@ -299,6 +299,8 @@ type TokenAggregation struct {
 type SessionTokens struct {
 	SessionID           string    `json:"session_id"`
 	SessionRef          string    `json:"session_ref"`
+	UserID              string    `json:"user_id"`
+	UserName            string    `json:"user_name"`
 	AgentType           string    `json:"agent_type"`
 	Models              []string  `json:"models"`
 	StartedAt           time.Time `json:"started_at"`

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, Col, DatePicker, Empty, Row, Space, Statistic, Table, Tag, Typography } from "antd";
+import { Card, Col, DatePicker, Empty, Row, Segmented, Space, Statistic, Table, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 
 import { fetchSessionTokens } from "../../api/client";
 import type { SessionTokens } from "../../api/types";
+import { useAuth } from "@/shared/auth/authContext";
 
 const { Title, Text } = Typography;
 
@@ -24,16 +25,20 @@ function formatDateTime(iso: string): string {
 }
 
 export function TokensPage() {
+  const { user } = useAuth();
   const today = dayjs();
   const firstOfMonth = today.startOf("month");
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([firstOfMonth, today]);
+  const canViewTeam = Boolean(user && user.role !== "employee");
+  const [scope, setScope] = useState<"mine" | "team">("mine");
+  const effectiveScope = canViewTeam ? scope : "mine";
 
   const from = range[0].format("YYYY-MM-DD");
   const to = range[1].format("YYYY-MM-DD");
 
   const { data: sessions = [], isLoading } = useQuery<SessionTokens[]>({
-    queryKey: ["session-tokens", from, to],
-    queryFn: () => fetchSessionTokens({ from, to }),
+    queryKey: ["session-tokens", from, to, effectiveScope],
+    queryFn: () => fetchSessionTokens({ from, to, scope: effectiveScope }),
     staleTime: 60_000
   });
 
@@ -61,19 +66,33 @@ export function TokensPage() {
       <Space style={{ width: "100%", justifyContent: "space-between" }}>
         <div>
           <Title level={4} style={{ marginBottom: 4 }}>Token 明细</Title>
-          <Text type="secondary">按 Session 维度查看 Input / Output / Cache / Total</Text>
+          <Text type="secondary">
+            {effectiveScope === "mine" ? "我的 Token 明细" : "团队 Token 明细"} · 按 AI 工作记录查看 Input / Output / Cache / Total
+          </Text>
         </div>
-        <DatePicker.RangePicker
-          value={range}
-          onChange={(v) => v && v[0] && v[1] && setRange([v[0], v[1]])}
-        />
+        <Space>
+          {canViewTeam ? (
+            <Segmented
+              value={scope}
+              onChange={(v) => setScope(v as "mine" | "team")}
+              options={[
+                { label: "我的", value: "mine" },
+                { label: user?.role === "director" || user?.role === "admin" ? "全团队" : "团队", value: "team" }
+              ]}
+            />
+          ) : null}
+          <DatePicker.RangePicker
+            value={range}
+            onChange={(v) => v && v[0] && v[1] && setRange([v[0], v[1]])}
+          />
+        </Space>
       </Space>
 
       <Row gutter={[12, 12]}>
         <Col xs={12} md={6} lg={4}>
           <Card size="small">
             <Statistic title="Total" value={formatTokens(totals.total)} />
-            <Text type="secondary" style={{ fontSize: 11 }}>{sessions.length} sessions</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>{sessions.length} 条记录</Text>
           </Card>
         </Col>
         <Col xs={12} md={6} lg={5}>
@@ -112,11 +131,21 @@ export function TokensPage() {
           scroll={{ x: "max-content" }}
           columns={[
             {
-              title: "Session",
+              title: "记录",
               dataIndex: "session_ref",
               render: (v: string) => <Text code style={{ fontSize: 11 }}>{v.slice(0, 12)}</Text>,
               width: 110
             },
+            ...(effectiveScope === "team"
+              ? [
+                  {
+                    title: "成员",
+                    dataIndex: "user_name",
+                    width: 120,
+                    render: (v: string) => v || "-"
+                  }
+                ]
+              : []),
             { title: "Agent", dataIndex: "agent_type", width: 110, render: (v: string) => <Tag>{v}</Tag> },
             {
               title: "Models",
@@ -154,11 +183,11 @@ export function TokensPage() {
               width: 140
             }
           ]}
-          locale={{ emptyText: <Empty description="所选范围暂无 Session" /> }}
+          locale={{ emptyText: <Empty description={effectiveScope === "mine" ? "所选范围暂无我的 Token 记录" : "所选范围暂无团队 Token 记录"} /> }}
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={3}>
+                <Table.Summary.Cell index={0} colSpan={effectiveScope === "team" ? 4 : 3}>
                   <Text strong>Total ({sessions.length})</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={3} align="right"><Text strong>{formatTokens(totals.input)}</Text></Table.Summary.Cell>

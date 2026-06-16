@@ -95,10 +95,11 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/sessions",
-    title: "Sessions",
+    title: "AI 工作记录",
     icon: <SolutionOutlined />,
     menuGroup: "业务",
     menuOrder: 60,
+    hideInMenu: true,
     element: <SessionsPage />
   },
   {

@@ -155,6 +155,8 @@ export interface TokenAggregation {
 export interface SessionTokens {
   session_id: string;
   session_ref: string;
+  user_id: string;
+  user_name: string;
   agent_type: string;
   models: string[];
   started_at: string;

@@ -1,6 +1,7 @@
 import { api } from "@/shared/request/httpClient";
 import { getAuthSession } from "@/shared/auth/session";
 import type { User } from "@/shared/auth/types";
+import { HttpError } from "@/shared/request/types";
 
 import type {
   ACStatus,
@@ -135,6 +136,16 @@ export const updateReport = (id: string, data: { content?: string; feishu_doc_ur
 export const fetchTeamMemberReports = (date: string) =>
   unwrap(api.get<TeamMemberReport[]>(`/reports/team/members`, { date }));
 export const fetchTeamReportToday = () => unwrap(api.get<TeamReport>("/reports/team/today"));
+export async function fetchTeamReportTodayOrNull() {
+  try {
+    return await unwrap(api.get<TeamReport>("/reports/team/today", undefined, { skipErrorHandler: true }));
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
 export const generateTeamReport = () =>
   unwrap(api.post<TeamReport>("/reports/team/today/generate"));
 export const fetchTeamReports = (params?: Record<string, string>) =>
@@ -156,5 +167,5 @@ export const fetchTokens = (params?: {
   return unwrap(api.get<TokenAggregation>(`/tokens${qs}`));
 };
 
-export const fetchSessionTokens = (params: { from: string; to: string }) =>
+export const fetchSessionTokens = (params: { from: string; to: string; scope?: "mine" | "team" }) =>
   unwrap(api.get<SessionTokens[]>("/tokens/sessions", params));

@@ -34,20 +34,20 @@ func (h *TeamHandler) Activity(w http.ResponseWriter, r *http.Request) {
 
 	// Scope teams by role
 	teamFilter := ""
-	args := []any{date}
+	teamArgs := []any{}
 	if u.Role == "team_leader" || u.Role == "pm" {
 		if u.TeamID == nil {
 			writeJSON(w, http.StatusOK, model.TeamActivity{Teams: []model.TeamStat{}, IdleWarnings: []model.IdleWarning{}})
 			return
 		}
-		teamFilter = "WHERE t.id = $2"
-		args = append(args, *u.TeamID)
+		teamFilter = "WHERE t.id = $1"
+		teamArgs = append(teamArgs, *u.TeamID)
 	}
 
 	rows, err := h.db.Query(`
 		SELECT t.id, t.name FROM teams t
 		`+teamFilter+`
-		ORDER BY t.name`, args...)
+		ORDER BY t.name`, teamArgs...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

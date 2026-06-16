@@ -155,7 +155,7 @@ export function ProductsPage() {
       <Space style={{ width: "100%", justifyContent: "space-between" }}>
         <div>
           <Title level={4} style={{ marginBottom: 4 }}>我的工作</Title>
-          <Text type="secondary">文档和 Claude Code session 分别独立追踪</Text>
+          <Text type="secondary">沉淀工作文档，并自动关联 AI 工作记录</Text>
         </div>
         <Space>
           <Button icon={<PlusOutlined />} onClick={() => setDocOpen(true)}>添加文档</Button>
@@ -246,14 +246,14 @@ export function ProductsPage() {
         title={
           <Space>
             <RobotOutlined />
-            <span>Claude Code Session</span>
+            <span>AI 工作记录</span>
             <Tag color="purple">{sortedSessions.length}</Tag>
           </Space>
         }
         size="small"
       >
         {sortedSessions.length === 0 ? (
-          <Empty description={dateStr ? `${dateStr} 无上传 session` : "暂无 session，使用 CLI daemon 上传"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty description={dateStr ? `${dateStr} 无 AI 工作记录` : "暂无 AI 工作记录，使用 aida upload 上传"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <Table<Session>
             rowKey="id"
@@ -262,7 +262,7 @@ export function ProductsPage() {
             size="small"
             columns={[
               {
-                title: "Session",
+                title: "记录",
                 key: "session",
                 render: (_: unknown, s) => (
                   <Space direction="vertical" size={0}>
@@ -308,7 +308,7 @@ export function ProductsPage() {
                       <Button size="small" onClick={() => handleDownload(s.id)}>日志</Button>
                     ) : null}
                     <Popconfirm
-                      title="撤回此 session？"
+                      title="撤回此 AI 工作记录？"
                       okText="撤回"
                       okButtonProps={{ danger: true }}
                       cancelText="取消"
@@ -324,7 +324,7 @@ export function ProductsPage() {
         )}
         {sortedSessions.length > 8 ? (
           <div style={{ marginTop: 8 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>还有 {sortedSessions.length - 8} 条 session...</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>还有 {sortedSessions.length - 8} 条 AI 工作记录...</Text>
           </div>
         ) : null}
       </Card>

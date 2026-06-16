@@ -132,13 +132,13 @@ export function EmployeeDashboard() {
       <Card size="small">
         <Space style={{ width: "100%", justifyContent: "space-between" }}>
           <Space direction="vertical" size={2}>
-            <Text strong>Session 上报</Text>
+            <Text strong>我的工作记录</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              上报 Claude Code session，AI 自动关联任务。撤回 = 物理删除。
+              文档和 AI 工作记录会沉淀到我的工作中，并自动关联任务。
             </Text>
           </Space>
-          <Link to="/sessions">
-            <Button type="primary">前往 Session 管理 →</Button>
+          <Link to="/products">
+            <Button type="primary">查看我的工作 →</Button>
           </Link>
         </Space>
       </Card>

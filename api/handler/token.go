@@ -122,7 +122,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 		to = now.Format("2006-01-02")
 	}
 
-	scope, scopeArgs, _ := buildTokenScope(u)
+	scope, scopeArgs, _ := buildTokenScopeForSessionTokens(u, r.URL.Query().Get("scope"))
 	args := append([]any{}, scopeArgs...)
 	args = append(args, from)
 	fromIdx := len(args)
@@ -136,7 +136,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 	}
 
 	q := `
-		SELECT s.id, s.session_ref, s.agent_type,
+		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name, ''), s.agent_type,
 		       CASE WHEN s.models <> '{}' THEN s.models ELSE ARRAY[s.model] END,
 		       s.started_at,
 		       COALESCE(tu.input_tokens, 0),
@@ -147,6 +147,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 		                COALESCE(tu.input_tokens,0) + COALESCE(tu.output_tokens,0)
 		                 + COALESCE(tu.cache_creation_tokens,0) + COALESCE(tu.cache_read_tokens,0))
 		FROM sessions s
+		LEFT JOIN users u ON u.id = s.user_id
 		LEFT JOIN LATERAL (
 			SELECT * FROM token_usage tu WHERE tu.session_id = s.id LIMIT 1
 		) tu ON true
@@ -164,7 +165,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var s model.SessionTokens
 		var models pq.StringArray
-		if err := rows.Scan(&s.SessionID, &s.SessionRef, &s.AgentType, &models,
+		if err := rows.Scan(&s.SessionID, &s.SessionRef, &s.UserID, &s.UserName, &s.AgentType, &models,
 			&s.StartedAt, &s.InputTokens, &s.OutputTokens,
 			&s.CacheCreationTokens, &s.CacheReadTokens, &s.TotalTokens); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -197,6 +198,21 @@ func buildTokenScope(u *model.User) (string, []any, int) {
 		return "tu.user_id IN (SELECT id FROM users WHERE team_id = $1)", []any{*u.TeamID}, 2
 	default:
 		// director: no scope, but we still need a placeholder arg index
+		return "", []any{}, 1
+	}
+}
+
+func buildTokenScopeForSessionTokens(u *model.User, requestedScope string) (string, []any, int) {
+	if requestedScope == "mine" || u.Role == "employee" {
+		return "s.user_id = $1", []any{u.ID}, 2
+	}
+	switch u.Role {
+	case "team_leader", "pm":
+		if u.TeamID == nil {
+			return "s.user_id = $1", []any{u.ID}, 2
+		}
+		return "s.user_id IN (SELECT id FROM users WHERE team_id = $1)", []any{*u.TeamID}, 2
+	default:
 		return "", []any{}, 1
 	}
 }

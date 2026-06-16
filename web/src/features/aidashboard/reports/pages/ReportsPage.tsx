@@ -18,7 +18,7 @@ import dayjs from "dayjs";
 import {
   fetchReports,
   fetchTeamMemberReports,
-  fetchTeamReportToday,
+  fetchTeamReportTodayOrNull,
   fetchTeamReports,
   generateTeamReport,
   generateTodayReport,
@@ -245,9 +245,9 @@ function TLReportsView() {
   const [teamContent, setTeamContent] = useState("");
   const [teamFeishuUrl, setTeamFeishuUrl] = useState("");
 
-  const { data: teamReport } = useQuery<TeamReport>({
+  const { data: teamReport } = useQuery<TeamReport | null>({
     queryKey: ["team-report-today"],
-    queryFn: () => fetchTeamReportToday(),
+    queryFn: () => fetchTeamReportTodayOrNull(),
     staleTime: 30_000
   });
 
