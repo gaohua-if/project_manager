@@ -1,3 +1,4 @@
+import { runtimeConfig } from "@/config/runtimeConfig";
 import { api } from "@/shared/request/httpClient";
 import { getAuthSession } from "@/shared/auth/session";
 import type { User } from "@/shared/auth/types";
@@ -23,6 +24,10 @@ import type {
 async function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
   const res = await promise;
   return res.data;
+}
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
 }
 
 // ───────────────────────── Users / Teams ─────────────────────────
@@ -94,7 +99,7 @@ export const withdrawSession = (sessionId: string) =>
   unwrap(api.delete<{ status: string }>(`/sessions/${sessionId}`));
 
 export function getSessionLogURL(sessionId: string): string {
-  return `${import.meta.env.VITE_API_BASE_URL ?? "/api/v1"}/sessions/${sessionId}/log`;
+  return `${trimTrailingSlash(runtimeConfig.apiBaseUrl)}/sessions/${sessionId}/log`;
 }
 
 export async function downloadSessionLog(sessionId: string): Promise<void> {
@@ -116,19 +121,23 @@ export async function downloadSessionLog(sessionId: string): Promise<void> {
 
 export const fetchDocuments = (params?: Record<string, string>) =>
   unwrap(api.get<Document[]>("/documents", params));
-export const createDocument = (data: { title: string; url: string; description?: string; task_id?: string }) =>
-  unwrap(api.post<Document>("/documents", data));
+export const createDocument = (data: {
+  title: string;
+  url: string;
+  description?: string;
+  task_id?: string;
+}) => unwrap(api.post<Document>("/documents", data));
 export const updateDocument = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Document>(`/documents/${id}`, data));
-export const deleteDocument = (id: string) => unwrap(api.delete<{ status: string }>(`/documents/${id}`));
+export const deleteDocument = (id: string) =>
+  unwrap(api.delete<{ status: string }>(`/documents/${id}`));
 
 // ───────────────────────── Reports ─────────────────────────
 
 export const fetchReports = (params?: Record<string, string>) =>
   unwrap(api.get<DailyReport[]>("/reports", params));
 export const fetchTodayReport = () => unwrap(api.get<DailyReport>("/reports/today"));
-export const generateTodayReport = () =>
-  unwrap(api.post<DailyReport>("/reports/today/generate"));
+export const generateTodayReport = () => unwrap(api.post<DailyReport>("/reports/today/generate"));
 export const fetchReport = (id: string) => unwrap(api.get<DailyReport>(`/reports/${id}`));
 export const updateReport = (id: string, data: { content?: string; feishu_doc_url?: string }) =>
   unwrap(api.put<DailyReport>(`/reports/${id}`, data));
@@ -138,7 +147,9 @@ export const fetchTeamMemberReports = (date: string) =>
 export const fetchTeamReportToday = () => unwrap(api.get<TeamReport>("/reports/team/today"));
 export async function fetchTeamReportTodayOrNull() {
   try {
-    return await unwrap(api.get<TeamReport>("/reports/team/today", undefined, { skipErrorHandler: true }));
+    return await unwrap(
+      api.get<TeamReport>("/reports/team/today", undefined, { skipErrorHandler: true })
+    );
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
       return null;
@@ -161,9 +172,7 @@ export const fetchTokens = (params?: {
   to?: string;
   group_by?: TokenGroupBy;
 }) => {
-  const qs = params
-    ? "?" + new URLSearchParams(params as Record<string, string>).toString()
-    : "";
+  const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : "";
   return unwrap(api.get<TokenAggregation>(`/tokens${qs}`));
 };
 

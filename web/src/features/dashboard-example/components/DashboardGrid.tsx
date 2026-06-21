@@ -14,12 +14,6 @@ export function ChartGrid({ children }: { children: ReactNode }) {
   return <section className="chart-grid">{children}</section>;
 }
 
-export function ChartGridItem({
-  span,
-  children
-}: {
-  span: 4 | 6 | 8 | 12;
-  children: ReactNode;
-}) {
+export function ChartGridItem({ span, children }: { span: 4 | 6 | 8 | 12; children: ReactNode }) {
   return <div className={`chart-span-${span}`}>{children}</div>;
 }

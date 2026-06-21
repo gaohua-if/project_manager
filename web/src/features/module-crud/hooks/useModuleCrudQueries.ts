@@ -52,7 +52,8 @@ export function useCreateModule() {
 export function useUpdateModule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, values }: { id: string; values: ModuleFormValues }) => moduleCrudApi.update(id, values),
+    mutationFn: ({ id, values }: { id: string; values: ModuleFormValues }) =>
+      moduleCrudApi.update(id, values),
     onSuccess: (_result, variables) => {
       feedback.message()?.success("保存成功");
       void queryClient.invalidateQueries({ queryKey: moduleCrudKeys.lists() });

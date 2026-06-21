@@ -15,12 +15,7 @@ interface TagSidebarLayoutProps extends PropsWithChildren {
   onChange?: (key: string) => void;
 }
 
-export function TagSidebarLayout({
-  items,
-  activeKey,
-  onChange,
-  children
-}: TagSidebarLayoutProps) {
+export function TagSidebarLayout({ items, activeKey, onChange, children }: TagSidebarLayoutProps) {
   return (
     <div className="tag-sidebar-layout">
       <aside className="tag-sidebar-layout__sidebar">
@@ -28,10 +23,7 @@ export function TagSidebarLayout({
           <button
             type="button"
             key={item.key}
-            className={[
-              "tag-sidebar-layout__item",
-              item.key === activeKey ? "is-active" : ""
-            ]
+            className={["tag-sidebar-layout__item", item.key === activeKey ? "is-active" : ""]
               .filter(Boolean)
               .join(" ")}
             onClick={() => onChange?.(item.key)}

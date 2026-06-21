@@ -83,10 +83,7 @@ export function ParameterListField({
                           isDragDisabled={disabled}
                         >
                           {(dragProvided, snapshot) => (
-                            <div
-                              ref={dragProvided.innerRef}
-                              {...dragProvided.draggableProps}
-                            >
+                            <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
                               <div
                                 className={[
                                   "parameter-list-field__row",
@@ -108,7 +105,10 @@ export function ParameterListField({
                                   className="parameter-list-field__key"
                                   rules={nameRules(kind)}
                                 >
-                                  <Input placeholder={kind === "env" ? "请输入Key" : "请输入参数名称"} disabled={disabled} />
+                                  <Input
+                                    placeholder={kind === "env" ? "请输入Key" : "请输入参数名称"}
+                                    disabled={disabled}
+                                  />
                                 </Form.Item>
 
                                 {kind !== "output" && (
@@ -118,11 +118,17 @@ export function ParameterListField({
                                     className="parameter-list-field__required"
                                     rules={[{ required: true, message: "请选择是否必填" }]}
                                   >
-                                    <Select options={requiredOptions} placeholder="请选择是否必填" disabled={disabled} />
+                                    <Select
+                                      options={requiredOptions}
+                                      placeholder="请选择是否必填"
+                                      disabled={disabled}
+                                    />
                                   </Form.Item>
                                 )}
 
-                                {kind !== "output" && <span className="parameter-list-field__colon">:</span>}
+                                {kind !== "output" && (
+                                  <span className="parameter-list-field__colon">:</span>
+                                )}
 
                                 {kind === "output" && (
                                   <>
@@ -154,7 +160,11 @@ export function ParameterListField({
                                     { max: 100, message: "说明不能超过100个字符" }
                                   ]}
                                 >
-                                  <Input placeholder="说明（必填）" maxLength={100} disabled={disabled} />
+                                  <Input
+                                    placeholder="说明（必填）"
+                                    maxLength={100}
+                                    disabled={disabled}
+                                  />
                                 </Form.Item>
 
                                 {!disabled && (
@@ -177,7 +187,13 @@ export function ParameterListField({
                 </Droppable>
               </DragDropContext>
               <Form.Item className="parameter-list-field__add">
-                <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add(defaultValue(kind))} disabled={disabled}>
+                <Button
+                  type="dashed"
+                  block
+                  icon={<PlusOutlined />}
+                  onClick={() => add(defaultValue(kind))}
+                  disabled={disabled}
+                >
                   添加{label}
                 </Button>
               </Form.Item>

@@ -1,41 +1,71 @@
-import { Card, Progress, Segmented, Tag, Tooltip } from "antd";
+import { Progress, Segmented, Tag, Tooltip } from "antd";
+import type { ReactNode } from "react";
 import type { SegmentedOptions } from "antd/es/segmented";
-import type { RequirementPriority, RequirementStatus, TaskPriority, TaskStatus } from "../api/types";
+import type {
+  RequirementPriority,
+  RequirementStatus,
+  TaskPriority,
+  TaskStatus
+} from "../api/types";
 
-export function formatTokens(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
-  return String(v);
+import "./metric-card.css";
+
+export type StatCardTone = "primary" | "success" | "warning" | "danger" | "info";
+
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon?: ReactNode;
+  tone?: StatCardTone;
+  loading?: boolean;
 }
 
-const STAT_CARD_TONES = {
-  info: { color: "#1677ff" },
-  success: { color: "#52c41a" },
-  warning: { color: "#faad14" },
-  danger: { color: "#ff4d4f" },
-  purple: { color: "#722ed1" }
-} as const;
-
-export type StatCardTone = keyof typeof STAT_CARD_TONES;
-
+/**
+ * Top-line metric card for dashboards. Mirrors the structure of the locked
+ * `MetricCard` template (title-with-top-right-icon, value, meta, tone variants,
+ * loading skeleton). Values are rendered as pre-formatted strings/numbers from
+ * the calling dashboard rather than animated, because business cards combine
+ * counts, ratios (`"3/5"`), percentages (`"70%"`), and formatted token sizes.
+ */
 export function StatCard({
   label,
   value,
   sub,
-  tone = "info"
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  tone?: StatCardTone;
-}) {
-  const color = STAT_CARD_TONES[tone].color;
+  icon,
+  tone = "primary",
+  loading = false
+}: StatCardProps) {
+  if (loading) {
+    return (
+      <div className={`aidashboard-metric-card aidashboard-metric-card--tone-${tone}`}>
+        <div className="aidashboard-metric-card__title">
+          <span className="aidashboard-metric-card-skeleton aidashboard-metric-card-skeleton--title" />
+          <span className="aidashboard-metric-card-skeleton aidashboard-metric-card-skeleton--icon" />
+        </div>
+        <span className="aidashboard-metric-card-skeleton aidashboard-metric-card-skeleton--value" />
+        <span className="aidashboard-metric-card-skeleton aidashboard-metric-card-skeleton--meta" />
+      </div>
+    );
+  }
+
   return (
-    <Card size="small" className="aidashboard-stat-card" bodyStyle={{ padding: 16 }}>
-      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
-      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{label}</div>
-      {sub ? <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{sub}</div> : null}
-    </Card>
+    <div className={`aidashboard-metric-card aidashboard-metric-card--tone-${tone}`}>
+      <div className="aidashboard-metric-card__title">
+        <span>{label}</span>
+        {icon && (
+          <span className="aidashboard-metric-card__icon" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+      </div>
+      <div className="aidashboard-metric-card__value">
+        <span className="aidashboard-metric-card__value-text">{value}</span>
+      </div>
+      <div className="aidashboard-metric-card__meta">
+        <span>{sub ?? ""}</span>
+      </div>
+    </div>
   );
 }
 
@@ -44,7 +74,13 @@ export function ProgressBar({ value, showLabel = true }: { value: number; showLa
     value >= 80 ? "success" : value >= 40 ? "active" : "exception";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
-      <Progress percent={value} size="small" strokeColor={undefined} status={color} style={{ flex: 1, minWidth: 80 }} />
+      <Progress
+        percent={value}
+        size="small"
+        strokeColor={undefined}
+        status={color}
+        style={{ flex: 1, minWidth: 80 }}
+      />
       {showLabel ? <span style={{ fontSize: 12, color: "#6b7280" }}>{value}%</span> : null}
     </div>
   );
@@ -60,7 +96,13 @@ export function DeadlineCell({ deadline }: { deadline?: string }) {
   const urgent = days <= 3;
   return (
     <Tooltip title={urgent ? `剩 ${days} 天` : undefined}>
-      <span style={{ fontSize: 12, color: urgent ? "#ff4d4f" : "#6b7280", fontWeight: urgent ? 600 : 400 }}>
+      <span
+        style={{
+          fontSize: 12,
+          color: urgent ? "#ff4d4f" : "#6b7280",
+          fontWeight: urgent ? 600 : 400
+        }}
+      >
         {deadline}
         {urgent && days >= 0 ? ` (${days}天)` : ""}
       </span>
@@ -82,12 +124,12 @@ const REQ_STATUS_META: Record<RequirementStatus, { color: string; label: string 
 };
 
 export function TaskStatusTag({ status }: { status: TaskStatus }) {
-  const meta = TASK_STATUS_META[status];
+  const meta = TASK_STATUS_META[status] ?? { color: "default", label: status || "未知" };
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
 export function RequirementStatusTag({ status }: { status: RequirementStatus }) {
-  const meta = REQ_STATUS_META[status];
+  const meta = REQ_STATUS_META[status] ?? { color: "default", label: status || "未知" };
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
@@ -105,12 +147,12 @@ const TASK_PRIORITY_META: Record<TaskPriority, { color: string; label: string }>
 };
 
 export function RequirementPriorityTag({ priority }: { priority: RequirementPriority }) {
-  const meta = REQ_PRIORITY_META[priority];
+  const meta = REQ_PRIORITY_META[priority] ?? { color: "default", label: priority || "未知" };
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
 export function TaskPriorityTag({ priority }: { priority: TaskPriority }) {
-  const meta = TASK_PRIORITY_META[priority];
+  const meta = TASK_PRIORITY_META[priority] ?? { color: "default", label: priority || "未知" };
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
@@ -120,12 +162,13 @@ const PERIOD_OPTIONS: SegmentedOptions = [
   { label: "月", value: "month" }
 ];
 
-export function PeriodTabs({
-  value,
-  onChange
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return <Segmented size="small" options={PERIOD_OPTIONS} value={value} onChange={(v) => onChange(String(v))} />;
+export function PeriodTabs({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Segmented
+      size="small"
+      options={PERIOD_OPTIONS}
+      value={value}
+      onChange={(v) => onChange(String(v))}
+    />
+  );
 }

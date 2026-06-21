@@ -19,8 +19,16 @@ export function FormPageWrap({
   children
 }: FormPageWrapProps) {
   return (
-    <div className={["form-page-wrap", `form-page-wrap--${density}`, className].filter(Boolean).join(" ")} style={style}>
-      <div className={card ? "form-page-wrap__inner is-card" : "form-page-wrap__inner"} style={{ maxWidth }}>
+    <div
+      className={["form-page-wrap", `form-page-wrap--${density}`, className]
+        .filter(Boolean)
+        .join(" ")}
+      style={style}
+    >
+      <div
+        className={card ? "form-page-wrap__inner is-card" : "form-page-wrap__inner"}
+        style={{ maxWidth }}
+      >
         {children}
       </div>
     </div>

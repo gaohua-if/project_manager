@@ -22,7 +22,8 @@ export function LoginPage() {
   const { status, isAuthenticated, login } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const fromLocation = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+  const fromLocation = (location.state as { from?: { pathname?: string; search?: string } } | null)
+    ?.from;
   const requestedPath = fromLocation
     ? `${fromLocation.pathname ?? "/"}${fromLocation.search ?? ""}`
     : searchParams.get("next");
@@ -63,13 +64,27 @@ export function LoginPage() {
               }
             }}
           >
-            <Form.Item label="工号" name="employee_id" rules={[{ required: true, message: "请输入工号" }]}>
+            <Form.Item
+              label="工号"
+              name="employee_id"
+              rules={[{ required: true, message: "请输入工号" }]}
+            >
               <Input prefix={<UserOutlined />} autoComplete="username" placeholder="如 admin" />
             </Form.Item>
-            <Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}>
-              <Input.Password prefix={<LockOutlined />} autoComplete="current-password" placeholder="请输入密码" />
+            <Form.Item
+              label="密码"
+              name="password"
+              rules={[{ required: true, message: "请输入密码" }]}
+            >
+              <Input.Password
+                prefix={<LockOutlined />}
+                autoComplete="current-password"
+                placeholder="请输入密码"
+              />
             </Form.Item>
-            {loginError ? <Alert type="error" showIcon message={loginError} className="login-page__error" /> : null}
+            {loginError ? (
+              <Alert type="error" showIcon message={loginError} className="login-page__error" />
+            ) : null}
             <Button type="primary" htmlType="submit" block loading={submitting}>
               登录
             </Button>

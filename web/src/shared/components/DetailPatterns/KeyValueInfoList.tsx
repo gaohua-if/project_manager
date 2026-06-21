@@ -57,7 +57,10 @@ export function KeyValueInfoList({
                   {item.label}
                 </Tag>
                 {!outputMode && (
-                  <Tag color={item.required ? "orange" : "default"} className="key-value-info-list__required">
+                  <Tag
+                    color={item.required ? "orange" : "default"}
+                    className="key-value-info-list__required"
+                  >
                     {item.required ? "必填" : "非必填"}
                   </Tag>
                 )}

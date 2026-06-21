@@ -12,12 +12,8 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     proxy: {
-      "/api/v1/auth/login": {
-        target: "http://192.168.11.18:30054",
-        changeOrigin: true
-      },
-      "/api/v1/users": {
-        target: "http://192.168.11.18:30021",
+      "/api/v1": {
+        target: "http://localhost:8080",
         changeOrigin: true
       }
     }
@@ -31,7 +27,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router")) {
+          if (
+            id.includes("node_modules/react") ||
+            id.includes("node_modules/react-dom") ||
+            id.includes("node_modules/react-router")
+          ) {
             return "react";
           }
           if (id.includes("node_modules/antd") || id.includes("node_modules/@ant-design")) {

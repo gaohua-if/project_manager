@@ -2,9 +2,8 @@ import { Alert, Button, Card, Form, Input } from "antd";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { registerUser } from "@/shared/auth/authApi";
-import { setAuthSession } from "@/shared/auth/session";
 import { runtimeConfig } from "@/config/runtimeConfig";
+import { useAuth } from "@/shared/auth/authContext";
 
 import "./LoginPage.css";
 
@@ -13,6 +12,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const { register } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,14 +63,13 @@ export function RegisterPage() {
 
               setSubmitting(true);
               try {
-                const { token } = await registerUser({
+                await register({
                   employee_id: employeeId,
                   name,
                   email,
                   password: values.password
                 });
-                setAuthSession({ token });
-                navigate("/login", { replace: true });
+                navigate("/", { replace: true });
               } catch (err) {
                 setError(err instanceof Error ? err.message : "注册失败");
               } finally {
@@ -112,7 +111,9 @@ export function RegisterPage() {
               <Input.Password autoComplete="new-password" />
             </Form.Item>
 
-            {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} /> : null}
+            {error ? (
+              <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />
+            ) : null}
 
             <Button type="primary" htmlType="submit" block loading={submitting}>
               注册

@@ -45,11 +45,15 @@ let modules: ModuleResource[] = Array.from({ length: 30 }, (_, index) => {
     updated_at: new Date(Date.now() - index * 36e5).toISOString(),
     envs: [{ key: "NCCL_DEBUG", is_optional: false, description: "通信调试等级" }],
     inputs: [{ name: "dataset_path", is_optional: false, description: "训练数据输入路径" }],
-    outputs: [{ name: "model_path", path: "/outputs/model", value_type: 1, description: "模型输出路径" }]
+    outputs: [
+      { name: "model_path", path: "/outputs/model", value_type: 1, description: "模型输出路径" }
+    ]
   };
 });
 
-function normalize(values: ModuleFormValues): Omit<ModuleResource, "id" | "ran_cnt" | "used_cnt" | "updated_at"> {
+function normalize(
+  values: ModuleFormValues
+): Omit<ModuleResource, "id" | "ran_cnt" | "used_cnt" | "updated_at"> {
   return {
     ...values,
     tags: values.tags ?? [],
@@ -71,19 +75,34 @@ function assertUniqueParams(values: ModuleFormValues) {
   if (duplicatedInput) {
     throw new MockApiError("输入参数重复", {
       status: 422,
-      fieldErrors: [{ field: ["inputs", inputNames.indexOf(duplicatedInput), "name"], message: "输入参数名称不能重复" }]
+      fieldErrors: [
+        {
+          field: ["inputs", inputNames.indexOf(duplicatedInput), "name"],
+          message: "输入参数名称不能重复"
+        }
+      ]
     });
   }
   if (duplicatedOutput) {
     throw new MockApiError("输出参数重复", {
       status: 422,
-      fieldErrors: [{ field: ["outputs", outputNames.indexOf(duplicatedOutput), "name"], message: "输出参数名称不能重复" }]
+      fieldErrors: [
+        {
+          field: ["outputs", outputNames.indexOf(duplicatedOutput), "name"],
+          message: "输出参数名称不能重复"
+        }
+      ]
     });
   }
   if (crossDuplicate) {
     throw new MockApiError("输入参数不能与输出参数重复", {
       status: 422,
-      fieldErrors: [{ field: ["inputs", inputNames.indexOf(crossDuplicate), "name"], message: "不能与输出参数重复" }]
+      fieldErrors: [
+        {
+          field: ["inputs", inputNames.indexOf(crossDuplicate), "name"],
+          message: "不能与输出参数重复"
+        }
+      ]
     });
   }
 }
@@ -108,16 +127,24 @@ export const moduleCrudMockApi = {
     if (params.category_id) rows = rows.filter((item) => item.categoryId === params.category_id);
     if (params.user_id) rows = rows.filter((item) => item.owner === params.user_id);
     if (keyword) {
-      rows = rows.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(keyword));
+      rows = rows.filter((item) =>
+        `${item.name} ${item.description ?? ""}`.toLowerCase().includes(keyword)
+      );
     }
     if (params.order_by) {
-      rows.sort((a, b) => compareValue(
-        a[params.order_by as keyof ModuleResource] as string | number | undefined,
-        b[params.order_by as keyof ModuleResource] as string | number | undefined,
-        params.order_type
-      ));
+      rows.sort((a, b) =>
+        compareValue(
+          a[params.order_by as keyof ModuleResource] as string | number | undefined,
+          b[params.order_by as keyof ModuleResource] as string | number | undefined,
+          params.order_type
+        )
+      );
     }
-    return { code: 0, msg: "success", data: createPageResult(rows, params.page_num, params.page_size) };
+    return {
+      code: 0,
+      msg: "success",
+      data: createPageResult(rows, params.page_num, params.page_size)
+    };
   },
 
   async detail(id: string): Promise<ApiResponse<ModuleResource>> {
@@ -129,7 +156,8 @@ export const moduleCrudMockApi = {
 
   async logs(id: string): Promise<ApiResponse<string>> {
     await wait(180);
-    if (!modules.some((module) => module.id === id)) throw new MockApiError("模块不存在", { status: 404 });
+    if (!modules.some((module) => module.id === id))
+      throw new MockApiError("模块不存在", { status: 404 });
     return {
       code: 0,
       msg: "success",
@@ -154,7 +182,8 @@ export const moduleCrudMockApi = {
 
   async update(id: string, values: ModuleFormValues): Promise<ApiResponse<ModuleResource>> {
     await wait();
-    if (!modules.some((item) => item.id === id)) throw new MockApiError("模块不存在或已被删除", { status: 404 });
+    if (!modules.some((item) => item.id === id))
+      throw new MockApiError("模块不存在或已被删除", { status: 404 });
     assertUniqueName(modules, values.name, id);
     assertUniqueParams(values);
     const current = modules.find((item) => item.id === id)!;
@@ -165,7 +194,8 @@ export const moduleCrudMockApi = {
 
   async delete(id: string): Promise<ApiResponse<null>> {
     await wait();
-    if (!modules.some((item) => item.id === id)) throw new MockApiError("模块不存在或已被删除", { status: 404 });
+    if (!modules.some((item) => item.id === id))
+      throw new MockApiError("模块不存在或已被删除", { status: 404 });
     modules = modules.filter((item) => item.id !== id);
     return { code: 0, msg: "success", data: null };
   }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
-import { AuthRequestError, fetchCurrentUser, loginWithPassword } from "./authApi";
+import { AuthRequestError, fetchCurrentUser, loginWithPassword, registerUser } from "./authApi";
 import { AuthContext } from "./authContext";
 import {
   AUTH_SESSION_CLEARED_EVENT,
@@ -10,7 +10,7 @@ import {
   isAuthSessionStorageKey,
   setAuthSession
 } from "./session";
-import type { LoginCredentials, User, UserRole } from "./types";
+import type { LoginCredentials, RegisterPayload, User, UserRole } from "./types";
 import type { AuthContextValue } from "./authContext";
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -39,7 +39,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setError(message);
       const shouldClearSession =
         loadError instanceof AuthRequestError
-          ? typeof loadError.status === "number" && loadError.status >= 400 && loadError.status < 500
+          ? typeof loadError.status === "number" &&
+            loadError.status >= 400 &&
+            loadError.status < 500
           : !(loadError instanceof TypeError);
       if (shouldClearSession) {
         clearAuthSession();
@@ -84,26 +86,42 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [loadCurrentUser, resetToAnonymous]);
 
-  const login = useCallback(
-    async (credentials: LoginCredentials) => {
-      setStatus("initializing");
-      setError(null);
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    setStatus("initializing");
+    setError(null);
 
-      try {
-        const { token, user: loginUser } = await loginWithPassword(credentials);
-        setAuthSession({ token });
-        setUser(loginUser);
-        setStatus("authenticated");
-      } catch (loginError) {
-        clearAuthSession();
-        const message = loginError instanceof Error ? loginError.message : "登录失败，请稍后重试";
-        setError(message);
-        setStatus("anonymous");
-        throw loginError;
-      }
-    },
-    []
-  );
+    try {
+      const { token, user: loginUser } = await loginWithPassword(credentials);
+      setAuthSession({ token });
+      setUser(loginUser);
+      setStatus("authenticated");
+    } catch (loginError) {
+      clearAuthSession();
+      const message = loginError instanceof Error ? loginError.message : "登录失败，请稍后重试";
+      setError(message);
+      setStatus("anonymous");
+      throw loginError;
+    }
+  }, []);
+
+  const register = useCallback(async (payload: RegisterPayload) => {
+    setStatus("initializing");
+    setError(null);
+
+    try {
+      const { token, user: registeredUser } = await registerUser(payload);
+      setAuthSession({ token });
+      setUser(registeredUser);
+      setStatus("authenticated");
+    } catch (registerError) {
+      clearAuthSession();
+      const message =
+        registerError instanceof Error ? registerError.message : "注册失败，请稍后重试";
+      setError(message);
+      setStatus("anonymous");
+      throw registerError;
+    }
+  }, []);
 
   const hasRole = useCallback(
     (role: UserRole | UserRole[]) => {
@@ -121,6 +139,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       error,
       login,
+      register,
       logout: () => {
         clearAuthSession();
         setUser(null);
@@ -139,7 +158,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       hasRole
     }),
-    [error, hasRole, loadCurrentUser, login, resetToAnonymous, status, user]
+    [error, hasRole, loadCurrentUser, login, register, resetToAnonymous, status, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

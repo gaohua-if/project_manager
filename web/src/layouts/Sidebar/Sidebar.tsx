@@ -50,7 +50,10 @@ export function SidebarContent({ collapsed = false, onNavigate }: SidebarContent
 
     routes
       .slice()
-      .sort((a, b) => (a.menuOrder ?? Number.MAX_SAFE_INTEGER) - (b.menuOrder ?? Number.MAX_SAFE_INTEGER))
+      .sort(
+        (a, b) =>
+          (a.menuOrder ?? Number.MAX_SAFE_INTEGER) - (b.menuOrder ?? Number.MAX_SAFE_INTEGER)
+      )
       .forEach((route, index) => {
         const groupLabel = route.menuGroup ?? "应用导航";
         const group = groups.get(groupLabel) ?? {

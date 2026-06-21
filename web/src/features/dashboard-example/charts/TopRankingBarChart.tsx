@@ -17,8 +17,16 @@ function truncateName(name: string) {
   return name.length > 8 ? `${name.slice(0, 8)}...` : name;
 }
 
-export function TopRankingBarChart({ data = [], loading, error, height = 340 }: TopRankingBarChartProps) {
-  const sortedData = useMemo(() => [...data].sort((a, b) => b.value - a.value).slice(0, 10), [data]);
+export function TopRankingBarChart({
+  data = [],
+  loading,
+  error,
+  height = 340
+}: TopRankingBarChartProps) {
+  const sortedData = useMemo(
+    () => [...data].sort((a, b) => b.value - a.value).slice(0, 10),
+    [data]
+  );
   const empty = !loading && !error && sortedData.length === 0;
   const option = useMemo<EChartsOption>(
     () => ({

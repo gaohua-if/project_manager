@@ -47,7 +47,10 @@ export function TimeRangeFilter({ value, loading, onChange, onRefresh }: TimeRan
     ],
     []
   );
-  const ownerOptions = useMemo(() => ["平台组", "算法组", "数据组"].map((item) => ({ label: item, value: item })), []);
+  const ownerOptions = useMemo(
+    () => ["平台组", "算法组", "数据组"].map((item) => ({ label: item, value: item })),
+    []
+  );
 
   useEffect(() => {
     form.setFieldsValue(formValue);

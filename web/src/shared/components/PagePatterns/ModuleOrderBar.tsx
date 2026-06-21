@@ -53,10 +53,7 @@ export function ModuleOrderBar({
           <button
             type="button"
             key={field.value}
-            className={[
-              "module-order-bar__field",
-              isActive ? "is-active" : ""
-            ]
+            className={["module-order-bar__field", isActive ? "is-active" : ""]
               .filter(Boolean)
               .join(" ")}
             onClick={() => handleClick(field.value)}

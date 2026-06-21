@@ -1,48 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Col,
-  DatePicker,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Row,
-  Select,
-  Space,
-  Table,
-  Typography
-} from "antd";
-import { PlusOutlined } from "@ant-design/icons";
-import { Link } from "react-router-dom";
-import { useState } from "react";
-import dayjs from "dayjs";
+import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Select } from "antd";
+import type { TableProps } from "antd";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
-import {
-  createTask,
-  fetchRequirements,
-  fetchTasks,
-  fetchUsers
-} from "../../api/client";
-import type { Requirement, Task, TaskPriority, TaskStatus } from "../../api/types";
-import type { User } from "@/shared/auth/types";
+import { fetchTasks } from "../../api/client";
+import type { Task, TaskPriority, TaskStatus } from "../../api/types";
 import { useAuth } from "@/shared/auth/authContext";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { ResourceActions, ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
+import { TableLayout } from "@/shared/components/TableLayout/TableLayout";
+import { appendSearch } from "@/shared/utils/urlQuery";
 
+import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
-
-const { Title, Text } = Typography;
-
-interface CreateTaskFormValues {
-  title: string;
-  requirement_id: string;
-  assignee_id: string;
-  priority: TaskPriority;
-  due_date?: dayjs.Dayjs;
-  acceptance_criteria_ids: number[];
-}
 
 const STATUS_FILTER_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: "todo", label: "待办" },
@@ -53,205 +24,142 @@ const STATUS_FILTER_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
 
 export function TasksListPage() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [form] = Form.useForm<CreateTaskFormValues>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = (searchParams.get("status") as TaskStatus | null) ?? "";
+
+  const updateParam = (key: string, value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true }
+    );
+  };
 
   const canCreate = Boolean(
     user && (user.role === "team_leader" || user.role === "director" || user.role === "admin")
   );
 
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
+  const tasksQuery = useQuery<Task[]>({
     queryKey: ["tasks", { status: statusFilter }],
     queryFn: () => fetchTasks(statusFilter ? { status: statusFilter } : undefined),
     staleTime: 30_000
   });
-  const { data: requirements = [] } = useQuery<Requirement[]>({
-    queryKey: ["requirements"],
-    queryFn: () => fetchRequirements(),
-    enabled: canCreate,
-    staleTime: 60_000
-  });
-  const { data: users = [] } = useQuery<User[]>({
-    queryKey: ["users"],
-    queryFn: () => fetchUsers(),
-    enabled: canCreate,
-    staleTime: 5 * 60_000
-  });
+  const tasks = tasksQuery.data ?? [];
 
-  const teamEmployees = users.filter(
-    (u) => u.role === "employee" && u.team_id === user?.team_id
-  );
-
-  const createMutation = useMutation({
-    mutationFn: (values: CreateTaskFormValues) =>
-      createTask({
-        requirement_id: values.requirement_id,
-        title: values.title.trim(),
-        acceptance_criteria_ids: values.acceptance_criteria_ids ?? [],
-        assignee_id: values.assignee_id,
-        priority: values.priority,
-        due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined
-      }),
-    onSuccess: () => {
-      message.success("任务已创建");
-      setCreateOpen(false);
-      form.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  const columns: TableProps<Task>["columns"] = [
+    {
+      title: "任务",
+      dataIndex: "title",
+      render: (title: string, t) => (
+        <Link to={appendSearch(`/tasks/${t.id}`, searchParams)}>{title}</Link>
+      )
     },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "创建任务失败")
-  });
-
-  const selectedRequirementId = Form.useWatch("requirement_id", form);
-  const selectedRequirement = requirements.find((r) => r.id === selectedRequirementId);
-
-  return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Space style={{ width: "100%", justifyContent: "space-between" }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>任务</Title>
-          <Text type="secondary">查看和管理任务</Text>
-        </div>
-        <Space>
-          {canCreate ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              创建任务
-            </Button>
-          ) : null}
-          <Select
-            style={{ width: 140 }}
-            value={statusFilter || undefined}
-            placeholder="全部状态"
-            allowClear
-            onChange={(v) => setStatusFilter((v ?? "") as TaskStatus | "")}
-            options={STATUS_FILTER_OPTIONS}
-          />
-        </Space>
-      </Space>
-
-      <Card size="small">
-        <Table<Task>
-          rowKey="id"
-          dataSource={tasks}
-          loading={isLoading}
-          pagination={false}
-          columns={[
+    {
+      title: "所属需求",
+      dataIndex: "requirement_title",
+      render: (v?: string) => v || "-",
+      width: 220
+    },
+    { title: "负责人", dataIndex: "assignee_name", render: (v?: string) => v || "-", width: 120 },
+    {
+      title: "状态",
+      dataIndex: "status",
+      render: (s: TaskStatus) => <TaskStatusTag status={s} />,
+      width: 110
+    },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      render: (p: TaskPriority) => <TaskPriorityTag priority={p} />,
+      width: 100
+    },
+    { title: "截止", dataIndex: "due_date", render: (v?: string) => v || "-", width: 130 },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_, record) => (
+        <ResourceActions
+          actions={[
             {
-              title: "任务",
-              dataIndex: "title",
-              render: (title: string, t) => <Link to={`/tasks/${t.id}`}>{title}</Link>
-            },
-            {
-              title: "所属需求",
-              dataIndex: "requirement_title",
-              render: (v?: string) => v || "-",
-              width: 200
-            },
-            {
-              title: "负责人",
-              dataIndex: "assignee_name",
-              render: (v?: string) => v || "-",
-              width: 120
-            },
-            {
-              title: "状态",
-              dataIndex: "status",
-              render: (s: Task["status"]) => <TaskStatusTag status={s} />,
-              width: 100
-            },
-            {
-              title: "优先级",
-              dataIndex: "priority",
-              render: (p: TaskPriority) => <TaskPriorityTag priority={p} />,
-              width: 90
-            },
-            {
-              title: "截止",
-              dataIndex: "due_date",
-              render: (v?: string) => v || "-",
-              width: 120
+              key: "detail",
+              label: "详情",
+              onClick: () => navigate(appendSearch(`/tasks/${record.id}`, searchParams))
             }
           ]}
-          locale={{ emptyText: <Empty description="暂无任务" /> }}
         />
-      </Card>
+      )
+    }
+  ];
 
-      <Modal
-        title="创建任务"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => form.submit()}
-        okText="创建并分配"
-        cancelText="取消"
-        confirmLoading={createMutation.isPending}
-        width={720}
-        destroyOnHidden
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{ priority: "medium", acceptance_criteria_ids: [] }}
-          onFinish={(values) => createMutation.mutate(values)}
+  return (
+    <PagePanel
+      title="任务"
+      className="aidashboard-list"
+      description="查看任务分配、优先级、状态和截止时间"
+      breadcrumbs={[{ title: "任务" }]}
+      actions={
+        <Button
+          icon={<ReloadOutlined />}
+          loading={tasksQuery.isFetching}
+          onClick={() => void tasksQuery.refetch()}
         >
-          <Form.Item label="任务标题" name="title" rules={[{ required: true, message: "请输入标题" }]}>
-            <Input placeholder="例如:实现 API 分页" />
-          </Form.Item>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="所属需求" name="requirement_id" rules={[{ required: true, message: "请选择需求" }]}>
-                <Select
-                  placeholder="选择需求"
-                  showSearch
-                  optionFilterProp="label"
-                  options={requirements.map((r) => ({ value: r.id, label: r.title }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="负责人" name="assignee_id" rules={[{ required: true, message: "请选择负责人" }]}>
-                <Select
-                  placeholder="选择工程师"
-                  options={teamEmployees.map((u) => ({ value: u.id, label: `${u.name} (${u.employee_id})` }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          {selectedRequirement && selectedRequirement.acceptance_criteria.length > 0 ? (
-            <Form.Item label="关联 AC" name="acceptance_criteria_ids">
-              <Checkbox.Group style={{ width: "100%" }}>
-                <Space direction="vertical" wrap>
-                  {selectedRequirement.acceptance_criteria.map((ac, i) => (
-                    <Checkbox key={i} value={i}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>AC{i + 1}</Text>{" "}
-                      <Text style={{ fontSize: 12 }}>{ac}</Text>
-                    </Checkbox>
-                  ))}
-                </Space>
-              </Checkbox.Group>
-            </Form.Item>
-          ) : null}
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="优先级" name="priority">
-                <Select
-                  options={[
-                    { value: "low", label: "低" },
-                    { value: "medium", label: "中" },
-                    { value: "high", label: "高" }
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="截止日期" name="due_date">
-                <DatePicker style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
-    </Space>
+          刷新
+        </Button>
+      }
+    >
+      <TableLayout
+        operations={
+          canCreate ? (
+            <Button
+              className="aidashboard-list__create"
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => navigate(appendSearch("/tasks/create", searchParams))}
+            >
+              创建任务
+            </Button>
+          ) : null
+        }
+        search={
+          <TableLayout.SearchGroup>
+            <TableLayout.SelectItem size="md">
+              <Select
+                style={{ width: "100%" }}
+                value={statusFilter || undefined}
+                placeholder="全部状态"
+                allowClear
+                onChange={(v) => updateParam("status", (v ?? "") as string)}
+                options={STATUS_FILTER_OPTIONS}
+              />
+            </TableLayout.SelectItem>
+          </TableLayout.SearchGroup>
+        }
+      >
+        {tasksQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="任务列表加载失败"
+            description={
+              tasksQuery.error instanceof Error ? tasksQuery.error.message : "请稍后重试"
+            }
+            action={<Button onClick={() => void tasksQuery.refetch()}>重试</Button>}
+          />
+        ) : null}
+        <ResourceTable<Task>
+          rowKey="id"
+          columns={columns}
+          dataSource={tasks}
+          loading={tasksQuery.isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+        />
+      </TableLayout>
+    </PagePanel>
   );
 }

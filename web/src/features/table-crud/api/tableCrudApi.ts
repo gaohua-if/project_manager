@@ -2,7 +2,12 @@ import { runtimeConfig } from "@/config/runtimeConfig";
 import { api } from "@/shared/request/httpClient";
 
 import { tableCrudMockApi } from "./tableCrudMockApi";
-import type { PageResult, TableResource, TableResourceFormValues, TableResourceListParams } from "./tableCrudTypes";
+import type {
+  PageResult,
+  TableResource,
+  TableResourceFormValues,
+  TableResourceListParams
+} from "./tableCrudTypes";
 
 export const tableCrudKeys = {
   all: ["table-crud"] as const,

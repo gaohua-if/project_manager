@@ -1,22 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, Col, Empty, Row, Space, Table, Typography } from "antd";
+import { Card, Col, Empty, Row } from "antd";
+import {
+  AlertOutlined,
+  ProjectOutlined,
+  TeamOutlined,
+  WalletOutlined
+} from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 
 import { fetchRequirements, fetchTasks, fetchTokens, fetchTeamActivity } from "../api/client";
 import type { Requirement, Task, TokenPeriod } from "../api/types";
 import { useAuth } from "@/shared/auth/authContext";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 
 import { AlertBanner, TokenDistributionPie } from "./charts";
-import {
-  DeadlineCell,
-  PeriodTabs,
-  ProgressBar,
-  StatCard,
-  TaskStatusTag
-} from "./shared";
-
-const { Title, Text } = Typography;
+import { DashboardErrorAlert } from "./DashboardState";
+import { DeadlineCell, PeriodTabs, ProgressBar, StatCard, TaskStatusTag } from "./shared";
 
 function formatTokens(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -28,26 +29,31 @@ export function TLDashboard() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<TokenPeriod>("week");
 
-  const { data: requirements = [] } = useQuery<Requirement[]>({
+  const requirementsQuery = useQuery<Requirement[]>({
     queryKey: ["requirements"],
     queryFn: () => fetchRequirements(),
     staleTime: 60_000
   });
-  const { data: tasks = [] } = useQuery<Task[]>({
+  const tasksQuery = useQuery<Task[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
     staleTime: 60_000
   });
-  const { data: activity } = useQuery({
+  const activityQuery = useQuery({
     queryKey: ["team-activity"],
     queryFn: () => fetchTeamActivity(),
     staleTime: 60_000
   });
-  const { data: tokens } = useQuery({
+  const tokensQuery = useQuery({
     queryKey: ["tokens", period, "user"],
     queryFn: () => fetchTokens({ period, group_by: "user" }),
     staleTime: 30_000
   });
+
+  const requirements = requirementsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const activity = activityQuery.data;
+  const tokens = tokensQuery.data;
 
   const myTeamMembers = activity?.teams?.find((t) => t.team_id === user?.team_id);
   const activeCount = myTeamMembers?.active || 0;
@@ -55,25 +61,47 @@ export function TLDashboard() {
   const blockedTasks = tasks.filter((t) => t.status === "blocked");
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <div>
-        <Title level={4} style={{ marginBottom: 4 }}>
-          {user?.team_name || "团队"} · TL {user?.name}
-        </Title>
-        <Text type="secondary">
-          参与 {requirements.length} 个需求 · 拆解 {tasks.length} 个任务 · 活跃度 {activeCount}/{totalCount}
-        </Text>
-      </div>
+    <PagePanel
+      title={`${user?.team_name || "团队"} · TL ${user?.name ?? ""}`}
+      description={`参与 ${requirements.length} 个需求 · 拆解 ${tasks.length} 个任务 · 活跃度 ${activeCount}/${totalCount}`}
+      breadcrumbs={[{ title: "Dashboard" }]}
+    >
+      <DashboardErrorAlert
+        items={[
+          { label: "需求", query: requirementsQuery },
+          { label: "任务", query: tasksQuery },
+          { label: "活跃度", query: activityQuery },
+          { label: "Token", query: tokensQuery }
+        ]}
+      />
 
       <Row gutter={[12, 12]}>
         <Col xs={12} md={6}>
-          <StatCard label="今日活跃" value={`${activeCount}/${totalCount}`} tone="info" />
+          <StatCard
+            label="今日活跃"
+            value={`${activeCount}/${totalCount}`}
+            tone="info"
+            icon={<TeamOutlined />}
+            loading={activityQuery.isLoading}
+          />
         </Col>
         <Col xs={12} md={6}>
-          <StatCard label="参与需求" value={requirements.length} tone="purple" />
+          <StatCard
+            label="参与需求"
+            value={requirements.length}
+            tone="info"
+            icon={<ProjectOutlined />}
+            loading={requirementsQuery.isLoading}
+          />
         </Col>
         <Col xs={12} md={6}>
-          <StatCard label="阻碍预警" value={blockedTasks.length} tone="danger" />
+          <StatCard
+            label="阻碍预警"
+            value={blockedTasks.length}
+            tone="danger"
+            icon={<AlertOutlined />}
+            loading={tasksQuery.isLoading}
+          />
         </Col>
         <Col xs={12} md={6}>
           <StatCard
@@ -81,6 +109,8 @@ export function TLDashboard() {
             value={formatTokens(tokens?.total || 0)}
             sub={`按 ${period}`}
             tone="warning"
+            icon={<WalletOutlined />}
+            loading={tokensQuery.isLoading}
           />
         </Col>
       </Row>
@@ -88,10 +118,11 @@ export function TLDashboard() {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
           <Card title={`成员 Token 排名 (${period})`} size="small">
-            <Table
+            <ResourceTable
               size="small"
               rowKey="label"
               dataSource={tokens?.groups || []}
+              loading={tokensQuery.isLoading}
               pagination={false}
               columns={[
                 { title: "成员", dataIndex: "label" },
@@ -117,18 +148,23 @@ export function TLDashboard() {
           <Card
             title="Token 分布 (按成员)"
             size="small"
+            loading={tokensQuery.isLoading}
             extra={<PeriodTabs value={period} onChange={(v) => setPeriod(v as TokenPeriod)} />}
           >
-            <TokenDistributionPie groups={tokens?.groups || []} centerLabel={formatTokens(tokens?.total || 0)} />
+            <TokenDistributionPie
+              groups={tokens?.groups || []}
+              centerLabel={formatTokens(tokens?.total || 0)}
+            />
           </Card>
         </Col>
       </Row>
 
       <Card title="本队任务" size="small">
-        <Table<Task>
+        <ResourceTable<Task>
           size="small"
           rowKey="id"
           dataSource={tasks.slice(0, 10)}
+          loading={tasksQuery.isLoading}
           pagination={false}
           columns={[
             {
@@ -167,10 +203,11 @@ export function TLDashboard() {
       </Card>
 
       <Card title="本队需求" size="small">
-        <Table<Requirement>
+        <ResourceTable<Requirement>
           size="small"
           rowKey="id"
           dataSource={requirements}
+          loading={requirementsQuery.isLoading}
           pagination={false}
           columns={[
             {
@@ -203,7 +240,7 @@ export function TLDashboard() {
 
       {blockedTasks.length > 0 && (
         <AlertBanner level="warning">
-          <span>⚠️ 阻塞任务: </span>
+          <span>阻塞任务: </span>
           {blockedTasks.map((t, i) => (
             <span key={t.id}>
               {i > 0 && " · "}
@@ -213,6 +250,6 @@ export function TLDashboard() {
           ))}
         </AlertBanner>
       )}
-    </Space>
+    </PagePanel>
   );
 }

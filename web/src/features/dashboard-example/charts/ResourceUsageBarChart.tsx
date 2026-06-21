@@ -13,7 +13,12 @@ interface ResourceUsageBarChartProps {
   height?: number;
 }
 
-export function ResourceUsageBarChart({ data = [], loading, error, height = 340 }: ResourceUsageBarChartProps) {
+export function ResourceUsageBarChart({
+  data = [],
+  loading,
+  error,
+  height = 340
+}: ResourceUsageBarChartProps) {
   const empty = !loading && !error && data.length === 0;
   const option = useMemo<EChartsOption>(
     () => ({
@@ -46,9 +51,27 @@ export function ResourceUsageBarChart({ data = [], loading, error, height = 340 
         splitLine: { lineStyle: { color: chartPalette.splitLine } }
       },
       series: [
-        { name: "CPU", type: "bar", barMaxWidth: 16, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: data.map((item) => item.cpu) },
-        { name: "Memory", type: "bar", barMaxWidth: 16, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: data.map((item) => item.memory) },
-        { name: "Storage", type: "bar", barMaxWidth: 16, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: data.map((item) => item.storage) }
+        {
+          name: "CPU",
+          type: "bar",
+          barMaxWidth: 16,
+          itemStyle: { borderRadius: [6, 6, 0, 0] },
+          data: data.map((item) => item.cpu)
+        },
+        {
+          name: "Memory",
+          type: "bar",
+          barMaxWidth: 16,
+          itemStyle: { borderRadius: [6, 6, 0, 0] },
+          data: data.map((item) => item.memory)
+        },
+        {
+          name: "Storage",
+          type: "bar",
+          barMaxWidth: 16,
+          itemStyle: { borderRadius: [6, 6, 0, 0] },
+          data: data.map((item) => item.storage)
+        }
       ]
     }),
     [data]

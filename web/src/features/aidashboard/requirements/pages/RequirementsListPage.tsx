@@ -1,199 +1,218 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Table, Typography } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import dayjs from "dayjs";
+import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Select } from "antd";
+import type { TableProps } from "antd";
+import { useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
-import {
-  createRequirement,
-  fetchRequirements,
-  fetchTeams
-} from "../../api/client";
-import type { Requirement, RequirementPriority } from "../../api/types";
-import {
-  ProgressBar,
-  RequirementPriorityTag
-} from "../../dashboard/shared";
+import { fetchRequirements } from "../../api/client";
+import type { Requirement, RequirementPriority, RequirementStatus } from "../../api/types";
+import "../../aidashboard-pattern.css";
+import { ProgressBar, RequirementPriorityTag, RequirementStatusTag } from "../../dashboard/shared";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { ResourceActions, ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
+import { TableLayout } from "@/shared/components/TableLayout/TableLayout";
+import { appendSearch } from "@/shared/utils/urlQuery";
 
-const { Title, Text } = Typography;
+const PRIORITY_OPTIONS: Array<{ value: RequirementPriority; label: string }> = [
+  { value: "urgent", label: "紧急" },
+  { value: "high", label: "高" },
+  { value: "medium", label: "中" },
+  { value: "low", label: "低" }
+];
 
-interface CreateFormValues {
-  title: string;
-  description: string;
-  priority: RequirementPriority;
-  deadline?: dayjs.Dayjs;
-  team_ids: string[];
-  feishu_doc_url?: string;
-}
+const STATUS_OPTIONS: Array<{ value: RequirementStatus; label: string }> = [
+  { value: "active", label: "进行中" },
+  { value: "completed", label: "已完成" },
+  { value: "cancelled", label: "已取消" }
+];
 
 export function RequirementsListPage() {
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const [open, setOpen] = useState(false);
-  const [form] = Form.useForm<CreateFormValues>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const keyword = searchParams.get("keyword") ?? "";
+  const priority = (searchParams.get("priority") as RequirementPriority | null) ?? undefined;
+  const status = (searchParams.get("status") as RequirementStatus | null) ?? undefined;
 
-  const { data: requirements = [], isLoading } = useQuery<Requirement[]>({
+  const updateParam = (key: string, value: string | undefined) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true }
+    );
+  };
+
+  const requirementsQuery = useQuery<Requirement[]>({
     queryKey: ["requirements"],
     queryFn: () => fetchRequirements(),
     staleTime: 60_000
   });
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: () => fetchTeams(),
-    staleTime: 5 * 60_000
-  });
+  const filteredRequirements = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    const requirements = requirementsQuery.data ?? [];
+    return requirements.filter((item) => {
+      const keywordMatched =
+        !kw ||
+        item.title.toLowerCase().includes(kw) ||
+        item.creator_name.toLowerCase().includes(kw) ||
+        item.team_names.join(" ").toLowerCase().includes(kw);
+      const priorityMatched = !priority || item.priority === priority;
+      const statusMatched = !status || item.status === status;
+      return keywordMatched && priorityMatched && statusMatched;
+    });
+  }, [keyword, priority, requirementsQuery.data, status]);
 
-  const createMutation = useMutation({
-    mutationFn: (values: CreateFormValues) =>
-      createRequirement({
-        title: values.title.trim(),
-        description: values.description.trim(),
-        priority: values.priority,
-        deadline: values.deadline ? values.deadline.format("YYYY-MM-DD") : undefined,
-        team_ids: values.team_ids,
-        feishu_doc_url: values.feishu_doc_url || undefined
-      }),
-    onSuccess: () => {
-      message.success("需求已创建");
-      setOpen(false);
-      form.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ["requirements"] });
-    },
-    onError: (err: unknown) => {
-      message.error(err instanceof Error ? err.message : "创建需求失败");
-    }
-  });
-
-  return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Space style={{ width: "100%", justifyContent: "space-between" }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>需求</Title>
-          <Text type="secondary">管理需求和验收标准</Text>
+  const columns: TableProps<Requirement>["columns"] = [
+    {
+      title: "需求",
+      dataIndex: "title",
+      render: (title: string, r) => (
+        <div className="aidashboard-list__name-link">
+          <Link to={appendSearch(`/requirements/${r.id}`, searchParams)}>{title}</Link>
+          {r.feishu_doc_url ? (
+            <div>
+              <a href={r.feishu_doc_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                飞书文档 ↗
+              </a>
+            </div>
+          ) : null}
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
-          新建需求
-        </Button>
-      </Space>
-
-      <Card size="small">
-        <Table<Requirement>
-          rowKey="id"
-          dataSource={requirements}
-          loading={isLoading}
-          pagination={false}
-          columns={[
+      )
+    },
+    { title: "创建者", dataIndex: "creator_name", width: 120 },
+    { title: "团队", dataIndex: "team_names", render: (v: string[]) => v.join(", "), width: 180 },
+    {
+      title: "AC",
+      dataIndex: "acceptance_criteria",
+      render: (v: string[]) => v?.length || 0,
+      width: 80
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      render: (s: RequirementStatus) => <RequirementStatusTag status={s} />,
+      width: 110
+    },
+    {
+      title: "进度",
+      dataIndex: "progress",
+      render: (v: number) => <ProgressBar value={v} />,
+      width: 180
+    },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      render: (p: RequirementPriority) => <RequirementPriorityTag priority={p} />,
+      width: 100
+    },
+    { title: "截止日期", dataIndex: "deadline", render: (v?: string) => v || "-", width: 130 },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_, record) => (
+        <ResourceActions
+          actions={[
             {
-              title: "需求",
-              dataIndex: "title",
-              render: (title: string, r) => (
-                <Space direction="vertical" size={0}>
-                  <Link to={`/requirements/${r.id}`}>{title}</Link>
-                  {r.feishu_doc_url ? (
-                    <a href={r.feishu_doc_url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>
-                      [飞书文档]
-                    </a>
-                  ) : null}
-                </Space>
-              )
-            },
-            {
-              title: "创建者",
-              dataIndex: "creator_name",
-              width: 100
-            },
-            {
-              title: "团队",
-              dataIndex: "team_names",
-              render: (v: string[]) => v.join(", "),
-              width: 160
-            },
-            {
-              title: "AC",
-              dataIndex: "acceptance_criteria",
-              render: (v: string[]) => v?.length || 0,
-              width: 60
-            },
-            {
-              title: "进度",
-              dataIndex: "progress",
-              render: (v: number) => <ProgressBar value={v} />,
-              width: 180
-            },
-            {
-              title: "优先级",
-              dataIndex: "priority",
-              render: (p: RequirementPriority) => <RequirementPriorityTag priority={p} />,
-              width: 90
-            },
-            {
-              title: "截止日期",
-              dataIndex: "deadline",
-              render: (v?: string) => v || "-",
-              width: 120
+              key: "detail",
+              label: "详情",
+              onClick: () =>
+                navigate(appendSearch(`/requirements/${record.id}`, searchParams))
             }
           ]}
-          locale={{ emptyText: <Empty description="暂无需求" /> }}
         />
-      </Card>
+      )
+    }
+  ];
 
-      <Modal
-        title="新建需求"
-        open={open}
-        onCancel={() => setOpen(false)}
-        onOk={() => form.submit()}
-        okText="创建需求"
-        cancelText="取消"
-        confirmLoading={createMutation.isPending}
-        width={720}
-        destroyOnHidden
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{ priority: "medium" }}
-          onFinish={(values) => createMutation.mutate(values)}
+  return (
+    <PagePanel
+      title="需求"
+      className="aidashboard-list"
+      description="管理需求、参与团队和验收标准进度"
+      breadcrumbs={[{ title: "需求" }]}
+      actions={
+        <Button
+          icon={<ReloadOutlined />}
+          loading={requirementsQuery.isFetching}
+          onClick={() => void requirementsQuery.refetch()}
         >
-          <Form.Item label="标题" name="title" rules={[{ required: true, message: "请输入标题" }]}>
-            <Input placeholder="例如:REQ-001 AI 平台 v3.0" />
-          </Form.Item>
-          <Form.Item label="描述" name="description" rules={[{ required: true, message: "请输入描述" }]}>
-            <Input.TextArea rows={4} placeholder="详细描述需求..." />
-          </Form.Item>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="优先级" name="priority">
-                <Select
-                  options={[
-                    { value: "low", label: "低" },
-                    { value: "medium", label: "中" },
-                    { value: "high", label: "高" },
-                    { value: "urgent", label: "紧急" }
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="截止日期" name="deadline">
-                <DatePicker style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="飞书文档 URL" name="feishu_doc_url">
-                <Input placeholder="https://..." />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item
-            label="参与团队"
-            name="team_ids"
-            rules={[{ required: true, message: "至少选择一个团队", type: "array", min: 1 }]}
+          刷新
+        </Button>
+      }
+    >
+      <TableLayout
+        operations={
+          <Button
+            className="aidashboard-list__create"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate(appendSearch("/requirements/create", searchParams))}
           >
-            <Select mode="multiple" placeholder="选择团队" options={teams.map((t) => ({ value: t.id, label: t.name }))} />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Space>
+            新建需求
+          </Button>
+        }
+        search={
+          <TableLayout.SearchGroup>
+            <TableLayout.SearchInput
+              itemSize="lg"
+              itemGrow
+              placeholder="搜索需求 / 创建者 / 团队"
+              onSearch={(value) => updateParam("keyword", value)}
+              defaultValue={keyword}
+            />
+            <TableLayout.SelectItem size="md">
+              <Select
+                allowClear
+                placeholder="状态"
+                value={status}
+                onChange={(next) => updateParam("status", next)}
+                options={STATUS_OPTIONS}
+                style={{ width: "100%" }}
+              />
+            </TableLayout.SelectItem>
+            <TableLayout.SelectItem size="md">
+              <Select
+                allowClear
+                placeholder="优先级"
+                value={priority}
+                onChange={(next) => updateParam("priority", next)}
+                options={PRIORITY_OPTIONS}
+                style={{ width: "100%" }}
+              />
+            </TableLayout.SelectItem>
+          </TableLayout.SearchGroup>
+        }
+      >
+        {requirementsQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="需求列表加载失败"
+            description={
+              requirementsQuery.error instanceof Error
+                ? requirementsQuery.error.message
+                : "请稍后重试"
+            }
+            action={<Button onClick={() => void requirementsQuery.refetch()}>重试</Button>}
+          />
+        ) : null}
+        <ResourceTable<Requirement>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRequirements}
+          loading={requirementsQuery.isLoading}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: false,
+            showTotal: (total) => `共 ${total} 条`
+          }}
+        />
+      </TableLayout>
+    </PagePanel>
   );
 }

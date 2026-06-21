@@ -13,7 +13,12 @@ interface StatusDonutChartProps {
   height?: number;
 }
 
-export function StatusDonutChart({ data = [], loading, error, height = 340 }: StatusDonutChartProps) {
+export function StatusDonutChart({
+  data = [],
+  loading,
+  error,
+  height = 340
+}: StatusDonutChartProps) {
   const empty = !loading && !error && data.every((item) => item.value === 0);
   const option = useMemo<EChartsOption>(
     () => ({

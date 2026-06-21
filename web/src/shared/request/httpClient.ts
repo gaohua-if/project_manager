@@ -68,7 +68,11 @@ function normalizeApiResponse<T>(payload: unknown): ApiResponse<T> {
     (payload as { code?: unknown }).code !== 0
   ) {
     const envelopePayload = payload as { code: number; msg?: string; data?: T };
-    return { code: envelopePayload.code, msg: envelopePayload.msg ?? "", data: envelopePayload.data as T };
+    return {
+      code: envelopePayload.code,
+      msg: envelopePayload.msg ?? "",
+      data: envelopePayload.data as T
+    };
   }
 
   return { code: 0, msg: "", data: payload as T };

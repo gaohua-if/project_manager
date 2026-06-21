@@ -1,5 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Card, DatePicker, Empty, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  DatePicker,
+  Empty,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography
+} from "antd";
 import { DownloadOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import dayjs from "dayjs";
@@ -13,8 +27,9 @@ import {
 } from "../../api/client";
 import type { Session, Task } from "../../api/types";
 import { useAuth } from "@/shared/auth/authContext";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -24,6 +39,10 @@ function formatDateTime(iso: string): string {
 function formatDuration(secs?: number): string {
   if (!secs) return "-";
   return `${Math.floor(secs / 60)}分 ${secs % 60}秒`;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "请稍后重试";
 }
 
 function ConfidenceTag({ value }: { value?: number }) {
@@ -37,19 +56,24 @@ export function SessionsPage() {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [date, setDate] = useState<dayjs.Dayjs | null>(null);
+  const [pendingSessionTaskId, setPendingSessionTaskId] = useState<string | null>(null);
+  const [pendingWithdrawId, setPendingWithdrawId] = useState<string | null>(null);
 
   const dateStr = date?.format("YYYY-MM-DD") || "";
 
-  const { data: sessions = [], isLoading } = useQuery<Session[]>({
+  const sessionsQuery = useQuery<Session[]>({
     queryKey: ["sessions", { date: dateStr }],
     queryFn: () => fetchSessions(dateStr ? { date: dateStr } : undefined),
     staleTime: 30_000
   });
-  const { data: tasks = [] } = useQuery<Task[]>({
+  const tasksQuery = useQuery<Task[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
     staleTime: 60_000
   });
+
+  const sessions = sessionsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
 
   const overrideMutation = useMutation({
     mutationFn: ({ sessionId, taskId }: { sessionId: string; taskId: string | null }) =>
@@ -70,6 +94,24 @@ export function SessionsPage() {
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "撤回失败")
   });
 
+  const handleSessionTaskChange = async (sessionId: string, taskId: string) => {
+    setPendingSessionTaskId(sessionId);
+    try {
+      await overrideMutation.mutateAsync({ sessionId, taskId: taskId || null });
+    } finally {
+      setPendingSessionTaskId(null);
+    }
+  };
+
+  const handleWithdraw = async (sessionId: string) => {
+    setPendingWithdrawId(sessionId);
+    try {
+      await withdrawMutation.mutateAsync(sessionId);
+    } finally {
+      setPendingWithdrawId(null);
+    }
+  };
+
   const handleDownload = async (sessionId: string) => {
     try {
       await downloadSessionLog(sessionId);
@@ -78,13 +120,19 @@ export function SessionsPage() {
     }
   };
 
+  const taskSelectDisabled = tasksQuery.isLoading || tasksQuery.isError;
+  const taskSelectPlaceholder = tasksQuery.isError
+    ? "任务加载失败"
+    : tasksQuery.isLoading
+      ? "任务加载中..."
+      : "未匹配";
+
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Space style={{ width: "100%", justifyContent: "space-between" }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>Session 管理</Title>
-          <Text type="secondary">查看和上报的 Claude Code session</Text>
-        </div>
+    <PagePanel
+      title="Session 管理"
+      description="查看和上报的 Claude Code session"
+      breadcrumbs={[{ title: "Session 管理" }]}
+      actions={
         <Space>
           <DatePicker
             value={date}
@@ -98,13 +146,33 @@ export function SessionsPage() {
             </Text>
           ) : null}
         </Space>
-      </Space>
+      }
+    >
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        {sessionsQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Session 加载失败"
+            description={errorMessage(sessionsQuery.error)}
+            action={<Button onClick={() => void sessionsQuery.refetch()}>重试</Button>}
+          />
+        ) : null}
+        {tasksQuery.isError ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="任务列表加载失败"
+            description="暂时无法修改 Session 的任务关联。"
+            action={<Button onClick={() => void tasksQuery.refetch()}>重试任务列表</Button>}
+          />
+        ) : null}
 
       <Card size="small">
         <Table<Session>
           rowKey="id"
           dataSource={sessions}
-          loading={isLoading}
+          loading={sessionsQuery.isLoading}
           pagination={{ pageSize: 20, showSizeChanger: false }}
           columns={[
             {
@@ -112,10 +180,23 @@ export function SessionsPage() {
               key: "session",
               render: (_: unknown, s) => (
                 <Space direction="vertical" size={0}>
-                  <Text code style={{ fontSize: 11 }}>{s.session_ref.slice(0, 12)}</Text>
+                  <Text code style={{ fontSize: 11 }}>
+                    {s.session_ref.slice(0, 12)}
+                  </Text>
                   {s.summary ? (
                     <Tooltip title={s.summary}>
-                      <Text type="secondary" style={{ fontSize: 11, maxWidth: 280, display: "inline-block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                      <Text
+                        type="secondary"
+                        style={{
+                          fontSize: 11,
+                          maxWidth: 280,
+                          display: "inline-block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          verticalAlign: "middle"
+                        }}
+                      >
                         {s.summary}
                       </Text>
                     </Tooltip>
@@ -156,8 +237,10 @@ export function SessionsPage() {
                   size="small"
                   style={{ width: "100%" }}
                   value={s.task_id || ""}
-                  placeholder="未匹配"
-                  onChange={(v) => overrideMutation.mutate({ sessionId: s.id, taskId: v || null })}
+                  loading={tasksQuery.isLoading || pendingSessionTaskId === s.id}
+                  disabled={taskSelectDisabled || pendingSessionTaskId === s.id}
+                  placeholder={taskSelectPlaceholder}
+                  onChange={(v) => void handleSessionTaskChange(s.id, v)}
                   options={[
                     { value: "", label: "未匹配" },
                     ...tasks.map((t) => ({ value: t.id, label: t.title }))
@@ -192,17 +275,35 @@ export function SessionsPage() {
                     okText="确认撤回"
                     okButtonProps={{ danger: true }}
                     cancelText="取消"
-                    onConfirm={() => withdrawMutation.mutate(s.id)}
+                    onConfirm={() => void handleWithdraw(s.id)}
                   >
-                    <Button size="small" danger loading={withdrawMutation.isPending}>撤回</Button>
+                    <Button
+                      size="small"
+                      danger
+                      loading={pendingWithdrawId === s.id}
+                      disabled={pendingWithdrawId === s.id}
+                    >
+                      撤回
+                    </Button>
                   </Popconfirm>
                 </Space>
               )
             }
           ]}
-          locale={{ emptyText: <Empty description={dateStr ? `${dateStr} 当日无上报 session` : "暂无 session，使用 CLI 上传：aida upload"} /> }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={
+                  dateStr
+                    ? `${dateStr} 当日无上报 session`
+                    : "暂无 session，使用 CLI 上传：aida upload"
+                }
+              />
+            )
+          }}
         />
       </Card>
-    </Space>
+      </Space>
+    </PagePanel>
   );
 }

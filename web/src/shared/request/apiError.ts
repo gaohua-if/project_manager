@@ -17,7 +17,9 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function toNamePath(field: unknown): ApiFieldError["field"] | undefined {
   if (Array.isArray(field)) {
-    const path = field.filter((item): item is string | number => typeof item === "string" || typeof item === "number");
+    const path = field.filter(
+      (item): item is string | number => typeof item === "string" || typeof item === "number"
+    );
     return path.length > 0 ? path : undefined;
   }
 

@@ -289,11 +289,7 @@ function renderSimpleForm(submitting: boolean, handleCancel: () => void) {
             <Select className="form-item-box" placeholder="请选择负责人" options={ownerOptions} />
           </Form.Item>
 
-          <Form.Item
-            label="状态"
-            name="status"
-            rules={[{ required: true, message: "请选择状态" }]}
-          >
+          <Form.Item label="状态" name="status" rules={[{ required: true, message: "请选择状态" }]}>
             <Select className="form-item-box" options={statusOptions} />
           </Form.Item>
 
@@ -348,19 +344,11 @@ function renderStandardForm(
             <Select className="form-item-box" placeholder="请选择负责人" options={ownerOptions} />
           </Form.Item>
 
-          <Form.Item
-            label="状态"
-            name="status"
-            rules={[{ required: true, message: "请选择状态" }]}
-          >
+          <Form.Item label="状态" name="status" rules={[{ required: true, message: "请选择状态" }]}>
             <Select className="form-item-box" options={statusOptions} />
           </Form.Item>
 
-          <Form.Item
-            label="区域"
-            name="region"
-            rules={[{ required: true, message: "请选择区域" }]}
-          >
+          <Form.Item label="区域" name="region" rules={[{ required: true, message: "请选择区域" }]}>
             <Select className="form-item-box" placeholder="请选择区域" options={regionOptions} />
           </Form.Item>
 
@@ -622,7 +610,6 @@ function renderSteppedForm({
                 </div>
               </>
             )}
-
           </section>
         ))}
       </div>
@@ -740,7 +727,11 @@ function renderAdvancedForm(submitting: boolean, handleCancel: () => void) {
             <p>承载容量和调度相关字段，适合后续替换成更具体的业务资源项。</p>
           </div>
           <div className="table-crud-form__grid">
-            <Form.Item label="配额" name="quota" rules={[{ required: true, message: "请输入配额" }]}>
+            <Form.Item
+              label="配额"
+              name="quota"
+              rules={[{ required: true, message: "请输入配额" }]}
+            >
               <InputNumber className="form-item-box" min={1} max={16} />
             </Form.Item>
             <Form.Item label="标签" name="tags">
@@ -798,7 +789,11 @@ function renderAdvancedForm(submitting: boolean, handleCancel: () => void) {
           submitText="创建资源"
           loading={submitting}
           onCancel={handleCancel}
-          extra={<button className="table-crud-form__draft-button" type="button">保存草稿</button>}
+          extra={
+            <button className="table-crud-form__draft-button" type="button">
+              保存草稿
+            </button>
+          }
           sticky
         />
       </div>

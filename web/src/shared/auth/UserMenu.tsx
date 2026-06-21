@@ -14,7 +14,9 @@ export function UserMenu() {
   const { message } = App.useApp();
 
   const displayName = user?.name?.trim() || user?.employee_id || "未登录";
-  const userSummary = user ? `${ROLE_LABELS[user.role]}${user.team_name ? " · " + user.team_name : ""}` : "平台用户";
+  const userSummary = user
+    ? `${ROLE_LABELS[user.role]}${user.team_name ? " · " + user.team_name : ""}`
+    : "平台用户";
 
   const copyToken = async () => {
     const { token } = getAuthSession();

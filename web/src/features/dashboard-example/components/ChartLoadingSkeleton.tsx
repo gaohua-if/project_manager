@@ -31,7 +31,11 @@ interface ChartLoadingSkeletonProps {
 export function ChartLoadingSkeleton({ height, type }: ChartLoadingSkeletonProps) {
   if (type === "donut") {
     return (
-      <div className="dashboard-chart-skeleton dashboard-chart-skeleton--donut" style={{ height }} aria-hidden="true">
+      <div
+        className="dashboard-chart-skeleton dashboard-chart-skeleton--donut"
+        style={{ height }}
+        aria-hidden="true"
+      >
         <div className="dashboard-chart-skeleton__donut-wrap">
           <span className="dashboard-chart-skeleton__donut" />
         </div>
@@ -48,7 +52,10 @@ export function ChartLoadingSkeleton({ height, type }: ChartLoadingSkeletonProps
             <div key={index} className="dashboard-chart-skeleton__horizontal-row">
               <span className="dashboard-skeleton dashboard-chart-skeleton__horizontal-label" />
               <span className="dashboard-chart-skeleton__horizontal-track">
-                <span className="dashboard-chart-skeleton__horizontal-fill" style={{ width: `${width}%` }} />
+                <span
+                  className="dashboard-chart-skeleton__horizontal-fill"
+                  style={{ width: `${width}%` }}
+                />
               </span>
             </div>
           ))}

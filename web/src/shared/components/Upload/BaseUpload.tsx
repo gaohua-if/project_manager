@@ -17,7 +17,8 @@ export interface UploadResponseData {
   [key: string]: unknown;
 }
 
-export interface BaseUploadProps extends Omit<UploadProps, "onChange" | "fileList" | "customRequest"> {
+export interface BaseUploadProps
+  extends Omit<UploadProps, "onChange" | "fileList" | "customRequest"> {
   value?: string | string[];
   uploadUrl?: string;
   fileType?: "image" | "csv" | "zip" | "yaml" | "md";
@@ -122,7 +123,10 @@ export function BaseUpload({
       const returnedValue = getReturnedValue(response.data, returnType);
       const doneFile = { ...uploadingFile, status: "done" as const, url: returnedValue };
       setFileList((prev) => prev.map((item) => (item.uid === file.uid ? doneFile : item)));
-      onChange?.(multiple ? [...(Array.isArray(value) ? value : []), returnedValue] : returnedValue, doneFile);
+      onChange?.(
+        multiple ? [...(Array.isArray(value) ? value : []), returnedValue] : returnedValue,
+        doneFile
+      );
       options.onSuccess?.(response.data);
     } catch (error) {
       setFileList((prev) => prev.filter((item) => item.uid !== file.uid));

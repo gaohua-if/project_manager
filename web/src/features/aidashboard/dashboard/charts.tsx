@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { BaseEChart } from "@/shared/charts/BaseEChart";
 
-import { formatTokens } from "./shared";
+import { formatTokens } from "./formatters";
 import type { TeamStat, TokenGroup, TokenPoint } from "../api/types";
 
 // ───────────────────────── AlertBanner ─────────────────────────
@@ -28,7 +28,13 @@ export function AlertBanner({
 
 // ───────────────────────── TokenTrendChart ─────────────────────────
 
-export function TokenTrendChart({ series, height = 140 }: { series: TokenPoint[]; height?: number }) {
+export function TokenTrendChart({
+  series,
+  height = 140
+}: {
+  series: TokenPoint[];
+  height?: number;
+}) {
   const empty = series.length === 0;
   const option = useMemo<EChartsOption>(
     () => ({
@@ -64,7 +70,16 @@ export function TokenTrendChart({ series, height = 140 }: { series: TokenPoint[]
 
 // ───────────────────────── TokenDistributionPie ─────────────────────────
 
-const PIE_COLORS = ["#1677ff", "#722ed1", "#52c41a", "#faad14", "#ff4d4f", "#13c2c2", "#fa8c16", "#8c8c8c"];
+const PIE_COLORS = [
+  "#1677ff",
+  "#722ed1",
+  "#52c41a",
+  "#faad14",
+  "#ff4d4f",
+  "#13c2c2",
+  "#fa8c16",
+  "#8c8c8c"
+];
 
 export function TokenDistributionPie({
   groups,
@@ -137,16 +152,39 @@ const TEAM_COLORS = ["#1677ff", "#722ed1", "#52c41a"];
 
 export function TeamActivityBars({ teams }: { teams: TeamStat[] }) {
   if (!teams || teams.length === 0) {
-    return <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>暂无团队</div>;
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
+        暂无团队
+      </div>
+    );
   }
   const maxTotal = Math.max(...teams.map((t) => t.total), 1);
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", minHeight: 110 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "flex-start",
+        flexWrap: "wrap",
+        gap: 12,
+        rowGap: 16,
+        overflowX: "auto",
+        minHeight: 110
+      }}
+    >
       {teams.map((t, i) => {
         const h = (t.total / maxTotal) * 80;
         const activeH = t.total > 0 ? (t.active / t.total) * h : 0;
         return (
-          <div key={t.team_id} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 80 }}>
+          <div
+            key={t.team_id}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              flex: "0 0 80px"
+            }}
+          >
             <div
               style={{
                 position: "relative",

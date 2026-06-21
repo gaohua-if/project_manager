@@ -1,0 +1,153 @@
+/* Mirrors `.metric-card` in `.project-standard/snapshot/src/features/dashboard-example/components/DashboardComponents.css`.
+ * AIDashboard reuses this structure (top-right semantic icon, loading skeleton, tone variants);
+ * card values are rendered as strings (`"70%"`, `"3/5"`, `"今日 35K"`) instead of the template's
+ * count-up animated numeric DashboardMetric, so we keep the styling but redeclare the class set here.
+ */
+
+.aidashboard-metric-card {
+  --metric-accent: #2563eb;
+  --metric-icon-background: #edf5ff;
+  --metric-glow: rgba(37, 99, 235, 0.07);
+  position: relative;
+  min-height: 132px;
+  overflow: hidden;
+  padding: 18px 18px 16px;
+  background:
+    radial-gradient(circle at 100% 0, var(--metric-glow), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.aidashboard-metric-card__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: #526173;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aidashboard-metric-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  color: var(--metric-accent);
+  font-size: 15px;
+  background: var(--metric-icon-background);
+  border-radius: 8px;
+}
+
+.aidashboard-metric-card__value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 16px;
+  color: var(--aihub-color-text-primary);
+}
+
+.aidashboard-metric-card__value-text {
+  font-size: 28px;
+  font-weight: 680;
+  line-height: 1;
+  color: var(--metric-accent);
+}
+
+.aidashboard-metric-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 16px;
+  color: #6b788a;
+  font-size: 12px;
+}
+
+.aidashboard-metric-card--tone-primary {
+  --metric-accent: #2563eb;
+  --metric-icon-background: #edf5ff;
+  --metric-glow: rgba(37, 99, 235, 0.07);
+}
+
+.aidashboard-metric-card--tone-success {
+  --metric-accent: #059669;
+  --metric-icon-background: #ecfdf5;
+  --metric-glow: rgba(5, 150, 105, 0.08);
+}
+
+.aidashboard-metric-card--tone-warning {
+  --metric-accent: #d97706;
+  --metric-icon-background: #fffbeb;
+  --metric-glow: rgba(217, 119, 6, 0.08);
+}
+
+.aidashboard-metric-card--tone-danger {
+  --metric-accent: #e11d48;
+  --metric-icon-background: #fff1f2;
+  --metric-glow: rgba(225, 29, 72, 0.08);
+}
+
+.aidashboard-metric-card--tone-info {
+  --metric-accent: #7c3aed;
+  --metric-icon-background: #f1edff;
+  --metric-glow: rgba(124, 58, 237, 0.08);
+}
+
+.aidashboard-metric-card-skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #edf3fa;
+  border-radius: 999px;
+}
+
+.aidashboard-metric-card-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.72) 48%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: aidashboard-metric-card-shimmer 1.5s ease-in-out infinite;
+}
+
+.aidashboard-metric-card-skeleton--title {
+  width: 96px;
+  height: 14px;
+}
+
+.aidashboard-metric-card-skeleton--icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+}
+
+.aidashboard-metric-card-skeleton--value {
+  width: 142px;
+  height: 34px;
+  margin-top: 16px;
+  border-radius: 12px;
+}
+
+.aidashboard-metric-card-skeleton--meta {
+  width: 72%;
+  height: 12px;
+  margin-top: 16px;
+}
+
+@keyframes aidashboard-metric-card-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

@@ -41,9 +41,7 @@
   border: 1px solid rgba(22, 119, 255, 0.24);
   border-radius: var(--aihub-radius-lg);
   color: var(--aihub-color-primary);
-  background:
-    linear-gradient(135deg, #ffffff, var(--aihub-color-primary-bg)),
-    #ffffff;
+  background: linear-gradient(135deg, #ffffff, var(--aihub-color-primary-bg)), #ffffff;
   box-shadow: var(--aihub-shadow-hover);
   font-size: 20px;
   font-weight: 700;

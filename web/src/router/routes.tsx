@@ -9,30 +9,25 @@ import {
   TeamOutlined,
   UnorderedListOutlined
 } from "@ant-design/icons";
-import { Result } from "antd";
 
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
 import { OrganizationPage } from "@/features/aidashboard/organization/pages/OrganizationPage";
+import { OrganizationPasswordResetPage } from "@/features/aidashboard/organization/pages/OrganizationPasswordResetPage";
+import { OrganizationUserEditPage } from "@/features/aidashboard/organization/pages/OrganizationUserEditPage";
+import { ProductDocumentCreatePage } from "@/features/aidashboard/products/pages/ProductDocumentCreatePage";
 import { ProductsPage } from "@/features/aidashboard/products/pages/ProductsPage";
 import { ReportsPage } from "@/features/aidashboard/reports/pages/ReportsPage";
+import { RequirementCreatePage } from "@/features/aidashboard/requirements/pages/RequirementCreatePage";
 import { RequirementDetailPage } from "@/features/aidashboard/requirements/pages/RequirementDetailPage";
 import { RequirementsListPage } from "@/features/aidashboard/requirements/pages/RequirementsListPage";
 import { SessionsPage } from "@/features/aidashboard/sessions/pages/SessionsPage";
+import { TaskCreatePage } from "@/features/aidashboard/tasks/pages/TaskCreatePage";
 import { TaskDetailPage } from "@/features/aidashboard/tasks/pages/TaskDetailPage";
 import { TasksListPage } from "@/features/aidashboard/tasks/pages/TasksListPage";
 import { TokensPage } from "@/features/aidashboard/tokens/pages/TokensPage";
 
+import { PagePlaceholder } from "./PagePlaceholder";
 import type { AppRoute } from "./types";
-
-function PagePlaceholder({ title }: { title: string }) {
-  return (
-    <Result
-      status="info"
-      title={title}
-      subTitle="该模块将在后续迁移轮次中接入业务逻辑。"
-    />
-  );
-}
 
 export const appRoutes: AppRoute[] = [
   {
@@ -53,6 +48,20 @@ export const appRoutes: AppRoute[] = [
     element: <OrganizationPage />
   },
   {
+    path: "/organization/users/:id/edit",
+    title: "编辑成员",
+    hideInMenu: true,
+    roles: ["admin"],
+    element: <OrganizationUserEditPage />
+  },
+  {
+    path: "/organization/users/:id/reset-password",
+    title: "重置密码",
+    hideInMenu: true,
+    roles: ["admin"],
+    element: <OrganizationPasswordResetPage />
+  },
+  {
     path: "/requirements",
     title: "需求",
     icon: <ProjectOutlined />,
@@ -60,6 +69,13 @@ export const appRoutes: AppRoute[] = [
     menuOrder: 30,
     roles: ["admin", "director", "pm", "team_leader"],
     element: <RequirementsListPage />
+  },
+  {
+    path: "/requirements/create",
+    title: "新建需求",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader"],
+    element: <RequirementCreatePage />
   },
   {
     path: "/requirements/:id",
@@ -78,6 +94,13 @@ export const appRoutes: AppRoute[] = [
     element: <TasksListPage />
   },
   {
+    path: "/tasks/create",
+    title: "创建任务",
+    hideInMenu: true,
+    roles: ["admin", "director", "team_leader"],
+    element: <TaskCreatePage />
+  },
+  {
     path: "/tasks/:id",
     title: "任务详情",
     hideInMenu: true,
@@ -90,8 +113,15 @@ export const appRoutes: AppRoute[] = [
     icon: <AppstoreOutlined />,
     menuGroup: "业务",
     menuOrder: 50,
-    roles: ["admin", "director", "team_leader", "employee"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <ProductsPage />
+  },
+  {
+    path: "/products/documents/create",
+    title: "添加文档",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <ProductDocumentCreatePage />
   },
   {
     path: "/sessions",

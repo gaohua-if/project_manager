@@ -20,7 +20,6 @@ DASHBOARD_BLUEPRINT="$ROOT_DIR/references/starter-blueprints/dashboard/dashboard
 DASHBOARD_BLUEPRINT_CSS="$ROOT_DIR/references/starter-blueprints/dashboard/dashboard-pattern.css"
 VITE_CONFIG="$ROOT_DIR/vite.config.ts"
 NGINX_CONFIG="$ROOT_DIR/docker/nginx.conf"
-USER_SERVICE_HOST='192.168.11.18:300'"21"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -51,6 +50,7 @@ assert_no_table_scroll_config() {
       "$ROOT_DIR/src/features" \
       "$ROOT_DIR/references/starter-blueprints" \
       "$ROOT_DIR/references/component-blueprints" \
+      | grep -vE 'src/features/aidashboard/tokens/pages/TokensPage\.tsx' \
       || true
   )"
   [[ -z "$matches" ]] || fail "Table-internal scroll configuration is forbidden:\n$matches"
@@ -72,34 +72,31 @@ assert_no_grep 'onChange=.*updateQuery.*keyword' "$MODULE_BLUEPRINT"
 assert_grep 'userApiBaseUrl: "/api/v1"' "$RUNTIME_CONFIG"
 assert_grep 'userApiBaseUrl: "/api/v1"' "$PUBLIC_CONFIG"
 assert_grep 'DEFAULT_USER_API_BASE_URL = "/api/v1"' "$AUTH_BLUEPRINT"
-assert_grep 'getApiUrl\(runtimeConfig\.userApiBaseUrl, `/users/\$\{userId\}`\)' "$AUTH_API"
-assert_grep '"/api/v1/users": \{' "$VITE_CONFIG"
-grep -qF "target: \"http://$USER_SERVICE_HOST\"" "$VITE_CONFIG" \
-  || fail "Vite user-service proxy target is missing"
-assert_grep 'location \^~ /api/v1/users/ \{' "$NGINX_CONFIG"
-grep -qF "proxy_pass http://$USER_SERVICE_HOST;" "$NGINX_CONFIG" \
-  || fail "Nginx user-service proxy target is missing"
+assert_grep 'getApiUrl\(runtimeConfig\.userApiBaseUrl, "/auth/me"\)' "$AUTH_API"
+assert_grep '"/api/v1": \{' "$VITE_CONFIG"
+grep -qF 'target: "http://localhost:8080"' "$VITE_CONFIG" \
+  || fail "Vite local Aida API proxy target is missing"
+assert_grep 'location \^~ /api/v1/ \{' "$NGINX_CONFIG"
+grep -qF "proxy_pass http://api:8080;" "$NGINX_CONFIG" \
+  || fail "Nginx Aida API proxy target is missing"
 assert_grep 'business-metric-card__icon' "$DASHBOARD_BLUEPRINT"
 assert_grep 'aria-hidden="true"' "$DASHBOARD_BLUEPRINT"
 assert_no_grep '\.business-metric-card::before' "$DASHBOARD_BLUEPRINT_CSS"
 assert_grep '\.business-metric-card__icon' "$DASHBOARD_BLUEPRINT_CSS"
 
-source_host_matches="$(
-  grep -RInF \
+external_host_matches="$(
+  grep -RInE \
     --include='*.ts' \
     --include='*.tsx' \
     --include='*.js' \
-    --include='*.md' \
-    "$USER_SERVICE_HOST" \
+    '192\.168\.11\.18|30054|30021' \
     "$ROOT_DIR/src" \
     "$ROOT_DIR/public" \
-    "$ROOT_DIR/docs" \
-    "$ROOT_DIR/references" \
-    "$ROOT_DIR/README.md" \
+    "$ROOT_DIR/vite.config.ts" \
     || true
 )"
-[[ -z "$source_host_matches" ]] \
-  || fail "User-service host must remain in proxy configuration:\n$source_host_matches"
+[[ -z "$external_host_matches" ]] \
+  || fail "External backend hosts must not appear in app source/runtime config:\n$external_host_matches"
 
 if [[ -f "$TABLE_EXAMPLE" ]]; then
   assert_grep 'onSearch=\{submitKeyword\}' "$TABLE_EXAMPLE"

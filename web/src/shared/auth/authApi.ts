@@ -93,7 +93,10 @@ export async function loginWithPassword(credentials: LoginCredentials): Promise<
   });
   const payload = await readPayload(response);
   if (!response.ok) {
-    throw new AuthRequestError(getErrorMessage(payload, "登录失败，请检查工号或密码"), response.status);
+    throw new AuthRequestError(
+      getErrorMessage(payload, "登录失败，请检查工号或密码"),
+      response.status
+    );
   }
   return resolveLoginResponse(payload);
 }

@@ -78,10 +78,7 @@ export function ModuleCrudFormPage() {
       backTo={backTo}
       onBack={handleCancel}
       onNavigate={handleNavigate}
-      breadcrumbs={[
-        { title: "Module CRUD", path: "/examples/module-crud" },
-        { title: "编辑模块" }
-      ]}
+      breadcrumbs={[{ title: "Module CRUD", path: "/examples/module-crud" }, { title: "编辑模块" }]}
     >
       <FormPageWrap className="module-crud-form-wrap" maxWidth="100%" density="cozy" card>
         <Spin spinning={submitting}>
@@ -201,11 +198,7 @@ export function ModuleCrudFormPage() {
                 </div>
               }
             />
-            <FormSubmitButton
-              submitText="保存模块"
-              loading={submitting}
-              onCancel={handleCancel}
-            />
+            <FormSubmitButton submitText="保存模块" loading={submitting} onCancel={handleCancel} />
           </Form>
         </Spin>
       </FormPageWrap>

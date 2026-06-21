@@ -14,5 +14,9 @@ interface StatusTagProps {
 
 export function StatusTag({ status, children, tone }: StatusTagProps) {
   const resolvedTone = tone ?? getStatusTagTone(status);
-  return <Tag className={`status-tag status-tag--${resolvedTone}`}>{children ?? getStatusTagLabel(status)}</Tag>;
+  return (
+    <Tag className={`status-tag status-tag--${resolvedTone}`}>
+      {children ?? getStatusTagLabel(status)}
+    </Tag>
+  );
 }

@@ -79,11 +79,13 @@ export const tableCrudMockApi = {
     if (params.priority) rows = rows.filter((item) => item.priority === params.priority);
 
     if (params.order_by) {
-      rows.sort((a, b) => compareValue(
-        a[params.order_by as keyof TableResource] as string | number | undefined,
-        b[params.order_by as keyof TableResource] as string | number | undefined,
-        params.order_type
-      ));
+      rows.sort((a, b) =>
+        compareValue(
+          a[params.order_by as keyof TableResource] as string | number | undefined,
+          b[params.order_by as keyof TableResource] as string | number | undefined,
+          params.order_type
+        )
+      );
     }
 
     return {

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aida P0 角色化首页原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">Ai</div>
+          <div>
+            <strong>Aida</strong>
+            <span>PRD 对齐版首页</span>
+          </div>
+        </div>
+        <nav class="side-nav" aria-label="角色切换">
+          <button class="role-tab is-active" data-role="director">
+            <span>总监</span>
+            <em>部门总体</em>
+          </button>
+          <button class="role-tab" data-role="pm">
+            <span>PM</span>
+            <em>需求 / 项目</em>
+          </button>
+          <button class="role-tab" data-role="tl">
+            <span>TL</span>
+            <em>团队 / 任务</em>
+          </button>
+          <button class="role-tab" data-role="employee">
+            <span>员工</span>
+            <em>任务 / Session</em>
+          </button>
+        </nav>
+        <div class="scope-note">
+          <strong>PRD 对齐</strong>
+          <p>围绕需求、任务、Session、Token、日报/周报组织；重点关注只做排序和显著展示。</p>
+        </div>
+      </aside>
+
+      <main class="main" id="role-page">
+      </main>
+    </div>
+
+    <div class="drawer-mask" id="drawer-mask" hidden></div>
+    <aside class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow" id="drawer-type">事项详情</p>
+          <h2 id="drawer-title">标题</h2>
+        </div>
+        <button class="icon-button" id="drawer-close" aria-label="关闭">×</button>
+      </div>
+      <div class="drawer-content" id="drawer-content"></div>
+      <div class="drawer-actions" id="drawer-actions"></div>
+    </aside>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

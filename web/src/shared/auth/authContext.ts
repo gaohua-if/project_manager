@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import type { LoginCredentials, User, UserRole } from "./types";
+import type { LoginCredentials, RegisterPayload, User, UserRole } from "./types";
 
 export type AuthStatus = "initializing" | "authenticated" | "anonymous" | "error";
 
@@ -10,6 +10,7 @@ export interface AuthContextValue {
   user: User | null;
   error: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<void>;
   logout: () => void;
   retryCurrentUser: () => Promise<void>;
   hasRole: (role: UserRole | UserRole[]) => boolean;
