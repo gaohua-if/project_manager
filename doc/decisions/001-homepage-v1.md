@@ -1,181 +1,166 @@
-# Decision 001: Phase-One Role Homepage
+# 决策 001：首页一期方向
 
-| Field | Value |
+| 项 | 值 |
 | --- | --- |
-| Status | Active decision |
-| Date | 2026-06-21 |
-| Scope | Aida phase-one homepage direction |
-| Type | Product decision, not implementation spec |
+| 状态 | 当前有效决策 |
+| 日期 | 2026-06-21 |
+| 范围 | Aida 一期首页方向 |
+| 类型 | 产品决策，不是实现规格 |
 
-## Decision
+## 结论
 
-Phase one starts by freezing the role-based homepage.
+一期先冻结角色化首页。
 
-The homepage is a role-specific workbench for Employee, TL, Director, and PM. It
-is not a token dashboard, not a generic BI dashboard, and not a full project
-management replacement.
+首页定位为员工、TL、总监、PM 的角色化工作台。它不是 Token 大屏，不是通用 BI Dashboard，也不是完整项目管理系统的首页。
 
-The first implementation direction should adjust the current demo homepage
-toward these fixed role templates. Requirement, task, AC, session, report, and
-token pages can continue to exist as supporting pages, but phase one should not
-begin by redesigning the whole task-management flow.
+当前 demo 的首页应优先向固定角色模板调整。需求、任务、AC、Session、报告和 Token 页面可以继续作为首页动作的承接页，但一期不从重做整套任务管理链路开始。
 
-## Why This Is Frozen First
+## 为什么先冻结首页
 
-The homepage has the largest gap from the current demo and decides how users
-understand Aida:
+首页是当前 demo 和一期方向差距最大的部分，也决定用户如何理解 Aida：
 
-- If the homepage is token-first, Aida looks like usage analytics.
-- If the homepage is task-first, Aida looks like a project-management tool.
-- If the homepage is report-first, Aida looks like a reporting portal.
-- If the homepage is role-workbench-first, Aida can validate its core value:
-  helping each role quickly know what needs attention.
+- 如果首页以 Token 为中心，Aida 会被理解成用量统计平台。
+- 如果首页以任务列表为中心，Aida 会被理解成项目管理工具。
+- 如果首页以报告为中心，Aida 会被理解成日报/周报入口。
+- 如果首页以角色工作台为中心，Aida 才能验证核心价值：让不同角色快速知道当前最该关注和处理什么。
 
-The requirement, task, and AC flow is less urgent to change for phase one. It is
-already close enough to support homepage actions and detail drill-down.
+需求、任务、AC 这套链路在一期不需要先大改。它们目前更适合作为首页事项的承接页和上下文来源。
 
-## Homepage Principle
+## 首页原则
 
-Each role homepage must answer one question within the first screen:
+每个角色首页首屏必须回答一个问题：
 
-> What should I look at or handle now?
+> 我现在最应该看什么、处理什么？
 
-Token, Session, and report data are supporting evidence. They can explain work,
-activity, and abnormal signals, but they must not dominate the homepage.
+Token、Session 和报告数据都是辅助证据。它们可以解释工作量、活跃度和异常信号，但不能成为首页主叙事。
 
-## Fixed Role Modules
+## 固定角色模块
 
-| Role | Homepage main modules |
+| 角色 | 首页主模块 |
 | --- | --- |
-| Employee | Session upload, Feishu daily/weekly report, personal token, followed tasks |
-| TL | Task breakdown + AC linkage, team report, member panel, team token, upstream attention items |
-| Director | Requirement overview, department report, team activity, token trend, key followed requirements |
-| PM | Key followed requirements, AC tracking, PM report, token distribution by requirement/model |
+| 员工 | Session 上报、飞书日报/周报、个人 Token、被关注任务 |
+| TL | 任务拆解 + AC 关联、团队报告、成员面板、本队 Token、上级关注事项 |
+| 总监 | 需求总览、部门报告、团队活跃度、Token 趋势、重点关注需求 |
+| PM | 重点关注需求、AC 追踪、PM 报告、Token 按需求/模型分布 |
 
-## Employee Homepage
+## 员工首页
 
-The employee homepage is about personal execution and low-friction reporting.
+员工首页服务个人执行和低负担上报。
 
-Primary goals:
+主要目标：
 
-- Upload or bind Sessions for today's work.
-- Confirm personal daily or weekly report status.
-- See tasks followed by TL, PM, or Director.
-- Understand whether someone is waiting for the employee's task output.
-- View personal token usage only as supporting evidence.
+- 上传或绑定当天 Session。
+- 确认个人日报 / 周报状态。
+- 查看被 TL、PM 或总监关注的个人任务。
+- 理解是否有下游任务正在等待自己的输出。
+- 查看个人 Token，但只作为工作证据和辅助信息。
 
-Preferred first-screen emphasis:
+首屏优先级：
 
-1. Pending personal actions: Session upload, Session binding, report confirmation.
-2. Followed tasks: who follows it, why it matters, deadline, missing evidence.
-3. Personal evidence widget: today's Sessions and token summary.
+1. 个人待处理动作：Session 上报、Session 绑定、报告确认。
+2. 被关注任务：谁关注、为什么关注、deadline、是否缺少工作证据。
+3. 个人证据小组件：今日 Session 和 Token 摘要。
 
-Tone rule:
+文案原则：
 
-Use wording such as "complete work evidence", "confirm report draft", and
-"support task progress". Avoid making the employee homepage feel like personal
-surveillance.
+员工侧要避免“被监控”的感受。优先使用“补齐工作记录”“确认报告草稿”“支撑任务进展”等表达，谨慎使用“异常”“无记录”等管理视角文案。
 
-## TL Homepage
+## TL 首页
 
-The TL homepage is about team execution and attention from upper roles.
+TL 首页服务团队执行和上级关注事项处理。
 
-Primary goals:
+主要目标：
 
-- See requirements that need task breakdown.
-- See tasks missing AC linkage.
-- Review team daily or weekly reports.
-- Scan member status, blockers, and missing work evidence.
-- See PM or Director attention items affecting the team.
-- View team token only as a supporting activity signal.
+- 查看待拆解需求。
+- 查看缺少 AC 关联的任务。
+- Review 团队日报 / 周报。
+- 扫描成员状态、阻塞和缺少工作证据的事项。
+- 查看 PM 或总监关注到本队的事项。
+- 查看本队 Token，但只作为团队活跃和工作证据辅助信号。
 
-Preferred first-screen emphasis:
+首屏优先级：
 
-1. Upper-level attention and blocked team tasks.
-2. Task breakdown and AC linkage gaps.
-3. Team report review status.
-4. Member panel.
+1. 上级关注事项和团队阻塞任务。
+2. 任务拆解与 AC 关联缺口。
+3. 团队报告 Review 状态。
+4. 成员面板。
 
-## Director Homepage
+## 总监首页
 
-The Director homepage is about department-level visibility and key risks.
+总监首页服务部门级可见性和重点风险判断。
 
-Primary goals:
+主要目标：
 
-- See key requirements and their overall progress.
-- See department report status.
-- Compare team activity at a high level.
-- Track token trend as background evidence.
-- See high-attention requirements and cross-team risks.
+- 查看重点需求和整体进度。
+- 查看部门报告状态。
+- 对比团队活跃度。
+- 查看 Token 趋势作为背景证据。
+- 查看高关注需求和跨团队风险。
 
-Preferred first-screen emphasis:
+首屏优先级：
 
-1. Key followed requirements.
-2. Requirement overview and risk ranking.
-3. Department report and team activity.
-4. Token trend as a right-side or secondary widget.
+1. 重点关注需求。
+2. 需求总览和风险排序。
+3. 部门报告和团队活跃度。
+4. Token 趋势作为右侧或次级小组件。
 
-Privacy boundary:
+隐私边界：
 
-The Director homepage should prefer department and team-level signals over
-personal token surveillance.
+总监首页应优先展示部门和团队级信号，避免把个人 Token 排名作为管理视角。
 
-## PM Homepage
+## PM 首页
 
-The PM homepage is about requirement health, AC progress, and cross-team risk.
+PM 首页服务需求健康度、AC 进展和跨团队风险。
 
-Primary goals:
+主要目标：
 
-- See key followed requirements.
-- Track missing AC, AC progress, and AC-to-task gaps.
-- See PM report status.
-- Use token distribution by requirement/model to explain abnormal requirement
-  progress.
-- Identify cross-team blockers that need coordination.
+- 查看重点关注需求。
+- 追踪缺 AC、AC 进度、AC 与任务关联缺口。
+- 查看 PM 报告状态。
+- 使用按需求 / 模型分布的 Token 辅助解释需求推进异常。
+- 识别需要协调的跨团队阻塞。
 
-Preferred first-screen emphasis:
+首屏优先级：
 
-1. Key followed requirements.
-2. AC tracking.
-3. Cross-team blockers.
-4. Token distribution by requirement/model as supporting analysis.
+1. 重点关注需求。
+2. AC 追踪。
+3. 跨团队阻塞。
+4. Token 按需求 / 模型分布作为辅助分析。
 
-## Demo Adjustment Direction
+## Demo 调整方向
 
-The current demo should be adjusted in this direction:
+当前 demo 首页应按以下方向调整：
 
-- Replace generic dashboard composition with fixed role homepage templates.
-- Make each role's first screen visibly different.
-- Reduce token and chart dominance.
-- Make role actions more prominent than pure metrics.
-- Keep requirement, task, AC, session, report, and token pages as supporting
-  drill-down pages.
-- Use a light drawer or detail panel for homepage item context.
+- 从通用 Dashboard 组合改为固定角色首页模板。
+- 四个角色首屏必须明显不同。
+- 降低 Token 和图表的视觉优先级。
+- 角色动作优先于纯指标展示。
+- 保留需求、任务、AC、Session、报告和 Token 页面作为承接页。
+- 首页点击可用轻量抽屉或详情面板承接上下文。
 
-## Explicit Non-Goals
+## 明确不做
 
-This decision does not approve the following scope:
+本决策不包含以下范围：
 
-- Free-form configurable dashboard.
-- Token-first data screen as the homepage.
-- Full task-management redesign.
-- Full requirement-management redesign.
-- Full daily/weekly report system redesign.
-- Real Feishu integration.
-- Real external notification loop.
-- Automatic assignment, scheduling, or priority changes.
-- Gantt chart or resource planning.
-- Personal token ranking as a management view.
+- 自由配置 Dashboard。
+- Token 优先的数据大屏首页。
+- 完整任务管理重构。
+- 完整需求管理重构。
+- 完整日报 / 周报系统重构。
+- 真实飞书集成。
+- 真实外部消息推送闭环。
+- 自动派单、自动排期、自动调整优先级。
+- 甘特图或资源计划。
+- 个人 Token 排名管理视图。
 
-## Open But Bounded Questions
+## 已冻结但仍待细化的问题
 
-These questions remain open, but they should not block homepage freezing:
+以下问题尚未完全定稿，但不阻塞首页方向冻结：
 
-- Exact fields inside each homepage module.
-- Exact chart form for token trend or token distribution.
-- Whether homepage clicks open a drawer or navigate to existing detail pages.
-- Exact text and status naming for report-related modules.
-- Exact risk threshold for missing Sessions, blockers, and no-progress items.
+- 每个首页模块的具体字段。
+- Token 趋势和 Token 分布的具体图表形式。
+- 首页点击后打开抽屉还是跳转现有详情页。
+- 报告相关模块的具体状态文案。
+- 缺 Session、阻塞、无进展等风险阈值。
 
-When these questions are answered, update this decision or create a new numbered
-decision document. Do not infer answers from older historical drafts.
+后续如果这些问题被确认，应更新本决策或新增编号决策文档。不要从旧历史文档中反推答案。

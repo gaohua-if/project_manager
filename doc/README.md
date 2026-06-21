@@ -1,39 +1,33 @@
-# Aida Documents
+# Aida 文档说明
 
-This directory is the product documentation workspace for Aida.
+这个目录用于放置 Aida 的产品方向、阶段性决策和历史材料。
 
-## Current Status
+## 当前状态
 
-Aida is moving from the current demo toward a phase-one product direction. The
-current priority is to freeze the role-based homepage first, because it has the
-largest gap from the demo and determines the product narrative.
+Aida 正在从当前 demo 向一期方案收敛。当前优先冻结的是“角色化首页”，因为它和现有 demo 的差距最大，也决定了产品给用户的第一印象。
 
-The requirement, task, AC, session, report, and token flows are still important,
-but they should not be redesigned before the homepage direction is stable.
+需求、任务、AC、Session、报告和 Token 相关流程仍然重要，但在首页方向稳定前，不应先大规模重做这些链路。
 
-## Source Of Truth
+## 阅读优先级
 
-Read documents in this order:
+按以下顺序阅读：
 
-1. `decisions/001-homepage-v1.md` - current confirmed homepage direction.
-2. `aida-requirement-thinking.md` - historical direction-convergence draft.
-3. `aida-platform-summary.md` - early broad product summary.
-4. `prototypes/aida-p0-homepage/` - historical P0 homepage prototype.
+1. `decisions/001-homepage-v1.md`：当前已确认的首页一期方向。
+2. `aida-requirement-thinking.md`：历史方向收敛稿。
+3. `aida-platform-summary.md`：早期完整产品设想。
+4. `prototypes/aida-p0-homepage/`：历史 P0 首页原型。
 
-For homepage-related work, `decisions/001-homepage-v1.md` takes precedence over
-all older documents.
+凡是首页相关问题，`decisions/001-homepage-v1.md` 优先级高于所有旧文档。
 
-## Document Status
+## 文档状态
 
-| Document | Status | Notes |
+| 文档 | 状态 | 说明 |
 | --- | --- | --- |
-| `decisions/001-homepage-v1.md` | Active decision | Use as the first source for homepage changes. |
-| `aida-requirement-thinking.md` | Historical reference | Useful for context, but no longer the latest homepage decision. |
-| `aida-platform-summary.md` | Historical reference | Broad early vision; do not treat every section as phase-one scope. |
-| `prototypes/aida-p0-homepage/` | Historical prototype | Reference for role-homepage exploration, not an implementation contract. |
+| `decisions/001-homepage-v1.md` | 当前有效决策 | 首页调整优先读取这份。 |
+| `aida-requirement-thinking.md` | 历史参考 | 可用于理解来龙去脉，但不再代表最新首页结论。 |
+| `aida-platform-summary.md` | 历史参考 | 早期完整设想，不应把其中所有内容都视为一期范围。 |
+| `prototypes/aida-p0-homepage/` | 历史原型 | 可参考角色首页探索方式，但不是实现合同。 |
 
-## Working Rule
+## 工作规则
 
-Do not expand requirements from older documents unless a new decision document
-explicitly revives them. When a topic is not covered by an active decision,
-treat it as undecided instead of inferring scope from historical drafts.
+不要从旧文档中自动扩展需求，除非新的决策文档明确重新启用这些内容。某个主题没有被当前有效决策覆盖时，应视为“未定”，不要从历史草稿里推断为已确认范围。
