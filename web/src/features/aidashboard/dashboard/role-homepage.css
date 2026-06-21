@@ -1,0 +1,702 @@
+.role-home {
+  display: grid;
+  gap: 16px;
+  min-width: 1080px;
+}
+
+.role-home__hero {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 20px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.role-home__hero h2 {
+  max-width: 780px;
+  margin: 6px 0 0;
+  color: #172033;
+  font-size: 20px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.role-home__eyebrow {
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.role-home__source {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: #526173;
+  background: #f6f9fd;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: help;
+}
+
+.role-home__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-home-metric {
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.role-home-metric span,
+.role-home-metric em {
+  display: block;
+  color: #64748b;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.role-home-metric strong {
+  display: block;
+  margin: 10px 0 6px;
+  color: #172033;
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.role-home-metric--blue {
+  border-top: 3px solid #1677ff;
+}
+
+.role-home-metric--green {
+  border-top: 3px solid #2f7d46;
+}
+
+.role-home-metric--orange {
+  border-top: 3px solid #d46b08;
+}
+
+.role-home-metric--red {
+  border-top: 3px solid #d9363e;
+}
+
+.role-home-metric--purple {
+  border-top: 3px solid #722ed1;
+}
+
+.role-home-metric--gray {
+  border-top: 3px solid #94a3b8;
+}
+
+.role-home-card.ant-card {
+  height: 100%;
+  border-color: #e6edf5;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.035);
+}
+
+.role-home-card > .ant-card-head {
+  min-height: 48px;
+  border-bottom-color: #eef3f8;
+}
+
+.role-home-card > .ant-card-body {
+  padding: 14px;
+}
+
+.role-home-card--primary > .ant-card-head {
+  background: #fbfdff;
+}
+
+.role-home--director .role-home-card.ant-card {
+  height: auto;
+}
+
+.role-home-action-list,
+.role-home-side-list {
+  display: grid;
+  gap: 10px;
+}
+
+.role-home-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid #e6edf5;
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.role-home-action.is-compact {
+  align-items: start;
+}
+
+.role-home-action--blue {
+  border-left-color: #1677ff;
+}
+
+.role-home-action--green {
+  border-left-color: #2f7d46;
+}
+
+.role-home-action--orange {
+  border-left-color: #d46b08;
+}
+
+.role-home-action--red {
+  border-left-color: #d9363e;
+}
+
+.role-home-action--purple {
+  border-left-color: #722ed1;
+}
+
+.role-home-action--gray {
+  border-left-color: #94a3b8;
+}
+
+.role-home-action__content {
+  min-width: 0;
+}
+
+.role-home-action__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.role-home-action__head strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.role-home-action p {
+  margin: 6px 0;
+  color: #526173;
+  line-height: 1.55;
+}
+
+.role-home-action span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.role-home-action__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 66px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #d6e4ff;
+  border-radius: 7px;
+  background: #f0f6ff;
+  color: #0958d9;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.role-home-evidence {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef3f8;
+}
+
+.role-home-evidence__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #526173;
+  font-weight: 650;
+}
+
+.role-home-evidence__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.role-home-evidence__pills span {
+  padding: 5px 8px;
+  color: #526173;
+  background: #f6f9fd;
+  border: 1px solid #e6edf5;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.role-home-timeline {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: #526173;
+}
+
+.role-home-timeline li {
+  line-height: 1.5;
+}
+
+.director-summary-card > .ant-card-body {
+  padding: 14px 16px;
+}
+
+.role-home--director .director-summary-card.ant-card {
+  border-color: #cfe1ff;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.director-summary-card__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.director-summary-card__content div {
+  min-width: 0;
+}
+
+.director-summary-card__content strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #172033;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.director-summary-card__content p {
+  margin: 0;
+  color: #526173;
+  line-height: 1.55;
+}
+
+.director-section-note {
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  color: #526173;
+  background: #fbfdff;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.director-main-card.ant-card,
+.director-ops-card.ant-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.director-main-card > .ant-card-body,
+.director-ops-card > .ant-card-body {
+  flex: 1;
+}
+
+.director-requirement-card > .ant-card-body {
+  padding: 12px 14px;
+}
+
+.director-requirement-row {
+  display: grid;
+  gap: 16px;
+}
+
+.director-requirement-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.director-health-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.director-health-chip--risk {
+  color: #ad4e00;
+  background: #fff7e6;
+  border-color: #ffd591;
+}
+
+.director-health-chip--focus {
+  color: #0958d9;
+  background: #f0f6ff;
+  border-color: #d6e4ff;
+}
+
+.director-health-chip--cross {
+  color: #096dd9;
+  background: #f0f9ff;
+  border-color: #bae0ff;
+}
+
+.director-health-chip--deadline {
+  color: #8a5a12;
+  background: #fffaf0;
+  border-color: #ffe7ba;
+}
+
+.director-requirement-table .ant-table-thead > tr > th {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.director-requirement-table .ant-table-tbody > tr > td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.director-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+}
+
+.director-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+}
+
+.director-team-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.director-team-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.director-team-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.director-team-card__head strong {
+  color: #172033;
+}
+
+.director-team-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  color: #526173;
+  font-size: 12px;
+}
+
+.director-team-card a {
+  width: fit-content;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.director-team-card a.director-subtle-link {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.director-compact-card > .ant-card-body {
+  padding: 12px;
+}
+
+.director-focus-card.ant-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.director-focus-card > .ant-card-body {
+  flex: 1;
+}
+
+.director-report-list {
+  display: grid;
+  gap: 8px;
+}
+
+.director-report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.director-report-row div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.director-report-row strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.director-report-row span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.director-report-row a {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.director-focus-mini {
+  display: grid;
+  gap: 10px;
+}
+
+.director-focus-mini__summary {
+  padding: 8px 10px;
+  color: #64748b;
+  background: #fbfdff;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.director-focus-mini__changes {
+  display: grid;
+  gap: 8px;
+}
+
+.director-focus-mini__changes button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  color: inherit;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.director-focus-mini__changes button:hover {
+  border-color: #91caff;
+  background: #fbfdff;
+}
+
+.director-focus-mini__changes span {
+  min-width: 0;
+  overflow: hidden;
+  color: #526173;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.director-token-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.director-token-panel__summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.director-token-panel__summary span,
+.director-token-panel__summary em {
+  display: block;
+  color: #64748b;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.director-token-panel__summary strong {
+  display: block;
+  margin: 5px 0;
+  color: #172033;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.director-focus-drawer {
+  display: grid;
+  gap: 16px;
+}
+
+.director-focus-group {
+  display: grid;
+  gap: 10px;
+}
+
+.director-focus-group h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.director-focus-list {
+  display: grid;
+  gap: 8px;
+}
+
+.director-focus-item {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  color: inherit;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.director-focus-item:hover,
+.director-focus-item.is-selected {
+  border-color: #91caff;
+  background: #fbfdff;
+}
+
+.director-focus-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.director-focus-item__head strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.director-focus-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.director-focus-item p,
+.director-focus-item em {
+  margin: 0;
+  color: #526173;
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.director-focus-detail {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #d6e4ff;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.director-focus-detail strong {
+  color: #172033;
+  font-size: 14px;
+}
+
+.director-focus-detail p {
+  margin: 0;
+  color: #526173;
+  line-height: 1.5;
+}
+
+.director-drawer {
+  display: grid;
+  gap: 8px;
+  color: #526173;
+  line-height: 1.6;
+}
+
+.director-drawer p {
+  margin: 0;
+}
+
+.role-home-debug {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 1080px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px dashed #c7d7ee;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.role-home-debug__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #526173;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@media (max-width: 1280px) {
+  .role-home {
+    min-width: 960px;
+  }
+
+  .role-home-debug {
+    min-width: 960px;
+  }
+}
