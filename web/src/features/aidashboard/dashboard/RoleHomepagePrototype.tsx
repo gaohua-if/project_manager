@@ -27,6 +27,16 @@ type Tone = "blue" | "green" | "orange" | "red" | "purple" | "gray";
 type DirectorTokenRange = "day" | "week" | "month";
 type DirectorReqFilter = "all" | "focused" | "risk";
 type DirectorFocusType = "项目" | "需求" | "任务";
+type PMProgressFilter =
+  | "all"
+  | "p0"
+  | "p1"
+  | "p2"
+  | "waiting"
+  | "missing_standard"
+  | "blocked"
+  | "abnormal"
+  | "resolved";
 
 interface MetricItem {
   label: string;
@@ -86,6 +96,22 @@ interface DirectorFocusChange {
 interface DirectorFocusItem extends DirectorFocusChange {
   status: string;
   risk: string;
+}
+
+interface PMProgressRow {
+  key: string;
+  name: string;
+  priority: "P0" | "P1" | "P2";
+  triggerReason: string;
+  currentIssue: string;
+  nextOwner: string;
+  deadline: string;
+  handlingStatus: string;
+  nextStep: string;
+  action: string;
+  pmConclusion: string;
+  lastHandledAt: string;
+  tags: PMProgressFilter[];
 }
 
 interface RoleHomeData {
@@ -395,17 +421,17 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
   },
   pm: {
     title: "PM 首页",
-    description: "重点关注需求、AC 追踪、PM 报告、跨团队阻塞 / 推进异常",
+    description: "重点关注需求、验收标准追踪、PM 报告、跨团队阻塞 / 推进异常",
     eyebrow: "需求健康工作台",
-    intent: "优先看重点需求、AC 缺口、PM 报告、跨团队阻塞和需求推进异常。",
+    intent: "优先看重点需求、验收标准缺口、PM 报告、跨团队阻塞和需求推进异常。",
     primaryTitle: "重点关注需求",
     primaryIcon: <FlagOutlined />,
     primary: [
       {
-        title: "REQ-051 智能工单归因缺 AC",
+        title: "REQ-051 智能工单归因缺验收标准",
         desc: "总监关注，但验收标准缺失，暂不适合进入拆任务阶段。",
         meta: "重点关注需求",
-        tag: "缺 AC",
+        tag: "缺验收标准",
         tone: "red",
         to: "/requirements",
         action: "看需求"
@@ -429,21 +455,21 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
         action: "看报告"
       }
     ],
-    secondaryTitle: "AC 追踪",
+    secondaryTitle: "验收标准追踪",
     secondaryIcon: <CheckSquareOutlined />,
     secondary: [
       {
         key: "REQ-051",
         name: "智能工单归因",
-        status: "缺 AC",
+        status: "缺验收标准",
         owner: "PM 陈",
         progress: 0,
-        note: "今日补齐 AC"
+        note: "今日补齐验收标准"
       },
       {
         key: "REQ-042",
         name: "统一权限模型",
-        status: "5/7 AC",
+        status: "验收标准 5/7",
         owner: "AI 工程",
         progress: 71,
         note: "跨团队阻塞"
@@ -451,7 +477,7 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
       {
         key: "REQ-037",
         name: "日报自动汇总",
-        status: "3/6 AC",
+        status: "验收标准 3/6",
         owner: "PM 陈",
         progress: 50,
         note: "高工作量低进展"
@@ -461,7 +487,7 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
     side: [
       {
         title: "REQ-037 进展异常",
-        desc: "AC 和任务状态 2 天无变化，需要 PM 确认范围或推动 TL 更新拆解。",
+        desc: "验收标准和任务状态 2 天无变化，需要 PM 确认范围或推动 TL 更新拆解。",
         meta: "推进异常",
         tag: "需确认",
         tone: "orange",
@@ -480,12 +506,12 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
     ],
     metrics: [
       { label: "重点需求", value: "5", note: "2 个高关注", tone: "blue" },
-      { label: "缺 AC", value: "2", note: "影响拆解", tone: "red" },
+      { label: "缺验收标准", value: "2", note: "影响拆解", tone: "red" },
       { label: "跨团队阻塞", value: "1", note: "超过 1 天", tone: "orange" },
       { label: "推进异常", value: "2", note: "待 PM 判断", tone: "purple" }
     ],
     evidenceTitle: "PM 报告",
-    evidence: ["PM 周报入口", "重点需求摘要", "AC 风险清单", "跨团队阻塞清单"],
+    evidence: ["PM 周报入口", "重点需求摘要", "验收标准风险清单", "跨团队阻塞清单"],
     timeline: ["10:30 总监关注 REQ-051", "10:02 TL 为 REQ-042 补充说明", "09:18 REQ-037 进展待确认"]
   }
 };
@@ -691,6 +717,84 @@ const directorFocusItems: DirectorFocusItem[] = [
   }
 ];
 
+const pmProgressRows: PMProgressRow[] = [
+  {
+    key: "REQ-051",
+    name: "统一权限模型",
+    priority: "P0",
+    triggerReason: "总监关注 · 缺验收标准",
+    currentIssue: "需求尚未补充验收标准，Deadline 07-12",
+    nextOwner: "PM 陈",
+    deadline: "07-12",
+    handlingStatus: "未处理",
+    nextStep: "补充验收标准",
+    action: "去处理",
+    pmConclusion: "补齐后从缺验收标准风险中移除，仍保留总监关注标签",
+    lastHandledAt: "未处理",
+    tags: ["p0", "missing_standard"]
+  },
+  {
+    key: "REQ-042",
+    name: "智能工单归因",
+    priority: "P0",
+    triggerReason: "跨团队阻塞 · 等待 1.5 天",
+    currentIssue: "下游团队等待上游接口输出；任务 6/8 已拆，但接口联调仍阻塞",
+    nextOwner: "AI 工程 TL 王",
+    deadline: "07-10",
+    handlingStatus: "PM 已介入",
+    nextStep: "指定上游负责人",
+    action: "协调依赖",
+    pmConclusion: "PM 已介入协调，阻塞解除前降级为本周跟进",
+    lastHandledAt: "今天 16:20",
+    tags: ["p0", "p1", "blocked"]
+  },
+  {
+    key: "REQ-037",
+    name: "日报自动汇总",
+    priority: "P1",
+    triggerReason: "推进异常",
+    currentIssue: "本周 18 个 Session，但验收标准和任务状态 2 天无变化",
+    nextOwner: "TL 李",
+    deadline: "07-15",
+    handlingStatus: "等待反馈",
+    nextStep: "确认范围或要求 TL 更新任务拆解",
+    action: "查看详情",
+    pmConclusion: "PM 已要求 TL 判断是否缩小范围",
+    lastHandledAt: "今天 11:30",
+    tags: ["p1", "waiting", "abnormal"]
+  },
+  {
+    key: "REQ-029",
+    name: "跨团队发布校验",
+    priority: "P1",
+    triggerReason: "Deadline 风险 · 责任人已明确",
+    currentIssue: "等待 AI 工程验收口径；验收标准 2/5，任务 2/4 已拆",
+    nextOwner: "AI 工程",
+    deadline: "07-10",
+    handlingStatus: "等待反馈",
+    nextStep: "同步验收条件和截止时间",
+    action: "查看详情",
+    pmConclusion: "已同步下游等待情况，等待 AI 工程确认口径",
+    lastHandledAt: "昨天 18:30",
+    tags: ["p1", "waiting"]
+  },
+  {
+    key: "REQ-033",
+    name: "验收标准模板治理",
+    priority: "P2",
+    triggerReason: "PM 关注 · 今日有变化",
+    currentIssue: "验收标准 4/4，任务 5/5 已拆；今日补齐 1 条示例",
+    nextOwner: "PM 陈",
+    deadline: "07-20",
+    handlingStatus: "已解决",
+    nextStep: "跟进模板试用反馈",
+    action: "查看详情",
+    pmConclusion: "验收标准已补齐，保留关注标签并降级观察",
+    lastHandledAt: "今天 10:10",
+    tags: ["p2", "resolved"]
+  }
+];
+
 const rowColumns: ColumnsType<SimpleRow> = [
   {
     title: "对象",
@@ -731,6 +835,9 @@ const rowColumns: ColumnsType<SimpleRow> = [
 export function RoleHomepagePrototype({ role }: { role: RoleHomeKey }) {
   if (role === "director") {
     return <DirectorHomepagePrototype />;
+  }
+  if (role === "pm") {
+    return <PMHomepagePrototype />;
   }
 
   const data = roleData[role];
@@ -846,6 +953,226 @@ export function RoleHomepagePrototype({ role }: { role: RoleHomeKey }) {
           </Col>
         </Row>
       </div>
+    </PagePanel>
+  );
+}
+
+function PMHomepagePrototype() {
+  const [progressFilter, setProgressFilter] = useState<PMProgressFilter>("all");
+  const [selectedRequirement, setSelectedRequirement] = useState<PMProgressRow | null>(null);
+  const progressRows =
+    progressFilter === "all"
+      ? pmProgressRows
+      : pmProgressRows.filter((row) => row.tags.includes(progressFilter));
+  const priorityRows = pmProgressRows.slice(0, 3);
+  const statusChips: Array<{ label: string; value: string; filter: PMProgressFilter; tone: string }> = [
+    { label: "今日待处理", value: "2", filter: "p0", tone: "orange" },
+    { label: "已介入待反馈", value: "2", filter: "waiting", tone: "blue" },
+    { label: "缺验收标准", value: "2", filter: "missing_standard", tone: "orange" },
+    { label: "跨团队阻塞", value: "1", filter: "blocked", tone: "gold" },
+    { label: "推进异常", value: "3", filter: "abnormal", tone: "red" }
+  ];
+  const priorityLabel = (value: PMProgressRow["priority"]) => {
+    if (value === "P0") return "今日处理";
+    if (value === "P1") return "本周跟进";
+    return "持续观察";
+  };
+  const pmPriorityColor = (value: PMProgressRow["priority"]) => {
+    if (value === "P0") return "volcano";
+    if (value === "P1") return "gold";
+    return "blue";
+  };
+  const displayStatus = (value: string) => {
+    if (value === "未处理") return "待处理";
+    if (value === "PM 已介入") return "已介入";
+    return value;
+  };
+  const pmStatusColor = (value: string) => {
+    if (value === "未处理") return "orange";
+    if (value === "PM 已介入") return "blue";
+    if (value === "等待反馈") return "gold";
+    if (value === "已解决") return "green";
+    return "default";
+  };
+
+  const progressColumns: ColumnsType<PMProgressRow> = [
+    {
+      title: "需求 / 项目",
+      dataIndex: "name",
+      width: 180,
+      render: (name: string, row) => (
+        <Space orientation="vertical" size={0}>
+          <Button type="link" size="small" onClick={() => setSelectedRequirement(row)}>
+            {name}
+          </Button>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{row.key}</Typography.Text>
+        </Space>
+      )
+    },
+    {
+      title: "推进状态",
+      dataIndex: "priority",
+      width: 90,
+      render: (priority: PMProgressRow["priority"], row) => (
+        <Space orientation="vertical" size={2}>
+          <Tag color={pmPriorityColor(priority)}>{priorityLabel(priority)}</Tag>
+          <Tag color={pmStatusColor(row.handlingStatus)}>{displayStatus(row.handlingStatus)}</Tag>
+        </Space>
+      )
+    },
+    {
+      title: "触发原因",
+      dataIndex: "triggerReason",
+      width: 180,
+      render: (reason: string) => <span className="pm-table-reason">{reason}</span>
+    },
+    {
+      title: "当前问题",
+      dataIndex: "currentIssue",
+      width: 300
+    },
+    { title: "下一步", dataIndex: "nextStep", width: 160 },
+    { title: "下一步责任人", dataIndex: "nextOwner", width: 130 },
+    {
+      title: "Deadline",
+      dataIndex: "deadline",
+      width: 90
+    },
+    {
+      title: "操作",
+      width: 100,
+      render: (_, row) => (
+        <Button type={row.priority === "P0" ? "primary" : "default"} size="small" onClick={() => setSelectedRequirement(row)}>
+          {row.action}
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <PagePanel title="首页" description="关键事项概览" breadcrumbs={[{ title: "Dashboard" }]} showNav={false}>
+      <div className="role-home role-home--pm-prototype">
+        <div className="pm-scope-bar">
+          <div>
+            <strong>PM 需求推进首页</strong>
+            <span>当前范围：我负责 / 我关注 / 全部可见 · 时间范围：本周</span>
+          </div>
+          <Space>
+            <Link to="/reports">生成 PM 周报</Link>
+            <Link to="/reports">写日报</Link>
+          </Space>
+        </div>
+
+        <div className="pm-status-strip">
+          {statusChips.map((chip) => (
+            <button
+              className={`pm-status-chip pm-status-chip--${chip.tone}`}
+              key={chip.label}
+              type="button"
+              onClick={() => setProgressFilter(chip.filter)}
+            >
+              <span>{chip.label}</span>
+              <strong>{chip.value}</strong>
+            </button>
+          ))}
+        </div>
+
+        <Card
+          className="role-home-card role-home-card--primary pm-priority-card"
+          title={
+            <Space>
+              <AlertOutlined />
+              今日优先处理
+            </Space>
+          }
+        >
+          <div className="pm-priority-list">
+            {priorityRows.map((item) => (
+              <button
+                className="pm-priority-item"
+                key={item.key}
+                type="button"
+                onClick={() => setSelectedRequirement(item)}
+              >
+                <div className="pm-priority-item__head">
+                  <strong>{item.name}</strong>
+                  <Tag color={pmStatusColor(item.handlingStatus)}>{displayStatus(item.handlingStatus)}</Tag>
+                </div>
+                <p className="pm-priority-item__reason">{item.triggerReason} · Deadline {item.deadline}</p>
+                <p>{item.currentIssue}</p>
+                <div className="pm-priority-item__footer">
+                  <span>下一步：{item.nextStep}</span>
+                  <span>责任人：{item.nextOwner}</span>
+                  <Button type={item.priority === "P0" ? "primary" : "default"} size="small">
+                    {item.action}
+                  </Button>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <Card
+          className="role-home-card role-home-card--primary pm-progress-card pm-queue-card"
+          title={
+            <Space>
+              <ProjectOutlined />
+              需求推进清单
+            </Space>
+          }
+          extra={
+            <Segmented
+              size="small"
+              value={progressFilter}
+              onChange={(value) => setProgressFilter(value as PMProgressFilter)}
+              options={[
+                { label: "全部", value: "all" },
+                { label: "今日处理", value: "p0" },
+                { label: "本周跟进", value: "p1" },
+                { label: "持续观察", value: "p2" },
+                { label: "待反馈", value: "waiting" },
+                { label: "缺验收标准", value: "missing_standard" },
+                { label: "跨团队阻塞", value: "blocked" },
+                { label: "推进异常", value: "abnormal" },
+                { label: "已解决", value: "resolved" }
+              ]}
+            />
+          }
+        >
+          <Table<PMProgressRow>
+            className="pm-progress-table"
+            size="small"
+            rowKey="key"
+            columns={progressColumns}
+            dataSource={progressRows}
+            pagination={false}
+          />
+        </Card>
+
+      </div>
+
+      <Drawer
+        title={selectedRequirement?.name ?? "需求详情"}
+        open={Boolean(selectedRequirement)}
+        onClose={() => setSelectedRequirement(null)}
+        size="default"
+      >
+        {selectedRequirement ? (
+          <div className="director-drawer">
+            <p><strong>{selectedRequirement.key}</strong> · {displayStatus(selectedRequirement.handlingStatus)}</p>
+            <p>推进状态：{priorityLabel(selectedRequirement.priority)}</p>
+            <p>触发原因：{selectedRequirement.triggerReason}</p>
+            <p>当前问题：{selectedRequirement.currentIssue}</p>
+            <p>下一步：{selectedRequirement.nextStep}</p>
+            <p>下一步责任人：{selectedRequirement.nextOwner}</p>
+            <p>Deadline：{selectedRequirement.deadline}</p>
+            <p>PM 处理结论：{selectedRequirement.pmConclusion}</p>
+            <p>最近处理时间：{selectedRequirement.lastHandledAt}</p>
+            <p>说明：这里展示 PM 视角的需求推进闭环，不包含任务执行操作。</p>
+          </div>
+        ) : null}
+      </Drawer>
+
     </PagePanel>
   );
 }
