@@ -47,6 +47,11 @@ export function LoginPage() {
           <Form
             layout="vertical"
             requiredMark={false}
+            initialValues={
+              import.meta.env.DEV
+                ? { employee_id: "admin", password: "Admin@123!" }
+                : undefined
+            }
             onValuesChange={() => setLoginError(null)}
             onFinish={async (values: { employee_id: string; password: string }) => {
               setSubmitting(true);

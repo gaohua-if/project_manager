@@ -1,18 +1,26 @@
-import { Button, Card, Col, Drawer, Progress, Row, Segmented, Space, Table, Tag, Typography } from "antd";
+import { Avatar, Button, Card, Col, Drawer, Progress, Row, Segmented, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
   AlertOutlined,
+  AppstoreOutlined,
   BarChartOutlined,
+  BellOutlined,
   CheckSquareOutlined,
+  ClockCircleOutlined,
   FileTextOutlined,
   FlagOutlined,
   LinkOutlined,
+  PlusOutlined,
   ProjectOutlined,
+  ReloadOutlined,
+  RightOutlined,
+  ScheduleOutlined,
   TeamOutlined,
   ThunderboltOutlined,
   UploadOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 
@@ -27,16 +35,6 @@ type Tone = "blue" | "green" | "orange" | "red" | "purple" | "gray";
 type DirectorTokenRange = "day" | "week" | "month";
 type DirectorReqFilter = "all" | "focused" | "risk";
 type DirectorFocusType = "项目" | "需求" | "任务";
-type PMProgressFilter =
-  | "all"
-  | "p0"
-  | "p1"
-  | "p2"
-  | "waiting"
-  | "missing_standard"
-  | "blocked"
-  | "abnormal"
-  | "resolved";
 
 interface MetricItem {
   label: string;
@@ -98,20 +96,114 @@ interface DirectorFocusItem extends DirectorFocusChange {
   risk: string;
 }
 
-interface PMProgressRow {
+interface PMActionItem {
+  key: string;
+  priority: "高" | "中";
+  requirement: string;
+  triggerReason: string;
+  status: string;
+  owner: string;
+  nextAction: string;
+  deadline: string;
+  action: string;
+  to: string;
+}
+
+interface PMActiveRequirement {
   key: string;
   name: string;
-  priority: "P0" | "P1" | "P2";
-  triggerReason: string;
-  currentIssue: string;
-  nextOwner: string;
+  focusSource: string;
+  ac: string;
+  taskProgress: number;
+  blockStatus: string;
+  weekSessions: number;
+  weekToken: string;
   deadline: string;
-  handlingStatus: string;
-  nextStep: string;
-  action: string;
-  pmConclusion: string;
-  lastHandledAt: string;
-  tags: PMProgressFilter[];
+  to: string;
+  feishuUrl: string;
+}
+
+interface PMFollowTask {
+  key: string;
+  name: string;
+  requirement: string;
+  status: string;
+  owner: string;
+  deadline: string;
+  note: string;
+  to: string;
+}
+
+interface TLRiskItem {
+  key: string;
+  title: string;
+  count: number;
+  meta: string;
+  ownerLabel: string;
+  owner: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  tone: "red" | "orange" | "gold";
+  to: string;
+}
+
+interface TLMetricItem {
+  label: string;
+  value: string;
+  delta: string;
+  tone: "blue" | "purple" | "red" | "orange";
+}
+
+interface TLTodoRow {
+  key: string;
+  title: string;
+  owner: string;
+  tag?: string;
+  time: string;
+  to: string;
+}
+
+interface TLTodoGroup {
+  key: string;
+  title: string;
+  count: number;
+  subtitle: string;
+  tone: "purple" | "orange";
+  rows: TLTodoRow[];
+}
+
+interface TLTaskStatusItem {
+  label: string;
+  value: number;
+  percent: string;
+  color: string;
+}
+
+interface TLWorkEvidenceTask {
+  key: string;
+  task: string;
+  owner: string;
+  requirement: string;
+  deadline: string;
+  missingDays: string;
+  focusLevel: string;
+  to: string;
+}
+
+interface TLActivityItem {
+  key: string;
+  title: string;
+  desc: string;
+  time: string;
+  tone: "red" | "purple" | "green" | "orange";
+}
+
+interface TLQuickAction {
+  key: string;
+  label: string;
+  tone: "green" | "blue" | "orange" | "gold" | "purple";
+  icon: ReactNode;
+  to: string;
 }
 
 interface RoleHomeData {
@@ -717,82 +809,304 @@ const directorFocusItems: DirectorFocusItem[] = [
   }
 ];
 
-const pmProgressRows: PMProgressRow[] = [
+const pmActionItems: PMActionItem[] = [
+  {
+    key: "REQ-001",
+    priority: "高",
+    requirement: "统一权限模型",
+    triggerReason: "总监关注 · 缺验收标准",
+    status: "AC 5/7",
+    owner: "PM 陈",
+    nextAction: "补齐验收标准",
+    deadline: "07-12",
+    action: "查看需求",
+    to: "/requirements"
+  },
+  {
+    key: "REQ-005",
+    priority: "高",
+    requirement: "跨团队发布校验",
+    triggerReason: "跨团队依赖等待 1 天以上",
+    status: "PM 已介入",
+    owner: "AI 工程 TL 王",
+    nextAction: "添加协调结论",
+    deadline: "07-10",
+    action: "查看阻塞",
+    to: "/tasks"
+  },
+  {
+    key: "REQ-003",
+    priority: "中",
+    requirement: "日报自动汇总",
+    triggerReason: "高 Session 但进度无变化",
+    status: "任务未推进",
+    owner: "TL 李",
+    nextAction: "检查任务拆解/范围",
+    deadline: "07-15",
+    action: "查看摘要",
+    to: "/requirements"
+  }
+];
+
+const pmActiveRequirements: PMActiveRequirement[] = [
   {
     key: "REQ-051",
     name: "统一权限模型",
-    priority: "P0",
-    triggerReason: "总监关注 · 缺验收标准",
-    currentIssue: "需求尚未补充验收标准，Deadline 07-12",
-    nextOwner: "PM 陈",
+    focusSource: "总监关注",
+    ac: "5/7",
+    taskProgress: 71,
+    blockStatus: "缺验收标准",
+    weekSessions: 18,
+    weekToken: "42K",
     deadline: "07-12",
-    handlingStatus: "未处理",
-    nextStep: "补充验收标准",
-    action: "去处理",
-    pmConclusion: "补齐后从缺验收标准风险中移除，仍保留总监关注标签",
-    lastHandledAt: "未处理",
-    tags: ["p0", "missing_standard"]
+    to: "/requirements",
+    feishuUrl: "https://feishu.cn/docx/aida-req-051"
   },
   {
     key: "REQ-042",
     name: "智能工单归因",
-    priority: "P0",
-    triggerReason: "跨团队阻塞 · 等待 1.5 天",
-    currentIssue: "下游团队等待上游接口输出；任务 6/8 已拆，但接口联调仍阻塞",
-    nextOwner: "AI 工程 TL 王",
+    focusSource: "PM 关注",
+    ac: "3/5",
+    taskProgress: 58,
+    blockStatus: "依赖中",
+    weekSessions: 12,
+    weekToken: "68K",
     deadline: "07-10",
-    handlingStatus: "PM 已介入",
-    nextStep: "指定上游负责人",
-    action: "协调依赖",
-    pmConclusion: "PM 已介入协调，阻塞解除前降级为本周跟进",
-    lastHandledAt: "今天 16:20",
-    tags: ["p0", "p1", "blocked"]
+    to: "/tasks",
+    feishuUrl: "https://feishu.cn/docx/aida-req-042"
   },
   {
     key: "REQ-037",
     name: "日报自动汇总",
-    priority: "P1",
-    triggerReason: "推进异常",
-    currentIssue: "本周 18 个 Session，但验收标准和任务状态 2 天无变化",
-    nextOwner: "TL 李",
+    focusSource: "-",
+    ac: "4/6",
+    taskProgress: 67,
+    blockStatus: "无明显阻塞",
+    weekSessions: 22,
+    weekToken: "126K",
     deadline: "07-15",
-    handlingStatus: "等待反馈",
-    nextStep: "确认范围或要求 TL 更新任务拆解",
-    action: "查看详情",
-    pmConclusion: "PM 已要求 TL 判断是否缩小范围",
-    lastHandledAt: "今天 11:30",
-    tags: ["p1", "waiting", "abnormal"]
+    to: "/requirements",
+    feishuUrl: "https://feishu.cn/docx/aida-req-037"
   },
   {
     key: "REQ-029",
     name: "跨团队发布校验",
-    priority: "P1",
-    triggerReason: "Deadline 风险 · 责任人已明确",
-    currentIssue: "等待 AI 工程验收口径；验收标准 2/5，任务 2/4 已拆",
-    nextOwner: "AI 工程",
+    focusSource: "总监关注",
+    ac: "2/5",
+    taskProgress: 39,
+    blockStatus: "跨团队阻塞",
+    weekSessions: 6,
+    weekToken: "35K",
     deadline: "07-10",
-    handlingStatus: "等待反馈",
-    nextStep: "同步验收条件和截止时间",
-    action: "查看详情",
-    pmConclusion: "已同步下游等待情况，等待 AI 工程确认口径",
-    lastHandledAt: "昨天 18:30",
-    tags: ["p1", "waiting"]
+    to: "/requirements",
+    feishuUrl: "https://feishu.cn/docx/aida-req-029"
   },
   {
     key: "REQ-033",
     name: "验收标准模板治理",
-    priority: "P2",
-    triggerReason: "PM 关注 · 今日有变化",
-    currentIssue: "验收标准 4/4，任务 5/5 已拆；今日补齐 1 条示例",
-    nextOwner: "PM 陈",
+    focusSource: "-",
+    ac: "4/4",
+    taskProgress: 90,
+    blockStatus: "健康",
+    weekSessions: 5,
+    weekToken: "18K",
     deadline: "07-20",
-    handlingStatus: "已解决",
-    nextStep: "跟进模板试用反馈",
-    action: "查看详情",
-    pmConclusion: "验收标准已补齐，保留关注标签并降级观察",
-    lastHandledAt: "今天 10:10",
-    tags: ["p2", "resolved"]
+    to: "/requirements",
+    feishuUrl: "https://feishu.cn/docx/aida-req-033"
   }
+];
+
+const pmFollowTasks: PMFollowTask[] = [
+  {
+    key: "TASK-151",
+    name: "补充统一权限模型验收标准",
+    requirement: "REQ-051",
+    status: "待处理",
+    owner: "PM 陈",
+    deadline: "07-12",
+    note: "总监反馈缺少验收标准，需明确角色边界",
+    to: "/tasks"
+  },
+  {
+    key: "TASK-142",
+    name: "确认接口输出时间",
+    requirement: "REQ-042",
+    status: "进行中",
+    owner: "AI 工程 TL 王",
+    deadline: "07-10",
+    note: "上游接口输出时间待确认",
+    to: "/tasks"
+  },
+  {
+    key: "TASK-137",
+    name: "更新日报自动汇总任务拆解",
+    requirement: "REQ-037",
+    status: "待处理",
+    owner: "TL 李",
+    deadline: "07-15",
+    note: "Session 高但进度无变化",
+    to: "/tasks"
+  },
+  {
+    key: "TASK-129",
+    name: "同步发布校验截止时间",
+    requirement: "REQ-029",
+    status: "待处理",
+    owner: "AI 工程",
+    deadline: "07-10",
+    note: "跨团队依赖等待中，需确认时间",
+    to: "/tasks"
+  }
+];
+
+const tlRiskItems: TLRiskItem[] = [
+  {
+    key: "risk-blocked",
+    title: "高关注度未下阻塞任务",
+    count: 1,
+    meta: "阻塞超过 1 天",
+    ownerLabel: "负责人",
+    owner: "王五",
+    secondaryLabel: "阻塞时长",
+    secondaryValue: "1天6小时",
+    tone: "red",
+    to: "/tasks"
+  },
+  {
+    key: "risk-evidence",
+    title: "进行中任务缺少工作证据",
+    count: 3,
+    meta: "收录日 +1",
+    ownerLabel: "其中 1 个被重点关注",
+    owner: "需关注处理",
+    secondaryLabel: "",
+    secondaryValue: "",
+    tone: "orange",
+    to: "/sessions"
+  },
+  {
+    key: "risk-deadline",
+    title: "临近 Deadline 风险",
+    count: 2,
+    meta: "3 天内到期",
+    ownerLabel: "涉及需求",
+    owner: "2 个",
+    secondaryLabel: "需确认",
+    secondaryValue: "截止时间",
+    tone: "gold",
+    to: "/tasks"
+  }
+];
+
+const tlMetrics: TLMetricItem[] = [
+  { label: "今日活跃", value: "11/13", delta: "较昨日 +2", tone: "blue" },
+  { label: "参与需求", value: "4", delta: "较昨日 -", tone: "purple" },
+  { label: "阻塞预警", value: "1", delta: "较昨日 +1", tone: "red" },
+  { label: "本队 Token", value: "1.84M", delta: "较昨日 +123K", tone: "orange" }
+];
+
+const tlTodoGroups: TLTodoGroup[] = [
+  {
+    key: "daily-review",
+    title: "日报待 Review",
+    count: 2,
+    subtitle: "其中 2 份缺任务关联",
+    tone: "purple",
+    rows: [
+      { key: "review-li", title: "缺任务关联", owner: "李四", tag: "缺任务关联", time: "提交于 17:26", to: "/reports" },
+      { key: "review-qian", title: "缺任务关联", owner: "钱七", tag: "缺任务关联", time: "提交于 16:48", to: "/reports" }
+    ]
+  },
+  {
+    key: "need-handle",
+    title: "需要您处理的任务",
+    count: 2,
+    subtitle: "请确认需求变更与资源调整",
+    tone: "orange",
+    rows: [
+      { key: "req-001", title: "REQ-001 需求变更确认", owner: "张三", time: "提交于 15:14", to: "/requirements" },
+      { key: "req-004", title: "REQ-004 资源调整申请", owner: "赵六", time: "提交于 14:02", to: "/requirements" }
+    ]
+  }
+];
+
+const tlTaskStatusItems: TLTaskStatusItem[] = [
+  { label: "进行中", value: 7, percent: "39%", color: "#1677ff" },
+  { label: "待开始", value: 5, percent: "28%", color: "#52c41a" },
+  { label: "已完成", value: 4, percent: "22%", color: "#722ed1" },
+  { label: "已阻塞", value: 2, percent: "11%", color: "#ff4d4f" }
+];
+
+const tlEvidenceTasks: TLWorkEvidenceTask[] = [
+  {
+    key: "T-102",
+    task: "梳理加速优化",
+    owner: "李四",
+    requirement: "REQ-002",
+    deadline: "06-10",
+    missingDays: "3 天",
+    focusLevel: "总监关注",
+    to: "/tasks"
+  },
+  {
+    key: "T-105",
+    task: "接口性能优化",
+    owner: "钱七",
+    requirement: "REQ-003",
+    deadline: "06-15",
+    missingDays: "2 天",
+    focusLevel: "中",
+    to: "/tasks"
+  },
+  {
+    key: "T-108",
+    task: "日志系统改造",
+    owner: "赵六",
+    requirement: "REQ-005",
+    deadline: "06-20",
+    missingDays: "2 天",
+    focusLevel: "低",
+    to: "/tasks"
+  }
+];
+
+const tlActivities: TLActivityItem[] = [
+  {
+    key: "activity-1",
+    title: "任务 T-201（数据导入模块）阻塞已超过 1 天",
+    desc: "负责人：王五｜阻塞原因：第三方接口未返回数据",
+    time: "18 分钟前",
+    tone: "red"
+  },
+  {
+    key: "activity-2",
+    title: "李四 提交了日报，待您 Review（缺任务关联）",
+    desc: "日报中有 2 条工作记录待绑定任务",
+    time: "17:26",
+    tone: "purple"
+  },
+  {
+    key: "activity-3",
+    title: "任务 T-101 已完成",
+    desc: "负责人：张三",
+    time: "16:40",
+    tone: "green"
+  },
+  {
+    key: "activity-4",
+    title: "REQ-001 需求变更申请待您处理",
+    desc: "提交人：张三",
+    time: "15:14",
+    tone: "orange"
+  }
+];
+
+const tlQuickActions: TLQuickAction[] = [
+  { key: "create", label: "创建任务", tone: "green", icon: <PlusOutlined />, to: "/tasks" },
+  { key: "assign", label: "分配需求", tone: "blue", icon: <ProjectOutlined />, to: "/requirements" },
+  { key: "block", label: "发现阻塞登记", tone: "orange", icon: <WarningOutlined />, to: "/tasks" },
+  { key: "remind", label: "提醒补充记录", tone: "gold", icon: <BellOutlined />, to: "/sessions" },
+  { key: "export", label: "导出日报", tone: "purple", icon: <FileTextOutlined />, to: "/reports" }
 ];
 
 const rowColumns: ColumnsType<SimpleRow> = [
@@ -838,6 +1152,9 @@ export function RoleHomepagePrototype({ role }: { role: RoleHomeKey }) {
   }
   if (role === "pm") {
     return <PMHomepagePrototype />;
+  }
+  if (role === "tl") {
+    return <TLHomepagePrototype />;
   }
 
   const data = roleData[role];
@@ -957,96 +1274,393 @@ export function RoleHomepagePrototype({ role }: { role: RoleHomeKey }) {
   );
 }
 
-function PMHomepagePrototype() {
-  const [progressFilter, setProgressFilter] = useState<PMProgressFilter>("all");
-  const [selectedRequirement, setSelectedRequirement] = useState<PMProgressRow | null>(null);
-  const progressRows =
-    progressFilter === "all"
-      ? pmProgressRows
-      : pmProgressRows.filter((row) => row.tags.includes(progressFilter));
-  const priorityRows = pmProgressRows.slice(0, 3);
-  const statusChips: Array<{ label: string; value: string; filter: PMProgressFilter; tone: string }> = [
-    { label: "今日待处理", value: "2", filter: "p0", tone: "orange" },
-    { label: "已介入待反馈", value: "2", filter: "waiting", tone: "blue" },
-    { label: "缺验收标准", value: "2", filter: "missing_standard", tone: "orange" },
-    { label: "跨团队阻塞", value: "1", filter: "blocked", tone: "gold" },
-    { label: "推进异常", value: "3", filter: "abnormal", tone: "red" }
-  ];
-  const priorityLabel = (value: PMProgressRow["priority"]) => {
-    if (value === "P0") return "今日处理";
-    if (value === "P1") return "本周跟进";
-    return "持续观察";
+function TLHomepagePrototype() {
+  const activityIcon = (tone: TLActivityItem["tone"]) => {
+    if (tone === "red") return <AlertOutlined />;
+    if (tone === "purple") return <FileTextOutlined />;
+    if (tone === "green") return <CheckSquareOutlined />;
+    return <WarningOutlined />;
   };
-  const pmPriorityColor = (value: PMProgressRow["priority"]) => {
-    if (value === "P0") return "volcano";
-    if (value === "P1") return "gold";
-    return "blue";
-  };
-  const displayStatus = (value: string) => {
-    if (value === "未处理") return "待处理";
-    if (value === "PM 已介入") return "已介入";
-    return value;
-  };
-  const pmStatusColor = (value: string) => {
-    if (value === "未处理") return "orange";
-    if (value === "PM 已介入") return "blue";
-    if (value === "等待反馈") return "gold";
-    if (value === "已解决") return "green";
+  const focusColor = (value: string) => {
+    if (value === "总监关注") return "red";
+    if (value === "中") return "orange";
     return "default";
   };
 
-  const progressColumns: ColumnsType<PMProgressRow> = [
+  const evidenceColumns: ColumnsType<TLWorkEvidenceTask> = [
     {
-      title: "需求 / 项目",
-      dataIndex: "name",
-      width: 180,
-      render: (name: string, row) => (
-        <Space orientation="vertical" size={0}>
-          <Button type="link" size="small" onClick={() => setSelectedRequirement(row)}>
-            {name}
-          </Button>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{row.key}</Typography.Text>
-        </Space>
-      )
+      title: "任务",
+      dataIndex: "task",
+      render: (task: string, row) => <Link to={row.to}>{row.key} {task}</Link>
+    },
+    { title: "负责人", dataIndex: "owner", width: 90 },
+    { title: "需求", dataIndex: "requirement", width: 105 },
+    { title: "Deadline", dataIndex: "deadline", width: 95 },
+    {
+      title: "无证据天数",
+      dataIndex: "missingDays",
+      width: 105,
+      render: (days: string) => <Typography.Text type="danger">{days}</Typography.Text>
     },
     {
-      title: "推进状态",
-      dataIndex: "priority",
-      width: 90,
-      render: (priority: PMProgressRow["priority"], row) => (
-        <Space orientation="vertical" size={2}>
-          <Tag color={pmPriorityColor(priority)}>{priorityLabel(priority)}</Tag>
-          <Tag color={pmStatusColor(row.handlingStatus)}>{displayStatus(row.handlingStatus)}</Tag>
-        </Space>
-      )
-    },
-    {
-      title: "触发原因",
-      dataIndex: "triggerReason",
-      width: 180,
-      render: (reason: string) => <span className="pm-table-reason">{reason}</span>
-    },
-    {
-      title: "当前问题",
-      dataIndex: "currentIssue",
-      width: 300
-    },
-    { title: "下一步", dataIndex: "nextStep", width: 160 },
-    { title: "下一步责任人", dataIndex: "nextOwner", width: 130 },
-    {
-      title: "Deadline",
-      dataIndex: "deadline",
-      width: 90
+      title: "关注等级",
+      dataIndex: "focusLevel",
+      width: 105,
+      render: (level: string) => <Tag color={focusColor(level)}>{level}</Tag>
     },
     {
       title: "操作",
-      width: 100,
+      width: 70,
+      render: (_, row) => <Link to={row.to}>查看</Link>
+    }
+  ];
+
+  return (
+    <PagePanel title="首页" description="团队关键情况" breadcrumbs={[{ title: "Dashboard" }]} showNav={false}>
+      <div className="role-home role-home--tl-workbench">
+        <section className="tl-home-head">
+          <div>
+            <h2>晚上好，刘TL 👋</h2>
+            <p>以下是团队今日的关键状况，请及时关注与处理</p>
+          </div>
+          <Space className="tl-home-actions" wrap>
+            <Button icon={<AppstoreOutlined />}>自定义首页</Button>
+            <Button icon={<ReloadOutlined />}>数据刷新｜1 分钟前</Button>
+          </Space>
+        </section>
+
+        <Row gutter={[16, 16]} align="stretch">
+          <Col xs={24} xl={14}>
+            <Card
+              className="role-home-card tl-panel-card tl-risk-panel"
+              title={
+                <Space>
+                  <AlertOutlined />
+                  风险与阻塞（3）
+                </Space>
+              }
+              extra={<RightOutlined />}
+            >
+              <div className="tl-risk-grid">
+                {tlRiskItems.map((item) => (
+                  <div className={`tl-risk-card tl-risk-card--${item.tone}`} key={item.key}>
+                    <strong>{item.title}</strong>
+                    <div className="tl-risk-card__body">
+                      <div className="tl-risk-card__count">
+                        <span>{item.count}</span>
+                        <em>↑</em>
+                      </div>
+                      <div className="tl-risk-card__divider" />
+                      <div className="tl-risk-card__meta">
+                        <small>{item.ownerLabel}</small>
+                        <b>{item.owner}</b>
+                        {item.secondaryLabel ? (
+                          <>
+                            <small>{item.secondaryLabel}</small>
+                            <b>{item.secondaryValue}</b>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="tl-risk-card__footer">
+                      <span>{item.meta}</span>
+                      <Link to={item.to}>
+                        查看详情 <RightOutlined />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Col>
+          <Col xs={24} xl={10}>
+            <Card
+              className="role-home-card tl-panel-card tl-metric-panel"
+              title={
+                <Space>
+                  <BarChartOutlined />
+                  今日关键数据
+                </Space>
+              }
+            >
+              <div className="tl-metric-grid">
+                {tlMetrics.map((item) => (
+                  <div className={`tl-metric-item tl-metric-item--${item.tone}`} key={item.label}>
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                    <em>{item.delta}</em>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[16, 16]} align="stretch">
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card tl-panel-card"
+              title={
+                <Space>
+                  <ScheduleOutlined />
+                  今日待办（按优先级）
+                </Space>
+              }
+              extra={<Link to="/tasks">查看全部 <RightOutlined /></Link>}
+            >
+              <div className="tl-todo-list">
+                {tlTodoGroups.map((group) => (
+                  <div className="tl-todo-group" key={group.key}>
+                    <div className={`tl-todo-summary tl-todo-summary--${group.tone}`}>
+                      <span className="tl-todo-icon">{group.tone === "purple" ? <FileTextOutlined /> : <UploadOutlined />}</span>
+                      <div>
+                        <strong>{group.title}</strong>
+                        <p>
+                          <b>{group.count}</b>
+                          <span>{group.key === "daily-review" ? " 份" : " 个"}</span>
+                        </p>
+                        <em>{group.subtitle}</em>
+                      </div>
+                    </div>
+                    <div className="tl-todo-rows">
+                      {group.rows.map((row) => (
+                        <Link className="tl-todo-row" key={row.key} to={row.to}>
+                          <span className="tl-todo-owner">
+                            <Avatar size={24}>{row.owner.slice(0, 1)}</Avatar>
+                            {row.owner}
+                          </span>
+                          <span>{row.title}</span>
+                          {row.tag ? <Tag color="red">{row.tag}</Tag> : null}
+                          <time>{row.time}</time>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Col>
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card tl-panel-card"
+              title={
+                <Space>
+                  <TeamOutlined />
+                  团队任务概览
+                </Space>
+              }
+              extra={<Link to="/tasks">更多数据 <RightOutlined /></Link>}
+            >
+              <div className="tl-task-overview">
+                <div className="tl-task-circle">
+                  <Progress
+                    type="circle"
+                    percent={71}
+                    size={126}
+                    strokeColor={{ "0%": "#1677ff", "55%": "#52c41a", "100%": "#722ed1" }}
+                    trailColor="#f0f3f7"
+                    format={() => (
+                      <span className="tl-task-circle__text">
+                        <strong>18</strong>
+                        <em>总任务</em>
+                      </span>
+                    )}
+                  />
+                </div>
+                <div className="tl-task-status">
+                  {tlTaskStatusItems.map((item) => (
+                    <div key={item.label}>
+                      <span style={{ backgroundColor: item.color }} />
+                      <b>{item.label}</b>
+                      <strong>{item.value}</strong>
+                      <em>({item.percent})</em>
+                    </div>
+                  ))}
+                </div>
+                <div className="tl-task-kpis">
+                  <div>
+                    <span>按时完成率</span>
+                    <strong className="is-green">71%</strong>
+                    <em>较昨日 +5%</em>
+                  </div>
+                  <div>
+                    <span>延期任务</span>
+                    <strong className="is-red">2</strong>
+                    <em>较昨日 -1</em>
+                  </div>
+                  <div>
+                    <span>平均 Cycle Time</span>
+                    <strong className="is-red">3.6 天</strong>
+                    <em>较昨日 -0.4 天</em>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[16, 16]} align="stretch">
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card tl-panel-card"
+              title={
+                <Space>
+                  <ClockCircleOutlined />
+                  进行中任务（缺少工作证据）
+                </Space>
+              }
+              extra={<span className="tl-card-extra">共 3 个 全部 <RightOutlined /></span>}
+            >
+              <Table<TLWorkEvidenceTask>
+                className="tl-compact-table"
+                size="small"
+                rowKey="key"
+                columns={evidenceColumns}
+                dataSource={tlEvidenceTasks}
+                pagination={false}
+              />
+              <p className="tl-table-note">说明：连续 2 天及以上无 Session 或工作记录</p>
+            </Card>
+          </Col>
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card tl-panel-card"
+              title={
+                <Space>
+                  <ThunderboltOutlined />
+                  最近动态
+                </Space>
+              }
+              extra={
+                <div className="tl-activity-tabs">
+                  {["全部", "风险/阻塞", "日报", "任务", "需求", "全部动态"].map((item, index) => (
+                    <span className={index === 0 ? "is-active" : ""} key={item}>
+                      {item}
+                    </span>
+                  ))}
+                  <RightOutlined />
+                </div>
+              }
+            >
+              <div className="tl-activity-list">
+                {tlActivities.map((item) => (
+                  <div className="tl-activity-item" key={item.key}>
+                    <span className={`tl-activity-icon tl-activity-icon--${item.tone}`}>{activityIcon(item.tone)}</span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.desc}</p>
+                    </div>
+                    <time>{item.time}</time>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
+        <div className="tl-quick-action-grid">
+          {tlQuickActions.map((item) => (
+            <Link className={`tl-quick-action tl-quick-action--${item.tone}`} key={item.key} to={item.to}>
+              <span>{item.icon}</span>
+              <strong>{item.label}</strong>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </PagePanel>
+  );
+}
+
+function PMHomepagePrototype() {
+  const pmStatusColor = (value: string) => {
+    if (value.includes("缺验收标准")) return "red";
+    if (value === "需处理" || value.includes("风险") || value.includes("阻塞")) return "orange";
+    if (value === "已介入") return "blue";
+    if (value === "等待反馈") return "gold";
+    if (value === "待处理") return "red";
+    if (value === "待更新") return "orange";
+    if (value === "进行中") return "blue";
+    if (value.includes("异常")) return "volcano";
+    if (value.includes("稳定")) return "green";
+    if (value.includes("健康") || value.includes("无明显")) return "green";
+    return "default";
+  };
+  const priorityColor = (value: PMActionItem["priority"]) => (value === "高" ? "red" : "orange");
+  const progressStatus = (value: number) => (value < 45 ? "exception" : value >= 80 ? "success" : "active");
+  const totalSessions = pmActiveRequirements.reduce((sum, item) => sum + item.weekSessions, 0);
+  const totalTokenK = pmActiveRequirements.reduce((sum, item) => sum + Number(item.weekToken.replace("K", "")), 0);
+
+  const requirementColumns: ColumnsType<PMActiveRequirement> = [
+    {
+      title: "需求",
+      dataIndex: "name",
+      width: 210,
+      render: (name: string, row) => (
+        <Space orientation="vertical" size={0}>
+          <Link to={row.to}>
+            {row.key} {name}
+          </Link>
+        </Space>
+      )
+    },
+    {
+      title: "关注来源",
+      dataIndex: "focusSource",
+      width: 110,
+      render: (source: string) => source === "-" ? <Typography.Text type="secondary">-</Typography.Text> : <Tag color="blue">{source}</Tag>
+    },
+    { title: "AC", dataIndex: "ac", width: 80 },
+    {
+      title: "任务进度",
+      dataIndex: "taskProgress",
+      width: 150,
+      render: (progress: number) => (
+        <div className="pm-progress-cell">
+          <Progress percent={progress} size="small" showInfo={false} status={progressStatus(progress)} />
+          <span>{progress}%</span>
+        </div>
+      )
+    },
+    {
+      title: "阻塞状态",
+      dataIndex: "blockStatus",
+      width: 130,
+      render: (status: string) => <Tag color={pmStatusColor(status)}>{status}</Tag>
+    },
+    { title: "本周 Session", dataIndex: "weekSessions", width: 115 },
+    { title: "本周 Token", dataIndex: "weekToken", width: 110 },
+    { title: "Deadline", dataIndex: "deadline", width: 100 },
+    {
+      title: "操作",
+      width: 120,
       render: (_, row) => (
-        <Button type={row.priority === "P0" ? "primary" : "default"} size="small" onClick={() => setSelectedRequirement(row)}>
-          {row.action}
-        </Button>
+        <Space size={8}>
+          <Link to={row.to}>查看</Link>
+          <span className="pm-action-separator">/</span>
+          <a href={row.feishuUrl} target="_blank" rel="noreferrer">
+            飞书
+          </a>
+        </Space>
       )
     }
+  ];
+
+  const taskColumns: ColumnsType<PMFollowTask> = [
+    {
+      title: "任务",
+      dataIndex: "name",
+      render: (name: string, row) => <Link to={row.to}>{name}</Link>
+    },
+    { title: "所属需求", dataIndex: "requirement", width: 100 },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 90,
+      render: (status: string) => <Tag color={pmStatusColor(status)}>{status}</Tag>
+    },
+    { title: "负责人", dataIndex: "owner", width: 120 },
+    { title: "截止时间", dataIndex: "deadline", width: 95 },
+    { title: "最近说明", dataIndex: "note" }
   ];
 
   return (
@@ -1057,122 +1671,130 @@ function PMHomepagePrototype() {
             <strong>PM 需求推进首页</strong>
             <span>当前范围：我负责 / 我关注 / 全部可见 · 时间范围：本周</span>
           </div>
-          <Space>
+          <Space className="pm-quick-actions" wrap>
             <Link to="/reports">生成 PM 周报</Link>
             <Link to="/reports">写日报</Link>
+            <Link to="/sessions">上传我的 Session</Link>
           </Space>
         </div>
 
-        <div className="pm-status-strip">
-          {statusChips.map((chip) => (
-            <button
-              className={`pm-status-chip pm-status-chip--${chip.tone}`}
-              key={chip.label}
-              type="button"
-              onClick={() => setProgressFilter(chip.filter)}
-            >
-              <span>{chip.label}</span>
-              <strong>{chip.value}</strong>
-            </button>
-          ))}
-        </div>
-
         <Card
-          className="role-home-card role-home-card--primary pm-priority-card"
+          className="role-home-card role-home-card--primary pm-action-card"
           title={
             <Space>
               <AlertOutlined />
-              今日优先处理
+              待 PM 处理
             </Space>
           }
         >
-          <div className="pm-priority-list">
-            {priorityRows.map((item) => (
-              <button
-                className="pm-priority-item"
-                key={item.key}
-                type="button"
-                onClick={() => setSelectedRequirement(item)}
-              >
-                <div className="pm-priority-item__head">
-                  <strong>{item.name}</strong>
-                  <Tag color={pmStatusColor(item.handlingStatus)}>{displayStatus(item.handlingStatus)}</Tag>
+          <div className="pm-action-list">
+            {pmActionItems.map((item) => (
+              <div className={`pm-action-item pm-action-item--${priorityColor(item.priority)}`} key={item.key}>
+                <div className="pm-action-item__head">
+                  <Tag color={priorityColor(item.priority)}>{item.priority}</Tag>
+                  <Link to={item.to}>
+                    {item.key} {item.requirement}
+                  </Link>
                 </div>
-                <p className="pm-priority-item__reason">{item.triggerReason} · Deadline {item.deadline}</p>
-                <p>{item.currentIssue}</p>
-                <div className="pm-priority-item__footer">
-                  <span>下一步：{item.nextStep}</span>
-                  <span>责任人：{item.nextOwner}</span>
-                  <Button type={item.priority === "P0" ? "primary" : "default"} size="small">
-                    {item.action}
-                  </Button>
+                <div className="pm-action-item__reason">{item.triggerReason}</div>
+                <div className="pm-action-item__meta">
+                  <span>状态：<Tag color={pmStatusColor(item.status)}>{item.status}</Tag></span>
+                  <span>负责人：{item.owner}</span>
+                  <span>截止：{item.deadline}</span>
                 </div>
-              </button>
+                <div className="pm-action-item__footer">
+                  <span>{item.nextAction}</span>
+                  <Link to={item.to}>{item.action}</Link>
+                </div>
+              </div>
             ))}
           </div>
         </Card>
 
         <Card
-          className="role-home-card role-home-card--primary pm-progress-card pm-queue-card"
+          className="role-home-card role-home-card--primary pm-requirement-card"
           title={
             <Space>
               <ProjectOutlined />
-              需求推进清单
+              当前进行中需求
             </Space>
           }
-          extra={
-            <Segmented
-              size="small"
-              value={progressFilter}
-              onChange={(value) => setProgressFilter(value as PMProgressFilter)}
-              options={[
-                { label: "全部", value: "all" },
-                { label: "今日处理", value: "p0" },
-                { label: "本周跟进", value: "p1" },
-                { label: "持续观察", value: "p2" },
-                { label: "待反馈", value: "waiting" },
-                { label: "缺验收标准", value: "missing_standard" },
-                { label: "跨团队阻塞", value: "blocked" },
-                { label: "推进异常", value: "abnormal" },
-                { label: "已解决", value: "resolved" }
-              ]}
-            />
-          }
         >
-          <Table<PMProgressRow>
-            className="pm-progress-table"
+          <Table<PMActiveRequirement>
+            className="pm-compact-table"
             size="small"
             rowKey="key"
-            columns={progressColumns}
-            dataSource={progressRows}
+            columns={requirementColumns}
+            dataSource={pmActiveRequirements}
             pagination={false}
           />
         </Card>
 
+        <Row gutter={[16, 16]} align="stretch">
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card role-home-card--primary pm-task-card"
+              title={
+                <Space>
+                  <CheckSquareOutlined />
+                  关注的任务
+                </Space>
+              }
+            >
+              <Table<PMFollowTask>
+                className="pm-compact-table"
+                size="small"
+                rowKey="key"
+                columns={taskColumns}
+                dataSource={pmFollowTasks}
+                pagination={false}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} xl={12}>
+            <Card
+              className="role-home-card role-home-card--primary pm-ai-card"
+              title={
+                <Space>
+                  <ThunderboltOutlined />
+                  AI 工作量与进展信号
+                </Space>
+              }
+              extra={<Typography.Text type="secondary">更新时间：刚刚</Typography.Text>}
+            >
+              <div className="pm-ai-summary">
+                <div>
+                  <span>本周 Session</span>
+                  <strong>{totalSessions}</strong>
+                  <em>较上周 +18%</em>
+                </div>
+                <div>
+                  <span>本周 Token</span>
+                  <strong>{totalTokenK}K</strong>
+                  <em>较上周 +22%</em>
+                </div>
+                <div>
+                  <span>高工作量低进展</span>
+                  <strong>1</strong>
+                  <em>需 PM 查看</em>
+                </div>
+              </div>
+              <div className="pm-ai-alert">
+                <AlertOutlined />
+                <div>
+                  <strong>REQ-037 本周 22 个 Session，但 AC 和任务状态 2 天无变化。</strong>
+                  <span>AI 数据仅作为辅助信号，建议检查任务拆解或范围是否需要调整。</span>
+                </div>
+                <Link to="/requirements">查看摘要</Link>
+              </div>
+              <div className="pm-ai-link">
+                <Link to="/sessions">查看工作信号详情 →</Link>
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
       </div>
-
-      <Drawer
-        title={selectedRequirement?.name ?? "需求详情"}
-        open={Boolean(selectedRequirement)}
-        onClose={() => setSelectedRequirement(null)}
-        size="default"
-      >
-        {selectedRequirement ? (
-          <div className="director-drawer">
-            <p><strong>{selectedRequirement.key}</strong> · {displayStatus(selectedRequirement.handlingStatus)}</p>
-            <p>推进状态：{priorityLabel(selectedRequirement.priority)}</p>
-            <p>触发原因：{selectedRequirement.triggerReason}</p>
-            <p>当前问题：{selectedRequirement.currentIssue}</p>
-            <p>下一步：{selectedRequirement.nextStep}</p>
-            <p>下一步责任人：{selectedRequirement.nextOwner}</p>
-            <p>Deadline：{selectedRequirement.deadline}</p>
-            <p>PM 处理结论：{selectedRequirement.pmConclusion}</p>
-            <p>最近处理时间：{selectedRequirement.lastHandledAt}</p>
-            <p>说明：这里展示 PM 视角的需求推进闭环，不包含任务执行操作。</p>
-          </div>
-        ) : null}
-      </Drawer>
-
     </PagePanel>
   );
 }

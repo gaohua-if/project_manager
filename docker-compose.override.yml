@@ -1,0 +1,10 @@
+services:
+  db:
+    ports: !override
+      - "15433:5432"
+
+  api:
+    ports: !override
+      - "18090:8080"
+    environment:
+      CORS_ORIGIN: "http://localhost:5173,http://localhost:3000,http://192.168.28.113:3000,http://192.168.28.113:5173"
