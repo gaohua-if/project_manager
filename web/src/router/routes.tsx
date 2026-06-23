@@ -1,13 +1,11 @@
 import {
-  AppstoreOutlined,
   BarChartOutlined,
   BellOutlined,
   DashboardOutlined,
   FileTextOutlined,
   ProjectOutlined,
   SolutionOutlined,
-  TeamOutlined,
-  UnorderedListOutlined
+  TeamOutlined
 } from "@ant-design/icons";
 
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
@@ -32,7 +30,7 @@ import type { AppRoute } from "./types";
 export const appRoutes: AppRoute[] = [
   {
     path: "/dashboard",
-    title: "Dashboard",
+    title: "控制台",
     icon: <DashboardOutlined />,
     menuGroup: "概览",
     menuOrder: 10,
@@ -40,9 +38,9 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/organization",
-    title: "组织",
+    title: "组织 / 用户管理",
     icon: <TeamOutlined />,
-    menuGroup: "概览",
+    menuGroup: "管理",
     menuOrder: 20,
     roles: ["admin", "director", "pm", "team_leader"],
     element: <OrganizationPage />
@@ -63,11 +61,11 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/requirements",
-    title: "需求",
+    title: "需求看板",
     icon: <ProjectOutlined />,
     menuGroup: "业务",
     menuOrder: 30,
-    roles: ["admin", "director", "pm", "team_leader"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <RequirementsListPage />
   },
   {
@@ -81,15 +79,13 @@ export const appRoutes: AppRoute[] = [
     path: "/requirements/:id",
     title: "需求详情",
     hideInMenu: true,
-    roles: ["admin", "director", "pm", "team_leader"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <RequirementDetailPage />
   },
   {
     path: "/tasks",
     title: "任务",
-    icon: <UnorderedListOutlined />,
-    menuGroup: "业务",
-    menuOrder: 40,
+    hideInMenu: true,
     roles: ["admin", "director", "team_leader", "employee"],
     element: <TasksListPage />
   },
@@ -110,9 +106,7 @@ export const appRoutes: AppRoute[] = [
   {
     path: "/products",
     title: "我的工作",
-    icon: <AppstoreOutlined />,
-    menuGroup: "业务",
-    menuOrder: 50,
+    hideInMenu: true,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <ProductsPage />
   },
@@ -134,7 +128,7 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/reports",
-    title: "报告",
+    title: "日报 / 周报",
     icon: <FileTextOutlined />,
     menuGroup: "报告",
     menuOrder: 70,
@@ -144,7 +138,7 @@ export const appRoutes: AppRoute[] = [
     path: "/tokens",
     title: "Token 明细",
     icon: <BarChartOutlined />,
-    menuGroup: "报告",
+    menuGroup: "系统",
     menuOrder: 80,
     element: <TokensPage />
   },
