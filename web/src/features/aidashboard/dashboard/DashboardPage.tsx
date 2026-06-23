@@ -1,17 +1,21 @@
 import {
   AlertOutlined,
+  BarChartOutlined,
   ClockCircleOutlined,
   EditOutlined,
   FileDoneOutlined,
+  FileTextOutlined,
+  FlagOutlined,
   LinkOutlined,
-  ProjectOutlined,
   RightOutlined,
   SendOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag } from "antd";
+import * as echarts from "echarts";
+import type { EChartsOption } from "echarts";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
@@ -881,7 +885,6 @@ export function DashboardPage() {
   const dailyReport = personalReports.find((reportItem) => reportItem.kind === "personal_daily") ?? personalReports[0];
   const activeReport = reportStateById[activeReportId] ?? dailyReport;
   const tokenReport = TOKEN_DATA[previewRole][tokenRange];
-  const riskListUrl = getRiskListUrl(previewRole);
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
 
   const updateReport = (reportId: string, next: Partial<ReportItem>) => {
@@ -969,52 +972,35 @@ export function DashboardPage() {
       bodyClassName="console-dashboard-page__body"
       title="控制台"
       description="查看报告状态、关注对象和需要处理的风险。"
+      showNav={false}
     >
       <section className="console-dashboard">
-        <div className="console-topbar">
-          <div className="console-topbar__identity">
-            <span>{data.label}视图</span>
-            <strong>{data.userLine}</strong>
-            <p>{data.workCue}</p>
-          </div>
-          <div className="console-topbar__switch">
-            <span>原型角色</span>
-            <Segmented
-              size="small"
-              options={ROLE_OPTIONS}
-              value={previewRole}
-              onChange={(value) => setPreviewRole(value as PreviewRole)}
-            />
-          </div>
-        </div>
-
-        <div className="console-status-strip">
-          <StatusSignal label="今日日报" value={dailyReport.status} detail={`更新：${dailyReport.updatedAt}`} tone="blue" />
-          <StatusSignal label="风险" value={`${data.metrics.riskCount} 个`} detail={data.metrics.riskNote} tone="red" />
-          <StatusSignal label="临期" value={`${data.metrics.dueCount} 个`} detail={data.metrics.dueNote} tone="orange" />
-          <StatusSignal
-            label="关注"
-            value={`${data.metrics.focusCount} 个`}
-            detail={data.metrics.focusNote}
-            tone="green"
+        <div className="console-prototype-bar">
+          <span>原型角色</span>
+          <Segmented
+            size="small"
+            options={ROLE_OPTIONS}
+            value={previewRole}
+            onChange={(value) => setPreviewRole(value as PreviewRole)}
           />
         </div>
 
         <Row gutter={[14, 14]} align="stretch">
-          <Col xs={24} xl={16}>
+          <Col xs={24} xl={12}>
             <ReportSection
-              title="我的报告"
-              icon={<FileDoneOutlined />}
+              title="今日报告"
+              icon={<FileTextOutlined />}
               reports={personalReports}
               variant="personal"
               onOpen={openReportModal}
+              onViewReports={() => navigate("/reports")}
               onSend={(reportItem) => {
                 setActiveReportId(reportItem.id);
                 updateReport(reportItem.id, { status: "已发送", updatedAt: "刚刚" });
               }}
             />
           </Col>
-          <Col xs={24} xl={8}>
+          <Col xs={24} xl={12}>
             <div className="console-report-status-card">
               {summaryReports.length > 0 ? (
               <ReportSection
@@ -1023,6 +1009,7 @@ export function DashboardPage() {
                 reports={summaryReports}
                 variant="summary"
                 onOpen={openReportModal}
+                onViewReports={() => navigate("/reports")}
                 onSend={(reportItem) => {
                   setActiveReportId(reportItem.id);
                   updateReport(reportItem.id, { status: "已发送", updatedAt: "刚刚" });
@@ -1042,14 +1029,23 @@ export function DashboardPage() {
         <div className="console-panel">
           <PanelHeader
             icon={<AlertOutlined />}
-            title={`风险项 ${data.risks.length}`}
-            extra={<Button type="link" onClick={() => navigate(riskListUrl)}>查看全部</Button>}
+            title={`待处理风险 ${data.risks.length}`}
           />
           <div className="console-risk-list">
             {data.risks.length > 0 ? (
-              sortRisks(data.risks).map((item) => (
-                <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
-              ))
+              <>
+                <div className="console-risk-list__head">
+                  <span>风险</span>
+                  <span>标题 / 原因</span>
+                  <span>影响对象</span>
+                  <span>负责人</span>
+                  <span>截止</span>
+                  <span>操作</span>
+                </div>
+                {sortRisks(data.risks).map((item) => (
+                  <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
+                ))}
+              </>
             ) : (
               <div className="console-report-status-card">
                 <p>暂无需要关注的风险</p>
@@ -1061,11 +1057,19 @@ export function DashboardPage() {
 
         <div className="console-panel">
           <PanelHeader
-            icon={<ProjectOutlined />}
-            title="我关注的"
-            extra={<Tag>{data.follows.length} 个对象</Tag>}
+            icon={<FlagOutlined />}
+            title="关注对象变化"
+            extra={<Tag>{data.follows.length} 条</Tag>}
           />
           <div className="console-follow-list">
+            <div className="console-follow-list__head">
+              <span>对象 / 状态</span>
+              <span>标题 / 所属</span>
+              <span>负责人</span>
+              <span>截止</span>
+              <span>变化 / 提醒</span>
+              <span>操作</span>
+            </div>
             {sortFollowItems(data.follows).map((item) => (
               <FollowCard key={item.key} item={item} onView={handleFollowAction} />
             ))}
@@ -1134,6 +1138,7 @@ function ReportSection({
   reports,
   variant,
   onOpen,
+  onViewReports,
   onSend
 }: {
   title: string;
@@ -1141,6 +1146,7 @@ function ReportSection({
   reports: ReportItem[];
   variant: "personal" | "summary";
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
+  onViewReports: () => void;
   onSend: (report: ReportItem) => void;
 }) {
   if (variant === "personal") {
@@ -1151,12 +1157,16 @@ function ReportSection({
       <div className="console-panel console-panel--daily">
         <PanelHeader icon={icon} title={title} />
         <div className="console-report-status-card">
-          <Space size={8} wrap>
-            <strong>{dailyReport.name}</strong>
-            <ReportStatusTag status={dailyReport.status} />
-          </Space>
-          <p>{dailyReport.description}</p>
-          <div className="console-report-actions">{renderPrimaryReportAction(dailyReport, onOpen, onSend)}</div>
+          <div className="console-report-card-head">
+            <Space size={8} wrap>
+              <strong>{dailyReport.name}</strong>
+              <ReportStatusTag status={dailyReport.status} />
+            </Space>
+            <div className="console-report-actions console-report-actions--head">
+              {renderPrimaryReportAction(dailyReport, onOpen, onSend)}
+            </div>
+          </div>
+          <p>{getDailyReportCopy(dailyReport)}</p>
           {weeklyReport ? (
             <div className="console-report-history">
               <span>{weeklyReport.name}</span>
@@ -1165,6 +1175,24 @@ function ReportSection({
               {renderWeeklyReportAction(weeklyReport, onOpen)}
             </div>
           ) : null}
+          <div className="console-report-shortcuts" aria-label="报告入口">
+            <button type="button" className="console-report-shortcut" onClick={onViewReports}>
+              <span>
+                <FileTextOutlined />
+                <strong>日报记录</strong>
+              </span>
+              <em>草稿与发送记录</em>
+              <RightOutlined />
+            </button>
+            <button type="button" className="console-report-shortcut" onClick={onViewReports}>
+              <span>
+                <FileDoneOutlined />
+                <strong>周报记录</strong>
+              </span>
+              <em>本周汇总与历史周报</em>
+              <RightOutlined />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1258,8 +1286,8 @@ function renderPrimaryReportAction(
 
   if (report.status === "草稿待确认") {
     return (
-      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看草稿
+      <Button type="primary" icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
+        确认日报草稿
       </Button>
     );
   }
@@ -1282,9 +1310,29 @@ function renderPrimaryReportAction(
 
   return (
     <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-      {report.status === "生成失败" ? "重新生成" : "生成报告"}
+      {report.status === "生成失败" ? "重新生成日报" : "生成日报草稿"}
     </Button>
   );
+}
+
+function getDailyReportCopy(report: ReportItem) {
+  if (report.status === "草稿待确认") {
+    return "已根据今日 AI 工作记录生成草稿，确认内容后即可发送。";
+  }
+
+  if (report.status === "已发送") {
+    return "今日日报已发送，可回看内容和关联的工作记录。";
+  }
+
+  if (report.status === "发送失败") {
+    return "日报发送失败，请检查内容后重试发送。";
+  }
+
+  if (report.status === "生成中") {
+    return "正在根据今日 AI 工作记录生成日报草稿。";
+  }
+
+  return "选择今日 AI 工作记录，生成可确认的日报草稿。";
 }
 
 function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportItem, step?: ReportModalStep) => void) {
@@ -1321,10 +1369,10 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
 
 function getWeeklyReportReminder(report: ReportItem) {
   if (isWeeklyPendingAutoGenerate(report)) {
-    return "本周周报将于周五自动生成。";
+    return "周五自动汇总本周日报与任务记录。";
   }
 
-  return "基于本周日报和任务记录生成。";
+  return "基于本周日报、任务记录和风险变化生成。";
 }
 
 function isWeeklyPendingAutoGenerate(report: ReportItem) {
@@ -1365,22 +1413,24 @@ function SessionUploadCard({
   return (
     <div className="console-panel">
       <PanelHeader
-        icon={<ClockCircleOutlined />}
-        title="Session 上报概况"
-        extra={<Tag color={getSessionUploadStatusColor(report.status)}>{report.status}</Tag>}
+        icon={<BarChartOutlined />}
+        title="Token 统计"
+        extra={
+          <Segmented
+            className="console-token-range"
+            size="small"
+            options={TOKEN_RANGE_OPTIONS}
+            value={range}
+            onChange={(value) => onRangeChange(value as TokenRange)}
+          />
+        }
       />
       <div className="console-report-status-card">
-        <Segmented
-          size="small"
-          options={TOKEN_RANGE_OPTIONS}
-          value={range}
-          onChange={(value) => onRangeChange(value as TokenRange)}
-        />
         {renderSessionUploadSummary(range, report)}
-        <p>数据基于已上传 session 统计。</p>
-        <div className="console-report-actions">
-          <Button icon={<LinkOutlined />} onClick={onViewDetail}>
-            查看明细
+        <div className="console-token-footer">
+          <span>基于已上传 session 解析</span>
+          <Button type="link" icon={<LinkOutlined />} onClick={onViewDetail}>
+            查看 Token 明细
           </Button>
         </div>
       </div>
@@ -1396,63 +1446,160 @@ function getTokenRangeLabel(range: TokenRange) {
 function renderSessionUploadSummary(range: TokenRange, report: TokenReport) {
   if (report.groups && report.groups.length > 0) {
     return (
-      <>
-        <p>{getTokenRangeLabel(range)}各组上报：</p>
-        <div className="console-report-history">
-          {report.groups.map((group) => (
-            <span key={group.name}>
-              {group.name} {renderMiniBar(group.value)} {group.sessions} session，{group.total} Token，{group.uploaders} 人有上报
-            </span>
-          ))}
+      <div className="console-token-overview">
+        <div className="console-token-total">
+          <span>{getTokenRangeLabel(range)}合计</span>
+          <strong>{report.total}</strong>
+          <em>解析 Token</em>
         </div>
-        {report.mine ? <p>其中我的上报：{report.mine.sessions} 个 session，{report.mine.total} Token。</p> : null}
-      </>
+        <TokenGroupBars groups={report.groups} />
+        {report.mine ? <p className="console-token-subnote">我的 Token：{report.mine.total}</p> : null}
+      </div>
     );
   }
 
   if (typeof report.uploaders === "number") {
     return (
-      <>
-        <p>
-          {getTokenRangeLabel(range)}本组有 {report.uploaders} 人上传 session，共 {report.sessions} 个 session，解析 Token {report.total}。
-        </p>
-        <div className="console-report-history">
-          {report.bars.map((bar) => (
-            <span key={bar.label}>
-              {bar.label} {renderMiniBar(bar.value)} {bar.text}
-            </span>
-          ))}
+      <div className="console-token-overview">
+        <div className="console-token-total">
+          <span>{getTokenRangeLabel(range)}本组</span>
+          <strong>{report.total}</strong>
+          <em>解析 Token</em>
         </div>
-        {report.mine ? <p>其中我的上报：{report.mine.sessions} 个 session，{report.mine.total} Token。</p> : null}
-      </>
+        <TokenMiniBars bars={report.bars} />
+        {report.mine ? <p className="console-token-subnote">我的 Token：{report.mine.total}</p> : null}
+      </div>
     );
   }
 
   return (
-    <>
-      <p>
-        {getTokenRangeLabel(range)}已上传 {report.sessions} 个 session，解析 Token {report.total}。
-      </p>
-      <div className="console-report-history">
-        {report.bars.map((bar) => (
-          <span key={bar.label}>
-            {bar.label} {renderMiniBar(bar.value)}
-          </span>
-        ))}
+    <div className="console-token-overview">
+      <div className="console-token-total">
+        <span>{getTokenRangeLabel(range)}</span>
+        <strong>{report.total}</strong>
+        <em>解析 Token</em>
       </div>
-    </>
+      <TokenMiniBars bars={report.bars} />
+    </div>
   );
 }
 
-function renderMiniBar(value: number) {
-  const filled = Math.max(1, Math.min(8, Math.round(value / 12.5)));
-  return "█".repeat(filled);
+function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const option = useMemo<EChartsOption>(() => {
+    const middleIndex = Math.floor((bars.length - 1) / 2);
+
+    return {
+      animation: false,
+      grid: {
+        top: 6,
+        right: 4,
+        bottom: 4,
+        left: 46,
+        containLabel: false
+      },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "none"
+        },
+        borderWidth: 0,
+        padding: [6, 8],
+        textStyle: {
+          color: "#172033",
+          fontSize: 12
+        },
+        formatter: (params: unknown) => {
+          const item = Array.isArray(params) ? params[0] : params;
+          const index =
+            item && typeof item === "object" && "dataIndex" in item
+              ? Number((item as { dataIndex: number }).dataIndex)
+              : 0;
+          const bar = bars[index] ?? bars[0];
+          return `${bar.label}<br />${bar.text}`;
+        }
+      },
+      xAxis: {
+        type: "value",
+        show: false,
+        min: 0
+      },
+      yAxis: {
+        type: "category",
+        inverse: true,
+        data: bars.map((bar) => bar.label),
+        axisTick: { show: false },
+        axisLine: { show: false },
+        axisLabel: {
+          color: "#64748b",
+          fontSize: 11,
+          interval: 0,
+          formatter: (value: string, index: number) =>
+            bars.length <= 3 || index === 0 || index === middleIndex || index === bars.length - 1 ? value : ""
+        }
+      },
+      series: [
+        {
+          type: "bar",
+          data: bars.map((bar) => bar.value),
+          barWidth: bars.length === 1 ? 14 : bars.length <= 3 ? 12 : 6,
+          barMaxWidth: 14,
+          itemStyle: {
+            borderRadius: [999, 999, 999, 999],
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: "#69a6ff" },
+              { offset: 1, color: "#1677ff" }
+            ])
+          },
+          emphasis: {
+            itemStyle: {
+              color: "#0958d9"
+            }
+          }
+        }
+      ]
+    };
+  }, [bars]);
+
+  useEffect(() => {
+    if (!chartRef.current) return undefined;
+
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "svg" });
+    chart.setOption(option);
+
+    const resize = () => chart.resize();
+    window.addEventListener("resize", resize);
+
+    return () => {
+      window.removeEventListener("resize", resize);
+      chart.dispose();
+    };
+  }, [option]);
+
+  return (
+    <div className="console-token-chart" aria-label="Token 趋势">
+      <span className="console-token-chart__caption">按日趋势</span>
+      <div ref={chartRef} className="console-token-echart" />
+    </div>
+  );
 }
 
-function getSessionUploadStatusColor(status: SessionUploadStatus) {
-  if (status === "上报完整" || status === "有上报记录") return "green";
-  if (status === "解析异常") return "orange";
-  return "default";
+function TokenGroupBars({ groups }: { groups: NonNullable<TokenReport["groups"]> }) {
+  const maxValue = Math.max(...groups.map((group) => group.value), 1);
+
+  return (
+    <div className="console-token-group-bars" aria-label="Token 分组分布">
+      {groups.map((group) => (
+        <div key={group.name} className="console-token-group-bars__item">
+          <span>{group.name}</span>
+          <i>
+            <b style={{ width: `${Math.max(8, Math.round((group.value / maxValue) * 100))}%` }} />
+          </i>
+          <em>{group.total}</em>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function getDefaultDraftMarkdown(report: ReportItem) {
@@ -1854,26 +2001,6 @@ function ReportModalContent({
   );
 }
 
-function StatusSignal({
-  label,
-  value,
-  detail,
-  tone
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone: "blue" | "red" | "orange" | "green";
-}) {
-  return (
-    <div className={`console-status-signal console-status-signal--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{detail}</em>
-    </div>
-  );
-}
-
 function ReportStatusTag({ status }: { status: ReportStatus }) {
   const color =
     status === "已发送"
@@ -1891,25 +2018,24 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
 
   return (
     <article className="console-follow-card">
-      <div className="console-follow-card__main">
-        <Space size={8} wrap>
-          <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
-          <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
-        </Space>
+      <Space size={8} wrap>
+        <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
+        <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
+      </Space>
+      <div className="console-follow-card__title">
         <strong>{item.title}</strong>
-        <span>{isTask && item.requirement ? `所属需求：${item.requirement}` : `负责人：${item.owner}`}</span>
+        <span>{isTask && item.requirement ? `所属需求：${item.requirement}` : item.dependency}</span>
       </div>
-      <div className="console-follow-card__meta">
-        <span>负责人：{item.owner}</span>
-        <span>deadline：{item.deadline}</span>
-        {item.dependency ? <span>{item.dependency}</span> : null}
+      <span>{item.owner}</span>
+      <span>{item.deadline}</span>
+      <div className="console-follow-card__reminder">
         <Tag color={item.risk.includes("阻塞") || item.status === "阻塞" ? "red" : "orange"}>
           {item.risk}
         </Tag>
-        {item.activity ? <Tag>{item.activity}</Tag> : null}
+        {item.activity ? <em>{item.activity}</em> : null}
       </div>
       <Button type="link" icon={<RightOutlined />} onClick={() => onView(item)}>
-        查看
+        详情
       </Button>
     </article>
   );
@@ -1931,25 +2057,27 @@ function getFollowPriority(item: FollowItem) {
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
   return (
     <article className={`console-risk-card console-risk-card--${item.tone}`}>
+      <Tag color={riskTagColor[item.tone]}>{item.level} · {item.source}</Tag>
       <div className="console-risk-card__title">
-        <Space size={8} wrap>
-          <Tag color={riskTagColor[item.tone]}>{item.level} · {item.source}</Tag>
-        </Space>
         <strong>{item.title}</strong>
+        <p>{item.reason}</p>
       </div>
-      <div className="console-risk-card__body">
-        <span>{item.target}</span>
-        <span>负责人：{item.owner}</span>
-        <span>
-          <ClockCircleOutlined /> {item.deadline}
-        </span>
-      </div>
-      <p>{item.reason}</p>
+      <span>{item.target}</span>
+      <span>{item.owner}</span>
+      <span>
+        <ClockCircleOutlined /> {item.deadline}
+      </span>
       <Button type="link" icon={<LinkOutlined />} onClick={() => onAction(item)}>
-        {item.actionText}
+        {getRiskActionLabel(item)}
       </Button>
     </article>
   );
+}
+
+function getRiskActionLabel(item: RiskItem) {
+  if (item.riskType === "dependency_blocker") return "处理依赖";
+  if (item.riskType === "deadline") return "查看任务";
+  return item.actionText;
 }
 
 function sortRisks(risks: RiskItem[]) {
@@ -1960,12 +2088,6 @@ function getRiskPriority(risk: RiskItem) {
   if (risk.riskType === "deadline" && risk.source === "已超期") return 1;
   if (risk.riskType === "dependency_blocker") return 2;
   return 3;
-}
-
-function getRiskListUrl(role: PreviewRole) {
-  if (role === "team_leader") return "/requirements?view=risks&scope=team";
-  if (role === "director") return "/requirements?view=risks&scope=followed";
-  return "/requirements?view=risks&scope=mine";
 }
 
 const riskTagColor: Record<RiskTone, string> = {
