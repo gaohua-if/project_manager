@@ -1,6 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const hmrHost = process.env.VITE_DEV_HMR_HOST ?? "192.168.28.25";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -11,6 +13,11 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    strictPort: true,
+    allowedHosts: true,
+    hmr: {
+      host: hmrHost
+    },
     proxy: {
       "/api/v1": {
         target: "http://127.0.0.1:18090",

@@ -362,7 +362,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
   employee: {
     label: "个人",
     userLine: "陈一 · 前端工程师",
-    workCue: "今天有 1 个阻塞任务，日报草稿还没有发送。",
+    workCue: "今天有 1 个阻塞任务，日报还没有发送。",
     personalReports: [
       createReport({
         id: "employee-personal-daily",
@@ -370,7 +370,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日 session 生成日报草稿，请确认后发送。",
+        description: "系统已根据今日 session 生成日报，请确认后发送。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:42",
@@ -488,7 +488,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日 session 生成日报草稿，请确认后发送。",
+        description: "系统已根据今日 session 生成日报，请确认后发送。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:30",
@@ -757,7 +757,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "待生成",
-        description: "今日尚未生成日报，可选择 session 生成草稿。",
+        description: "今日尚未生成日报，可选择 session 生成日报。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         updatedAt: "-"
       }),
@@ -985,8 +985,8 @@ export function DashboardPage() {
           />
         </div>
 
-        <Row gutter={[14, 14]} align="stretch">
-          <Col xs={24} xl={12}>
+        <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
+          <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
             <ReportSection
               title="今日报告"
               icon={<FileTextOutlined />}
@@ -1000,7 +1000,7 @@ export function DashboardPage() {
               }}
             />
           </Col>
-          <Col xs={24} xl={12}>
+          <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
             <div className="console-report-status-card">
               {summaryReports.length > 0 ? (
               <ReportSection
@@ -1181,7 +1181,7 @@ function ReportSection({
                 <FileTextOutlined />
                 <strong>日报记录</strong>
               </span>
-              <em>草稿与发送记录</em>
+              <em>确认与发送记录</em>
               <RightOutlined />
             </button>
             <button type="button" className="console-report-shortcut" onClick={onViewReports}>
@@ -1281,43 +1281,70 @@ function renderPrimaryReportAction(
   onSend: (report: ReportItem) => void
 ) {
   if (report.status === "生成中") {
-    return <Button disabled>生成中</Button>;
+    return (
+      <Button className="console-report-primary-action console-report-primary-action--loading" disabled>
+        生成中
+      </Button>
+    );
   }
 
   if (report.status === "草稿待确认") {
     return (
-      <Button type="primary" icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        确认日报草稿
+      <Button
+        className="console-report-primary-action console-report-primary-action--confirm"
+        type="primary"
+        icon={<EditOutlined />}
+        onClick={() => onOpen(report, "editor")}
+      >
+        确认日报
       </Button>
     );
   }
 
   if (report.status === "已发送") {
     return (
-      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看报告
+      <Button
+        className="console-report-primary-action console-report-primary-action--quiet"
+        icon={<EditOutlined />}
+        onClick={() => onOpen(report, "editor")}
+      >
+        查看日报
       </Button>
     );
   }
 
   if (report.status === "发送失败") {
     return (
-      <Button type="primary" icon={<SendOutlined />} onClick={() => onSend(report)}>
+      <Button
+        className="console-report-primary-action console-report-primary-action--retry"
+        type="primary"
+        icon={<SendOutlined />}
+        onClick={() => onSend(report)}
+      >
         重试发送
       </Button>
     );
   }
 
   return (
-    <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-      {report.status === "生成失败" ? "重新生成日报" : "生成日报草稿"}
+    <Button
+      className={`console-report-primary-action ${
+        report.status === "生成失败"
+          ? "console-report-primary-action--regenerate"
+          : "console-report-primary-action--generate"
+      }`}
+      type="primary"
+      icon={<FileDoneOutlined />}
+      onClick={() => onOpen(report, getGenerateStepForReport(report))}
+    >
+      {report.status === "生成失败" ? "重新生成日报" : "生成日报"}
     </Button>
   );
 }
 
 function getDailyReportCopy(report: ReportItem) {
   if (report.status === "草稿待确认") {
-    return "已根据今日 AI 工作记录生成草稿，确认内容后即可发送。";
+    return "已根据今日 AI 工作记录生成日报，确认内容后即可发送。";
   }
 
   if (report.status === "已发送") {
@@ -1329,10 +1356,10 @@ function getDailyReportCopy(report: ReportItem) {
   }
 
   if (report.status === "生成中") {
-    return "正在根据今日 AI 工作记录生成日报草稿。";
+    return "正在根据今日 AI 工作记录生成日报。";
   }
 
-  return "选择今日 AI 工作记录，生成可确认的日报草稿。";
+  return "选择今日 AI 工作记录，生成可确认的日报。";
 }
 
 function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportItem, step?: ReportModalStep) => void) {
@@ -1493,7 +1520,7 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
       animation: false,
       grid: {
         top: 6,
-        right: 4,
+        right: 60,
         bottom: 4,
         left: 46,
         containLabel: false
@@ -1551,6 +1578,19 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
               { offset: 1, color: "#1677ff" }
             ])
           },
+          label: {
+            show: true,
+            position: "right",
+            color: "#526173",
+            fontSize: 11,
+            formatter: (params: unknown) => {
+              const index =
+                params && typeof params === "object" && "dataIndex" in params
+                  ? Number((params as { dataIndex: number }).dataIndex)
+                  : 0;
+              return bars[index]?.text ?? "";
+            }
+          },
           emphasis: {
             itemStyle: {
               color: "#0958d9"
@@ -1577,8 +1617,8 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
   }, [option]);
 
   return (
-    <div className="console-token-chart" aria-label="Token 趋势">
-      <span className="console-token-chart__caption">按日趋势</span>
+    <div className="console-token-chart" aria-label="每日解析 Token 趋势">
+      <span className="console-token-chart__caption">每日解析 Token</span>
       <div ref={chartRef} className="console-token-echart" />
     </div>
   );
@@ -2010,7 +2050,8 @@ function ReportStatusTag({ status }: { status: ReportStatus }) {
         : status === "草稿待确认" || status === "生成中"
           ? "blue"
           : "gold";
-  return <Tag color={color}>{status}</Tag>;
+  const label = status === "草稿待确认" ? "待确认" : status;
+  return <Tag color={color}>{label}</Tag>;
 }
 
 function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowItem) => void }) {
@@ -2034,7 +2075,12 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
         </Tag>
         {item.activity ? <em>{item.activity}</em> : null}
       </div>
-      <Button type="link" icon={<RightOutlined />} onClick={() => onView(item)}>
+      <Button
+        type="link"
+        icon={<RightOutlined />}
+        aria-label={`查看${item.title}详情`}
+        onClick={() => onView(item)}
+      >
         详情
       </Button>
     </article>
@@ -2057,7 +2103,7 @@ function getFollowPriority(item: FollowItem) {
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
   return (
     <article className={`console-risk-card console-risk-card--${item.tone}`}>
-      <Tag color={riskTagColor[item.tone]}>{item.level} · {item.source}</Tag>
+      <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
       <div className="console-risk-card__title">
         <strong>{item.title}</strong>
         <p>{item.reason}</p>
@@ -2090,9 +2136,3 @@ function getRiskPriority(risk: RiskItem) {
   return 3;
 }
 
-const riskTagColor: Record<RiskTone, string> = {
-  red: "red",
-  orange: "orange",
-  gold: "gold",
-  blue: "blue"
-};
