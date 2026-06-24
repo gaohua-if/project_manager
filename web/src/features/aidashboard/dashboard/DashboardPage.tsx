@@ -923,6 +923,11 @@ export function DashboardPage() {
     updateReport(activeReport.id, { status: "草稿待确认", updatedAt: "刚刚" });
   };
 
+  const goBackReportModalStep = () => {
+    if (!activeReport) return;
+    setReportModalStep(getGenerateStepForReport(activeReport));
+  };
+
   const sendReport = () => {
     if (!activeReport) return;
     updateReport(activeReport.id, { status: "已发送", updatedAt: "刚刚" });
@@ -1074,6 +1079,7 @@ export function DashboardPage() {
           onCancel: () => setIsReportModalOpen(false),
           onNext: startGenerateDraft,
           onGenerate: startGenerateDraft,
+          onBack: goBackReportModalStep,
           onSave: saveDraft,
           onSend: sendReport
         })}
@@ -1295,7 +1301,7 @@ function renderReportActions(
   if (report.status === "已发送") {
     return (
       <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看报告
+        编辑{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1345,7 +1351,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        查看{getReportActionNoun(report)}
+        编辑{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1471,7 +1477,7 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
   if (report.status === "已发送") {
     return (
       <Button type="link" onClick={() => onOpen(report, "editor")}>
-        查看周报
+        编辑周报
       </Button>
     );
   }
@@ -1513,7 +1519,7 @@ function getGenerateStepForReport(report: ReportItem): ReportModalStep {
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
   if (step === "editor") {
-    return report.status === "已发送" ? `查看${report.name}` : `编辑${report.name}`;
+    return `编辑${report.name}`;
   }
 
   return `生成${report.name}`;
@@ -1894,6 +1900,8 @@ function getEditorMeta(report: ReportItem) {
 }
 
 function getSendButtonText(report: ReportItem) {
+  if (report.scope === "team") return report.kind.includes("weekly") ? "发送组周报" : "发送组报";
+  if (report.scope === "department") return report.kind.includes("weekly") ? "发送部门周报" : "发送部门报告";
   return report.kind.includes("weekly") ? "发送周报" : "发送日报";
 }
 
@@ -1905,6 +1913,7 @@ function renderReportModalFooter({
   onCancel,
   onNext,
   onGenerate,
+  onBack,
   onSave,
   onSend
 }: {
@@ -1915,6 +1924,7 @@ function renderReportModalFooter({
   onCancel: () => void;
   onNext: () => void;
   onGenerate: () => void;
+  onBack: () => void;
   onSave: () => void;
   onSend: () => void;
 }) {
@@ -1940,10 +1950,6 @@ function renderReportModalFooter({
     );
   }
 
-  if (report.status === "已发送") {
-    return <Button onClick={onCancel}>关闭</Button>;
-  }
-
   return (
     <Space>
       {modifiedTaskCount > 0 ? (
@@ -1951,6 +1957,7 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
         </span>
       ) : null}
+      <Button onClick={onBack}>上一步</Button>
       <Button onClick={onSave}>保存修改</Button>
       <Button type="primary" icon={<SendOutlined />} onClick={onSend}>
         {getSendButtonText(report)}
@@ -2145,8 +2152,6 @@ function ReportModalContent({
     );
   }
 
-  const isReadOnly = report.status === "已发送";
-
   return (
     <div className="console-report-modal">
       <Steps
@@ -2165,7 +2170,6 @@ function ReportModalContent({
           className="console-markdown-textarea"
           value={draftMarkdown}
           rows={18}
-          readOnly={isReadOnly}
           onChange={(event) => onDraftMarkdownChange(event.target.value)}
         />
         {report.kind === "personal_daily" ? (
