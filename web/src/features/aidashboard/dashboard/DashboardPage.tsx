@@ -9,7 +9,6 @@ import {
   LinkOutlined,
   RightOutlined,
   SendOutlined,
-  TeamOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag } from "antd";
 import * as echarts from "echarts";
@@ -258,9 +257,9 @@ const TOKEN_DATA: Record<PreviewRole, Record<TokenRange, TokenReport>> = {
       sessions: 7,
       uploaders: 5,
       bars: [
-        { label: "已上报成员", value: 52, text: "5 人" },
-        { label: "session", value: 38, text: "7 个" },
-        { label: "Token", value: 32, text: "0.86M" }
+        { label: "成员覆盖", value: 52, text: "5 人" },
+        { label: "Session 数", value: 38, text: "7 个" },
+        { label: "Token 合计", value: 32, text: "0.86M" }
       ],
       mine: { sessions: 1, total: "0.18M" },
       status: "有上报记录"
@@ -270,9 +269,9 @@ const TOKEN_DATA: Record<PreviewRole, Record<TokenRange, TokenReport>> = {
       sessions: 36,
       uploaders: 9,
       bars: [
-        { label: "已上报成员", value: 74, text: "9 人" },
-        { label: "session", value: 86, text: "36 个" },
-        { label: "Token", value: 64, text: "5.28M" }
+        { label: "成员覆盖", value: 74, text: "9 人" },
+        { label: "Session 数", value: 86, text: "36 个" },
+        { label: "Token 合计", value: 64, text: "5.28M" }
       ],
       mine: { sessions: 5, total: "0.86M" },
       status: "有上报记录"
@@ -282,9 +281,9 @@ const TOKEN_DATA: Record<PreviewRole, Record<TokenRange, TokenReport>> = {
       sessions: 64,
       uploaders: 11,
       bars: [
-        { label: "已上报成员", value: 90, text: "11 人" },
-        { label: "session", value: 92, text: "64 个" },
-        { label: "Token", value: 78, text: "9.74M" }
+        { label: "成员覆盖", value: 90, text: "11 人" },
+        { label: "Session 数", value: 92, text: "64 个" },
+        { label: "Token 合计", value: 78, text: "9.74M" }
       ],
       mine: { sessions: 8, total: "1.26M" },
       status: "有上报记录"
@@ -382,7 +381,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成草稿。",
+        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
         sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "-"
       })
@@ -767,7 +766,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成草稿。",
+        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
         sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "-"
       })
@@ -991,6 +990,8 @@ export function DashboardPage() {
               title="今日报告"
               icon={<FileTextOutlined />}
               reports={personalReports}
+              summaryReports={summaryReports}
+              coverage={data.coverage}
               variant="personal"
               onOpen={openReportModal}
               onViewReports={() => navigate("/reports")}
@@ -1001,28 +1002,12 @@ export function DashboardPage() {
             />
           </Col>
           <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
-            <div className="console-report-status-card">
-              {summaryReports.length > 0 ? (
-              <ReportSection
-                title={previewRole === "team_leader" ? "组报告" : "部门报告"}
-                icon={<TeamOutlined />}
-                reports={summaryReports}
-                variant="summary"
-                onOpen={openReportModal}
-                onViewReports={() => navigate("/reports")}
-                onSend={(reportItem) => {
-                  setActiveReportId(reportItem.id);
-                  updateReport(reportItem.id, { status: "已发送", updatedAt: "刚刚" });
-                }}
-              />
-              ) : null}
-              <SessionUploadCard
-                range={tokenRange}
-                report={tokenReport}
-                onRangeChange={setTokenRange}
-                onViewDetail={() => navigate("/tokens")}
-              />
-            </div>
+            <SessionUploadCard
+              range={tokenRange}
+              report={tokenReport}
+              onRangeChange={setTokenRange}
+              onViewDetail={() => navigate("/tokens")}
+            />
           </Col>
         </Row>
 
@@ -1136,6 +1121,8 @@ function ReportSection({
   title,
   icon,
   reports,
+  summaryReports = [],
+  coverage,
   variant,
   onOpen,
   onViewReports,
@@ -1144,6 +1131,8 @@ function ReportSection({
   title: string;
   icon: ReactNode;
   reports: ReportItem[];
+  summaryReports?: ReportItem[];
+  coverage?: ReportCoverage;
   variant: "personal" | "summary";
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
   onViewReports: () => void;
@@ -1152,21 +1141,35 @@ function ReportSection({
   if (variant === "personal") {
     const dailyReport = reports.find((report) => report.kind === "personal_daily") ?? reports[0];
     const weeklyReport = reports.find((report) => report.kind === "personal_weekly");
+    const summaryDailyReport = summaryReports.find(
+      (report) => report.kind === "team_daily" || report.kind === "department_daily"
+    );
+    const summaryWeeklyReport = summaryReports.find(
+      (report) => report.kind === "team_weekly" || report.kind === "department_weekly"
+    );
 
     return (
       <div className="console-panel console-panel--daily">
         <PanelHeader icon={icon} title={title} />
         <div className="console-report-status-card">
-          <div className="console-report-card-head">
-            <Space size={8} wrap>
-              <strong>{dailyReport.name}</strong>
-              <ReportStatusTag status={dailyReport.status} />
-            </Space>
-            <div className="console-report-actions console-report-actions--head">
-              {renderPrimaryReportAction(dailyReport, onOpen, onSend)}
-            </div>
-          </div>
-          <p>{getDailyReportCopy(dailyReport)}</p>
+          <ReportTaskRow
+            label="我的日报"
+            report={dailyReport}
+            description={getDailyReportCopy(dailyReport)}
+            onOpen={onOpen}
+            onSend={onSend}
+          />
+          {summaryDailyReport ? (
+            <ReportTaskRow
+              label={getSummaryReportLabel(summaryDailyReport)}
+              report={summaryDailyReport}
+              description={getSummaryDailyReportCopy(summaryDailyReport)}
+              meta={coverage ? getCoverageSummary(summaryDailyReport, coverage) : undefined}
+              emphasized
+              onOpen={onOpen}
+              onSend={onSend}
+            />
+          ) : null}
           {weeklyReport ? (
             <div className="console-report-history">
               <span>{weeklyReport.name}</span>
@@ -1187,9 +1190,9 @@ function ReportSection({
             <button type="button" className="console-report-shortcut" onClick={onViewReports}>
               <span>
                 <FileDoneOutlined />
-                <strong>周报记录</strong>
+                <strong>{summaryDailyReport ? getSummaryRecordLabel(summaryDailyReport) : "周报记录"}</strong>
               </span>
-              <em>本周汇总与历史周报</em>
+              <em>{summaryWeeklyReport ? getSummaryWeeklyRecordCopy(summaryWeeklyReport) : "本周汇总与历史周报"}</em>
               <RightOutlined />
             </button>
           </div>
@@ -1214,6 +1217,40 @@ function ReportSection({
         ))}
       </div>
     </div>
+  );
+}
+
+function ReportTaskRow({
+  label,
+  report,
+  description,
+  meta,
+  emphasized,
+  onOpen,
+  onSend
+}: {
+  label: string;
+  report: ReportItem;
+  description: string;
+  meta?: string;
+  emphasized?: boolean;
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void;
+  onSend: (report: ReportItem) => void;
+}) {
+  return (
+    <section className={`console-report-task${emphasized ? " console-report-task--summary" : ""}`}>
+      <div className="console-report-card-head">
+        <Space size={8} wrap>
+          <strong>{label}</strong>
+          <ReportStatusTag status={report.status} />
+        </Space>
+        <div className="console-report-actions console-report-actions--head">
+          {renderPrimaryReportAction(report, onOpen, onSend)}
+        </div>
+      </div>
+      <p>{description}</p>
+      {meta ? <span className="console-report-task__meta">{meta}</span> : null}
+    </section>
   );
 }
 
@@ -1246,10 +1283,10 @@ function renderReportActions(
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          查看草稿
+          确认{getReportActionNoun(report)}
         </Button>
         <Button icon={<SendOutlined />} onClick={() => onSend(report)}>
-          发送
+          发送{getReportActionNoun(report)}
         </Button>
       </>
     );
@@ -1269,7 +1306,7 @@ function renderReportActions(
         重试发送
       </Button>
       <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看草稿
+        查看{getReportActionNoun(report)}
       </Button>
     </>
   );
@@ -1296,7 +1333,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        确认日报
+        确认{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1308,7 +1345,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        查看日报
+        查看{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1337,9 +1374,15 @@ function renderPrimaryReportAction(
       icon={<FileDoneOutlined />}
       onClick={() => onOpen(report, getGenerateStepForReport(report))}
     >
-      {report.status === "生成失败" ? "重新生成日报" : "生成日报"}
+      {report.status === "生成失败" ? `重新生成${getReportActionNoun(report)}` : `生成${getReportActionNoun(report)}`}
     </Button>
   );
+}
+
+function getReportActionNoun(report: ReportItem) {
+  if (report.scope === "team") return "组报";
+  if (report.scope === "department") return "部门报告";
+  return "日报";
 }
 
 function getDailyReportCopy(report: ReportItem) {
@@ -1362,6 +1405,56 @@ function getDailyReportCopy(report: ReportItem) {
   return "选择今日 AI 工作记录，生成可确认的日报。";
 }
 
+function getSummaryReportLabel(report: ReportItem) {
+  return report.scope === "department" ? "部门报告" : "组报告";
+}
+
+function getSummaryRecordLabel(report: ReportItem) {
+  return report.scope === "department" ? "部门报告记录" : "组报记录";
+}
+
+function getSummaryDailyReportCopy(report: ReportItem) {
+  if (report.status === "草稿待确认") {
+    return `${getReportActionNoun(report)}已生成，确认后即可发送。`;
+  }
+
+  if (report.status === "已发送") {
+    return `${getReportActionNoun(report)}已发送，可回看汇总内容和来源记录。`;
+  }
+
+  if (report.status === "发送失败") {
+    return `${getReportActionNoun(report)}发送失败，请检查发送目标后重试。`;
+  }
+
+  if (report.status === "生成中") {
+    return `正在汇总成员报告、任务风险和阻塞情况。`;
+  }
+
+  if (report.status === "生成失败") {
+    return `${getReportActionNoun(report)}生成失败，请根据提交覆盖情况重新生成。`;
+  }
+
+  return report.scope === "department"
+    ? "基于各组报告、部门风险和重点需求生成部门报告。"
+    : "基于组内成员日报、任务风险和阻塞情况生成组报。";
+}
+
+function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
+  if (report.scope === "department") {
+    return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 组未提交${
+      coverage.failed > 0 ? ` · ${coverage.failed} 组发送失败` : ""
+    }`;
+  }
+
+  return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 人未提交${
+    coverage.failed > 0 ? ` · ${coverage.failed} 人发送失败` : ""
+  }`;
+}
+
+function getSummaryWeeklyRecordCopy(report: ReportItem) {
+  return report.scope === "department" ? "部门汇总与历史报告" : "组内汇总与历史组报";
+}
+
 function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportItem, step?: ReportModalStep) => void) {
   if (isWeeklyPendingAutoGenerate(report)) {
     return null;
@@ -1370,7 +1463,7 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
   if (report.status === "草稿待确认" || report.status === "发送失败") {
     return (
       <Button type="link" onClick={() => onOpen(report, "editor")}>
-        查看草稿
+        确认周报
       </Button>
     );
   }
@@ -1420,7 +1513,7 @@ function getGenerateStepForReport(report: ReportItem): ReportModalStep {
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
   if (step === "editor") {
-    return report.status === "已发送" ? `查看${report.name}` : `编辑${report.name}草稿`;
+    return report.status === "已发送" ? `查看${report.name}` : `编辑${report.name}`;
   }
 
   return `生成${report.name}`;
@@ -1438,7 +1531,7 @@ function SessionUploadCard({
   onViewDetail: () => void;
 }) {
   return (
-    <div className="console-panel">
+    <div className="console-panel console-panel--token">
       <PanelHeader
         icon={<BarChartOutlined />}
         title="Token 统计"
@@ -1473,28 +1566,32 @@ function getTokenRangeLabel(range: TokenRange) {
 function renderSessionUploadSummary(range: TokenRange, report: TokenReport) {
   if (report.groups && report.groups.length > 0) {
     return (
-      <div className="console-token-overview">
-        <div className="console-token-total">
-          <span>{getTokenRangeLabel(range)}合计</span>
-          <strong>{report.total}</strong>
-          <em>解析 Token</em>
+      <div className="console-token-scope">
+        <TokenPersonalSummary range={range} report={report} />
+        <div className="console-token-scope-main">
+          <div className="console-token-scope-head">
+            <span>各组 Token</span>
+            <strong>{report.total}</strong>
+            <em>{report.sessions} 个 session · {report.groups.length} 个组已上报</em>
+          </div>
+          <TokenGroupBars groups={report.groups} />
         </div>
-        <TokenGroupBars groups={report.groups} />
-        {report.mine ? <p className="console-token-subnote">我的 Token：{report.mine.total}</p> : null}
       </div>
     );
   }
 
   if (typeof report.uploaders === "number") {
     return (
-      <div className="console-token-overview">
-        <div className="console-token-total">
-          <span>{getTokenRangeLabel(range)}本组</span>
-          <strong>{report.total}</strong>
-          <em>解析 Token</em>
+      <div className="console-token-scope">
+        <TokenPersonalSummary range={range} report={report} />
+        <div className="console-token-scope-main">
+          <div className="console-token-scope-head">
+            <span>本组 Token</span>
+            <strong>{report.total}</strong>
+            <em>{report.sessions} 个 session · {report.uploaders} 人已上报</em>
+          </div>
+          <TokenMetricBars bars={report.bars} />
         </div>
-        <TokenMiniBars bars={report.bars} />
-        {report.mine ? <p className="console-token-subnote">我的 Token：{report.mine.total}</p> : null}
       </div>
     );
   }
@@ -1507,6 +1604,21 @@ function renderSessionUploadSummary(range: TokenRange, report: TokenReport) {
         <em>解析 Token</em>
       </div>
       <TokenMiniBars bars={report.bars} />
+    </div>
+  );
+}
+
+function TokenPersonalSummary({ range, report }: { range: TokenRange; report: TokenReport }) {
+  const sessions = report.mine?.sessions ?? report.sessions;
+  const total = report.mine?.total ?? report.total;
+
+  return (
+    <div className="console-token-personal">
+      <span>
+        <strong>我的 Token</strong>
+        <em>{getTokenRangeLabel(range)} · {sessions} 个 session</em>
+      </span>
+      <b>{total}</b>
     </div>
   );
 }
@@ -1624,6 +1736,24 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
   );
 }
 
+function TokenMetricBars({ bars }: { bars: TokenReport["bars"] }) {
+  const maxValue = Math.max(...bars.map((bar) => bar.value), 1);
+
+  return (
+    <div className="console-token-metric-bars" aria-label="Token 上报摘要">
+      {bars.map((bar) => (
+        <div key={bar.label} className="console-token-metric-bars__item">
+          <span>{bar.label}</span>
+          <i>
+            <b style={{ width: `${Math.max(8, Math.round((bar.value / maxValue) * 100))}%` }} />
+          </i>
+          <em>{bar.text}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TokenGroupBars({ groups }: { groups: NonNullable<TokenReport["groups"]> }) {
   const maxValue = Math.max(...groups.map((group) => group.value), 1);
 
@@ -1631,7 +1761,12 @@ function TokenGroupBars({ groups }: { groups: NonNullable<TokenReport["groups"]>
     <div className="console-token-group-bars" aria-label="Token 分组分布">
       {groups.map((group) => (
         <div key={group.name} className="console-token-group-bars__item">
-          <span>{group.name}</span>
+          <span>
+            <strong>{group.name}</strong>
+            <small title={`${group.uploaders} 人 · ${group.sessions} 个 session`}>
+              {group.uploaders} 人 · {group.sessions} 次
+            </small>
+          </span>
           <i>
             <b style={{ width: `${Math.max(8, Math.round((group.value / maxValue) * 100))}%` }} />
           </i>
@@ -1726,10 +1861,10 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 
 function getReportSourceSteps(report: ReportItem) {
   if (report.kind === "personal_daily") {
-    return [{ title: "选择 session" }, { title: "编辑草稿" }];
+    return [{ title: "选择 session" }, { title: "编辑内容" }];
   }
 
-  return [{ title: "确认来源" }, { title: "编辑草稿" }];
+  return [{ title: "确认来源" }, { title: "编辑内容" }];
 }
 
 function getReportSourceTitle(report: ReportItem) {
@@ -1747,7 +1882,7 @@ function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
     return `各组提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}，发送失败 ${coverage.failed}`;
   }
 
-  return "系统将读取本周个人日报、任务、风险与阻塞生成草稿。";
+  return "系统将读取本周个人日报、任务、风险与阻塞生成报告。";
 }
 
 function getEditorMeta(report: ReportItem) {
@@ -1799,7 +1934,7 @@ function renderReportModalFooter({
       <Space>
         <Button onClick={onCancel}>取消</Button>
         <Button type="primary" onClick={onGenerate}>
-          生成草稿
+          生成报告
         </Button>
       </Space>
     );
@@ -1816,7 +1951,7 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
         </span>
       ) : null}
-      <Button onClick={onSave}>保存草稿</Button>
+      <Button onClick={onSave}>保存修改</Button>
       <Button type="primary" icon={<SendOutlined />} onClick={onSend}>
         {getSendButtonText(report)}
       </Button>
