@@ -1,7 +1,9 @@
 import type {
   CreateMockRequirementInput,
   CreateMockTaskInput,
+  FavoriteTargetType,
   MockAssignee,
+  MockFavorite,
   MockRequirement,
   MockTask,
   MockTaskStatus,
@@ -448,6 +450,16 @@ let tasks: MockTask[] = [
   }
 ];
 
+const CURRENT_USER_ID = "user-current";
+let favorites: MockFavorite[] = [
+  {
+    user_id: CURRENT_USER_ID,
+    target_type: "requirement",
+    target_id: "req-002",
+    created_at: "2026-06-22T08:00:00Z"
+  }
+];
+
 function wait(ms = 180) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -658,5 +670,40 @@ export const requirementsBoardMockApi = {
     };
     tasks = tasks.map((item) => (item.id === taskId ? updated : item));
     return updated;
+  },
+
+  async listFavorites() {
+    await wait(80);
+    return favorites.filter((item) => item.user_id === CURRENT_USER_ID).map((item) => ({ ...item }));
+  },
+
+  async toggleFavorite(target_type: FavoriteTargetType, target_id: string) {
+    await wait(80);
+    if (target_type === "requirement" && !requirements.some((item) => item.id === target_id)) {
+      throw new Error("需求不存在或已被删除");
+    }
+    if (target_type === "task" && !tasks.some((item) => item.id === target_id)) {
+      throw new Error("任务不存在或已被删除");
+    }
+    const existed = favorites.find(
+      (item) =>
+        item.user_id === CURRENT_USER_ID &&
+        item.target_type === target_type &&
+        item.target_id === target_id
+    );
+    if (existed) {
+      favorites = favorites.filter((item) => item !== existed);
+      return { favorited: false, target_type, target_id };
+    }
+    favorites = [
+      ...favorites,
+      {
+        user_id: CURRENT_USER_ID,
+        target_type,
+        target_id,
+        created_at: now()
+      }
+    ];
+    return { favorited: true, target_type, target_id };
   }
 };

@@ -216,6 +216,11 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 		toolCallsJSON, _ := json.Marshal(su.ToolCalls)
 		gitCommits := arrayToTextArray(su.GitCommits)
 
+		agentType := su.AgentType
+		if agentType == "" {
+			agentType = "claude_code"
+		}
+
 		var existingID string
 		err := h.db.QueryRow(
 			"SELECT id FROM sessions WHERE session_ref = $1 AND user_id = $2",
@@ -227,9 +232,9 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 		if err == sql.ErrNoRows {
 			err := h.db.QueryRow(`
 				INSERT INTO sessions (session_ref, user_id, agent_type, started_at, ended_at, duration_secs, model, summary, tool_calls_json, git_commits, models)
-				VALUES ($1, $2, 'claude_code', $3, $4, $5, $6, $7, $8, $9, $10)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				RETURNING id`,
-				su.SessionRef, u.ID, su.StartedAt, su.EndedAt, su.DurationSecs,
+				su.SessionRef, u.ID, agentType, su.StartedAt, su.EndedAt, su.DurationSecs,
 				su.Model, su.Summary, toolCallsJSON, gitCommits,
 				pq.Array(sessionModels(su)),
 			).Scan(&sessionID)
@@ -241,10 +246,10 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 			status = "updated"
 			_, err := h.db.Exec(`
 				UPDATE sessions
-				SET started_at = $3, ended_at = $4, duration_secs = $5, model = $6,
-					summary = $7, tool_calls_json = $8, git_commits = $9, models = $10, uploaded_at = now()
+				SET agent_type = $3, started_at = $4, ended_at = $5, duration_secs = $6, model = $7,
+					summary = $8, tool_calls_json = $9, git_commits = $10, models = $11, uploaded_at = now()
 				WHERE id = $1 AND user_id = $2`,
-				sessionID, u.ID, su.StartedAt, su.EndedAt, su.DurationSecs,
+				sessionID, u.ID, agentType, su.StartedAt, su.EndedAt, su.DurationSecs,
 				su.Model, su.Summary, toolCallsJSON, gitCommits,
 				pq.Array(sessionModels(su)),
 			)
@@ -324,14 +329,19 @@ func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.Se
 		models = []string{su.Model}
 	}
 
+	agentType := su.AgentType
+	if agentType == "" {
+		agentType = "claude_code"
+	}
+
 	if _, err := tx.Exec(`
 		INSERT INTO token_usage (session_id, user_id, task_id, requirement_id, agent_type, model,
 			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, models)
-		SELECT $1, $2, s.task_id, s.requirement_id, 'claude_code', $3,
-			$4, $5, $6, $7, $8, $9
+		SELECT $1, $2, s.task_id, s.requirement_id, $3, $4,
+			$5, $6, $7, $8, $9, $10
 		FROM sessions s
 		WHERE s.id = $1`,
-		sessionID, userID, su.Model,
+		sessionID, userID, agentType, su.Model,
 		su.TokenUsage.InputTokens, su.TokenUsage.OutputTokens,
 		su.TokenUsage.CacheCreationTokens, su.TokenUsage.CacheReadTokens,
 		su.TokenUsage.TotalTokens, pq.Array(models),
@@ -453,6 +463,7 @@ func (h *SessionHandler) DownloadLog(w http.ResponseWriter, r *http.Request) {
 
 func (h *SessionHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	u := getUser(r)
 	var req model.UpdateSessionTaskRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
@@ -464,12 +475,55 @@ func (h *SessionHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", *req.TaskID).Scan(&reqID)
 	}
 
-	_, err := h.db.Exec("UPDATE sessions SET task_id = $1, requirement_id = $2 WHERE id = $3",
-		req.TaskID, reqID, id)
+	res, err := h.db.Exec(`
+		UPDATE sessions
+		SET task_id = $1, requirement_id = $2
+		WHERE id = $3 AND (user_id = $4 OR $5 = 'admin')`,
+		req.TaskID, reqID, id, u.ID, u.Role)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		return
+	}
+	_, _ = h.db.Exec("UPDATE token_usage SET task_id = $1, requirement_id = $2 WHERE session_id = $3", req.TaskID, reqID, id)
+	h.Get(w, r)
+}
+
+func (h *SessionHandler) UpdateRequirement(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	var req model.UpdateSessionRequirementRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.RequirementID != nil && *req.RequirementID != "" {
+		var exists bool
+		if err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)", *req.RequirementID).Scan(&exists); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if !exists {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "requirement not found"})
+			return
+		}
+	}
+	res, err := h.db.Exec(`
+		UPDATE sessions
+		SET task_id = NULL, requirement_id = $1
+		WHERE id = $2 AND (user_id = $3 OR $4 = 'admin')`, req.RequirementID, id, u.ID, u.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		return
+	}
+	_, _ = h.db.Exec("UPDATE token_usage SET task_id = NULL, requirement_id = $1 WHERE session_id = $2", req.RequirementID, id)
 	h.Get(w, r)
 }
 

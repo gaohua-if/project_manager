@@ -49,6 +49,8 @@ func main() {
 	docH := handler.NewDocumentHandler(database)
 	tokenH := handler.NewTokenHandler(database)
 	teamH := handler.NewTeamHandler(database)
+	followH := handler.NewFollowHandler(database)
+	dashboardH := handler.NewDashboardHandler(database)
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
@@ -88,14 +90,22 @@ func main() {
 		r.Get("/tasks/{id}", taskH.Get)
 		r.Put("/tasks/{id}", taskH.Update)
 		r.Put("/tasks/{id}/status", taskH.UpdateStatus)
+		r.Put("/tasks/{id}/progress", taskH.UpdateProgress)
 		r.Post("/tasks/{id}/dependencies", taskH.AddDependency)
 		r.Delete("/tasks/{id}/dependencies/{dep_id}", taskH.RemoveDependency)
+
+		r.Get("/follows", followH.List)
+		r.Post("/follows", followH.Follow)
+		r.Delete("/follows/{target_type}/{target_id}", followH.Unfollow)
+		r.Get("/dashboard/follows", dashboardH.Follows)
+		r.Get("/dashboard/risks", dashboardH.Risks)
 
 		r.Post("/sessions/batch", sessionH.BatchUpload)
 		r.Get("/sessions", sessionH.List)
 		r.Get("/sessions/{id}", sessionH.Get)
 		r.Get("/sessions/{id}/log", sessionH.DownloadLog)
 		r.Put("/sessions/{id}/task", sessionH.UpdateTask)
+		r.Put("/sessions/{id}/requirement", sessionH.UpdateRequirement)
 		r.Delete("/sessions/{id}", sessionH.Withdraw)
 
 		r.Get("/documents", docH.List)

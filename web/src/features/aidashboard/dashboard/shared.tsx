@@ -118,7 +118,9 @@ const TASK_STATUS_META: Record<TaskStatus, { color: string; label: string }> = {
 };
 
 const REQ_STATUS_META: Record<RequirementStatus, { color: string; label: string }> = {
-  active: { color: "processing", label: "进行中" },
+	todo: { color: "default", label: "待开始" },
+	review: { color: "purple", label: "评审" },
+	active: { color: "processing", label: "进行中" },
   completed: { color: "success", label: "已完成" },
   cancelled: { color: "default", label: "已取消" }
 };

@@ -1,0 +1,159 @@
+.org-user-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.org-user-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--hero-bar, #2563eb);
+}
+
+.org-user-hero.is-danger::before {
+  background: #dc2626;
+}
+
+.org-user-hero.role-admin {
+  --hero-bar: #dc2626;
+}
+
+.org-user-hero.role-director {
+  --hero-bar: #2563eb;
+}
+
+.org-user-hero.role-pm {
+  --hero-bar: #7c3aed;
+}
+
+.org-user-hero.role-team_leader {
+  --hero-bar: #d97706;
+}
+
+.org-user-hero.role-employee {
+  --hero-bar: #059669;
+}
+
+.org-user-hero__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 50%;
+  background: var(--hero-bar, #2563eb);
+  box-shadow: 0 4px 10px rgba(28, 39, 67, 0.12);
+}
+
+.org-user-hero__body {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+
+.org-user-hero__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.org-user-hero__title strong {
+  color: #172033;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.org-user-hero__employee-id {
+  display: inline-flex;
+  padding: 1px 8px;
+  color: #475569;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.org-user-hero__chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #526173;
+  font-size: 12px;
+}
+
+.org-user-hero__team {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  color: #1d4ed8;
+  background: #eef5ff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.org-user-hero__email {
+  color: #7a879a;
+  font-size: 12px;
+}
+
+.org-user-hero .org-role-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.org-user-hero .org-role-tag.is-admin {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.org-user-hero .org-role-tag.is-director {
+  color: #1d4ed8;
+  background: #eef5ff;
+}
+
+.org-user-hero .org-role-tag.is-pm {
+  color: #6d28d9;
+  background: #f3edff;
+}
+
+.org-user-hero .org-role-tag.is-team_leader {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.org-user-hero .org-role-tag.is-employee {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.org-reset-warning {
+  margin-bottom: 14px;
+}
+
+.org-result-wrap {
+  padding: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}

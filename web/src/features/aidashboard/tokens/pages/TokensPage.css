@@ -1,0 +1,121 @@
+.tokens-page {
+  width: 100%;
+}
+
+.tokens-page .page-panel__body {
+  gap: 16px;
+}
+
+.tokens-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.06) 0, rgba(37, 99, 235, 0) 32%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.tokens-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #526173;
+  font-size: 12px;
+}
+
+.tokens-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tokens-toolbar .ant-segmented {
+  padding: 4px;
+  background: #f4f7fb;
+  border: 1px solid #e5eaf3;
+}
+
+.tokens-toolbar .ant-picker {
+  height: 38px;
+  border-radius: 9px;
+  border-color: #dfe8f2;
+}
+
+.tokens-table-card {
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.tokens-table-card .ant-table-thead > tr > th {
+  height: 44px;
+  background: #f8fafc;
+  color: #526173;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.tokens-table-card .ant-table-tbody > tr > td {
+  height: 48px;
+}
+
+.tokens-session-ref {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  color: #2563eb;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  background: #eef5ff;
+  border-radius: 6px;
+}
+
+.tokens-agent-tag {
+  margin: 0;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 0;
+}
+
+.tokens-agent-tag.is-claude {
+  color: #6d28d9;
+  background: #f3edff;
+}
+
+.tokens-agent-tag.is-codex {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.tokens-agent-tag.is-other {
+  color: #475569;
+  background: #eef1f6;
+}
+
+.tokens-cache-cell {
+  color: #047857;
+  font-weight: 600;
+}
+
+.tokens-total-cell {
+  color: #172033;
+  font-weight: 700;
+}
+
+.tokens-table-card .ant-table-summary > tr {
+  background: #f8fafc;
+}
+
+.tokens-table-card .ant-table-summary > tr > td {
+  border-top: 1px solid #dfe8f2;
+  font-weight: 700;
+}

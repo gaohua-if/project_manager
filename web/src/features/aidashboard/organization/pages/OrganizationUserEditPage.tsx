@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import "../../aidashboard-pattern.css";
 import { adminUpdateUser, fetchTeams, fetchUsers } from "../../api/client";
+import { UserHero } from "../components/UserHero";
 import { useAuth } from "@/shared/auth/authContext";
 import { ROLE_LABELS, type UserRole } from "@/shared/auth/types";
 import { FormPageWrap } from "@/shared/components/FormPageWrap/FormPageWrap";
@@ -20,6 +21,14 @@ interface EditFormValues {
   team_id: string;
 }
 
+const ROLE_TONE_DOT: Record<UserRole, string> = {
+  admin: "#dc2626",
+  director: "#2563eb",
+  pm: "#7c3aed",
+  team_leader: "#d97706",
+  employee: "#059669"
+};
+
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [
   { value: "employee", label: ROLE_LABELS.employee },
   { value: "team_leader", label: ROLE_LABELS.team_leader },
@@ -27,6 +36,31 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [
   { value: "director", label: ROLE_LABELS.director },
   { value: "admin", label: ROLE_LABELS.admin }
 ];
+
+function ResultPanel({
+  status,
+  title,
+  subTitle,
+  backTo
+}: {
+  status: "403" | "404";
+  title: string;
+  subTitle: string;
+  backTo: string;
+}) {
+  return (
+    <PagePanel
+      title="编辑成员"
+      className="aidashboard-form-page"
+      backTo={backTo}
+      breadcrumbs={[{ title: "组织", path: "/organization" }, { title: "编辑成员" }]}
+    >
+      <div className="org-result-wrap">
+        <Result status={status} title={title} subTitle={subTitle} />
+      </div>
+    </PagePanel>
+  );
+}
 
 export function OrganizationUserEditPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -96,18 +130,37 @@ export function OrganizationUserEditPage() {
   };
 
   if (currentUser?.role !== "admin") {
-    return <Result status="403" title="暂无权限" subTitle="仅管理员可编辑用户角色和团队。" />;
+    return (
+      <ResultPanel
+        status="403"
+        title="暂无权限"
+        subTitle="仅管理员可编辑用户角色和团队。"
+        backTo={backTo}
+      />
+    );
   }
 
   if (usersQuery.isLoading || teamsQuery.isLoading) return <PageSkeleton rows={8} />;
 
   if (!editingUser) {
-    return <Result status="404" title="用户不存在" subTitle="该用户可能已被删除。" />;
+    return (
+      <ResultPanel
+        status="404"
+        title="用户不存在"
+        subTitle="该用户可能已被删除。"
+        backTo={backTo}
+      />
+    );
   }
 
   if (editingUser.id === currentUser.id) {
     return (
-      <Result status="403" title="不能编辑自己" subTitle="请使用其他管理员账号调整当前账号。" />
+      <ResultPanel
+        status="403"
+        title="不能编辑自己"
+        subTitle="请使用其他管理员账号调整当前账号。"
+        backTo={backTo}
+      />
     );
   }
 
@@ -125,6 +178,7 @@ export function OrganizationUserEditPage() {
         { title: editingUser.name }
       ]}
     >
+      <UserHero user={editingUser} />
       <FormPageWrap className="aidashboard-form-wrap" maxWidth="100%" density="cozy" card>
         <Spin spinning={submitting}>
           {formError ? (
@@ -154,7 +208,23 @@ export function OrganizationUserEditPage() {
                 name="role"
                 rules={[{ required: true, message: "请选择角色" }]}
               >
-                <Select className="form-item-box" options={ROLE_OPTIONS} />
+                <Select
+                  className="form-item-box"
+                  options={ROLE_OPTIONS}
+                  optionRender={(opt) => (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: ROLE_TONE_DOT[opt.data.value as UserRole]
+                        }}
+                      />
+                      {opt.label}
+                    </span>
+                  )}
+                />
               </Form.Item>
               <Form.Item label="团队" name="team_id">
                 <Select

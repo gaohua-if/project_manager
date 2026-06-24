@@ -12,7 +12,7 @@ import { useFormLeaveConfirm } from "@/shared/hooks/useFormLeaveConfirm";
 import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
-import { requirementsBoardMockApi } from "../mock/requirementsBoardMockApi";
+import { requirementsBoardApi } from "../api/requirementsBoardApi";
 import type { MockRequirement, RequirementPriority } from "../mock/types";
 
 interface CreateFormValues {
@@ -36,13 +36,13 @@ export function RequirementCreatePage() {
 
   const teamsQuery = useQuery({
     queryKey: ["requirements-board", "teams"],
-    queryFn: () => requirementsBoardMockApi.listTeams(),
+    queryFn: () => requirementsBoardApi.listTeams(),
     staleTime: 5 * 60_000
   });
 
   const createMutation = useMutation({
     mutationFn: (values: CreateFormValues) =>
-      requirementsBoardMockApi.createRequirement({
+      requirementsBoardApi.createRequirement({
         title: values.title.trim(),
         description: values.description.trim(),
         priority: values.priority,

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aidashboard/api/model"
+	"github.com/aidashboard/api/service"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -23,7 +25,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT t.id, t.requirement_id, r.title as req_title, t.title,
 			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name,''),
-			t.creator_tl_id, t.status, t.priority, t.due_date,
+			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
@@ -58,8 +60,10 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 			argIdx++
 		}
 	case "employee":
-		query += fmt.Sprintf(" AND t.assignee_id = $%d", argIdx)
-		args = append(args, u.ID)
+		if r.URL.Query().Get("scope") != "requirements" {
+			query += fmt.Sprintf(" AND t.assignee_id = $%d", argIdx)
+			args = append(args, u.ID)
+		}
 	}
 
 	query += " ORDER BY t.created_at DESC"
@@ -78,14 +82,20 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		var dueDate sql.NullString
 		var assigneeID sql.NullString
 		var assigneeName sql.NullString
-		rows.Scan(&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
+		var completedAt sql.NullTime
+		if err := rows.Scan(&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
 			&acStr, &assigneeID, &assigneeName,
-			&t.CreatorTLID, &t.Status, &t.Priority, &dueDate,
-			&t.CreatedAt, &t.UpdatedAt)
+			&t.CreatorTLID, &t.Status, &t.Priority, &t.Progress, &dueDate, &completedAt,
+			&t.CreatedAt, &t.UpdatedAt); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		t.AcceptanceCriteriaIDs = parseIntArray(acStr)
 		t.AssigneeID = nullStringPtr(assigneeID)
 		t.AssigneeName = nullStringPtr(assigneeName)
 		t.DueDate = nullStringPtr(dueDate)
+		t.CompletedAt = nullTimePtr(completedAt)
+		h.enrichTask(&t, u.ID)
 		tasks = append(tasks, t)
 	}
 	if err := rows.Err(); err != nil {
@@ -103,11 +113,12 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var dueDate sql.NullString
 	var assigneeID sql.NullString
 	var assigneeName sql.NullString
+	var completedAt sql.NullTime
 
 	err := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name,''),
-			t.creator_tl_id, t.status, t.priority, t.due_date,
+			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
@@ -115,7 +126,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 		WHERE t.id = $1`, id).Scan(
 		&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
 		&acStr, &assigneeID, &assigneeName,
-		&t.CreatorTLID, &t.Status, &t.Priority, &dueDate,
+		&t.CreatorTLID, &t.Status, &t.Priority, &t.Progress, &dueDate, &completedAt,
 		&t.CreatedAt, &t.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -127,15 +138,15 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	t.AssigneeID = nullStringPtr(assigneeID)
 	t.AssigneeName = nullStringPtr(assigneeName)
 	t.DueDate = nullStringPtr(dueDate)
-
-	h.loadDeps(&t)
+	t.CompletedAt = nullTimePtr(completedAt)
+	h.enrichTask(&t, getUser(r).ID)
 	writeJSON(w, http.StatusOK, t)
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	if u.Role != "team_leader" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can create tasks"})
+	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm" && u.Role != "team_leader") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to create tasks"})
 		return
 	}
 
@@ -149,10 +160,6 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement_id and title required"})
 		return
 	}
-	if u.TeamID == nil {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "team leader must belong to a team"})
-		return
-	}
 	if req.AssigneeID == nil || *req.AssigneeID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "assignee_id is required"})
 		return
@@ -162,11 +169,20 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var assigneeOK bool
-	err := h.db.QueryRow(`
-		SELECT EXISTS(
-			SELECT 1 FROM users
-			WHERE id = $1 AND role = 'employee' AND team_id = $2
-		)`, *req.AssigneeID, *u.TeamID).Scan(&assigneeOK)
+	var err error
+	if u.Role == "team_leader" {
+		if u.TeamID == nil {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "team leader must belong to a team"})
+			return
+		}
+		err = h.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM users
+				WHERE id = $1 AND role = 'employee' AND team_id = $2
+			)`, *req.AssigneeID, *u.TeamID).Scan(&assigneeOK)
+	} else {
+		err = h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)", *req.AssigneeID).Scan(&assigneeOK)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -177,11 +193,15 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var requirementOK bool
-	err = h.db.QueryRow(`
-		SELECT EXISTS(
-			SELECT 1 FROM requirement_teams
-			WHERE requirement_id = $1 AND team_id = $2
-		)`, req.RequirementID, *u.TeamID).Scan(&requirementOK)
+	if u.Role == "team_leader" {
+		err = h.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM requirement_teams
+				WHERE requirement_id = $1 AND team_id = $2
+			)`, req.RequirementID, *u.TeamID).Scan(&requirementOK)
+	} else {
+		err = h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)", req.RequirementID).Scan(&requirementOK)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -189,6 +209,12 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !requirementOK {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement is not assigned to your team"})
 		return
+	}
+	for _, depID := range req.DependsOnIDs {
+		if err := h.validateDependency(req.RequirementID, "", depID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 	}
 
 	var taskID string
@@ -204,8 +230,12 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, depID := range req.DependsOnIDs {
-		h.db.Exec("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES ($1, $2)", taskID, depID)
+		if _, err := h.db.Exec("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", taskID, depID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 	}
+	h.updateRequirementProgress(taskID)
 
 	writeJSON(w, http.StatusCreated, map[string]string{"id": taskID, "status": "created"})
 }
@@ -215,6 +245,14 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req model.UpdateTaskRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Status != nil && !isStoredTaskStatus(*req.Status) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status; blocked is derived from dependencies"})
+		return
+	}
+	if req.Progress != nil && (*req.Progress < 0 || *req.Progress > 100) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "progress must be between 0 and 100"})
 		return
 	}
 
@@ -236,6 +274,11 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, fmt.Sprintf("status = $%d", argIdx))
 		args = append(args, *req.Status)
 		argIdx++
+		if *req.Status == "done" {
+			sets = append(sets, "progress = 100", "completed_at = now()")
+		} else {
+			sets = append(sets, "completed_at = NULL")
+		}
 	}
 	if req.Priority != nil {
 		sets = append(sets, fmt.Sprintf("priority = $%d", argIdx))
@@ -250,6 +293,11 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.AcceptanceCriteriaIDs != nil {
 		sets = append(sets, fmt.Sprintf("acceptance_criteria_ids = $%d", argIdx))
 		args = append(args, intArrayToPG(*req.AcceptanceCriteriaIDs))
+		argIdx++
+	}
+	if req.Progress != nil && (req.Status == nil || *req.Status != "done") {
+		sets = append(sets, fmt.Sprintf("progress = $%d", argIdx))
+		args = append(args, *req.Progress)
 		argIdx++
 	}
 
@@ -273,9 +321,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Status != nil && *req.Status == "done" {
-		h.updateRequirementProgress(id)
-	}
+	h.updateRequirementProgress(id)
 
 	h.Get(w, r)
 }
@@ -288,13 +334,18 @@ func (h *TaskHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validStatuses := map[string]bool{"todo": true, "in_progress": true, "done": true, "blocked": true}
-	if !validStatuses[req.Status] {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status"})
+	if !isStoredTaskStatus(req.Status) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status; blocked is derived from dependencies"})
 		return
 	}
 
-	res, err := h.db.Exec("UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2", req.Status, id)
+	res, err := h.db.Exec(`
+		UPDATE tasks
+		SET status = $1,
+			progress = CASE WHEN $1 = 'done' THEN 100 ELSE progress END,
+			completed_at = CASE WHEN $1 = 'done' THEN now() ELSE NULL END,
+			updated_at = now()
+		WHERE id = $2`, req.Status, id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -304,10 +355,32 @@ func (h *TaskHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Status == "done" {
-		h.updateRequirementProgress(id)
-	}
+	h.updateRequirementProgress(id)
 
+	h.Get(w, r)
+}
+
+func (h *TaskHandler) UpdateProgress(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req model.UpdateTaskProgressRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Progress < 0 || req.Progress > 100 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "progress must be between 0 and 100"})
+		return
+	}
+	res, err := h.db.Exec("UPDATE tasks SET progress = $1, updated_at = now() WHERE id = $2", req.Progress, id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	h.updateRequirementProgress(id)
 	h.Get(w, r)
 }
 
@@ -319,7 +392,20 @@ func (h *TaskHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.db.Exec("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES ($1, $2)", taskID, req.DependsOnID)
+	var requirementID string
+	if err := h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", taskID).Scan(&requirementID); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := h.validateDependency(requirementID, taskID, req.DependsOnID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	_, err := h.db.Exec("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", taskID, req.DependsOnID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -369,40 +455,95 @@ func (h *TaskHandler) loadDeps(t *model.Task) {
 	}
 }
 
+func (h *TaskHandler) enrichTask(t *model.Task, userID string) {
+	h.loadDeps(t)
+	t.RiskTypes = service.DeriveTaskRisks(*t, time.Now())
+	t.DisplayStatus = service.DisplayTaskStatus(*t)
+	if t.RiskTypes == nil {
+		t.RiskTypes = []string{}
+	}
+	rows, err := h.db.Query(`
+		SELECT DISTINCT s.id
+		FROM sessions s
+		JOIN token_usage tu ON tu.session_id = s.id
+		WHERE s.task_id = $1
+		ORDER BY s.id`, t.ID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil {
+				t.TokenSourceIDs = append(t.TokenSourceIDs, id)
+			}
+		}
+	}
+	_ = h.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM user_follows
+			WHERE user_id = $1 AND target_type = 'task' AND target_id = $2
+		)`, userID, t.ID).Scan(&t.IsFollowed)
+}
+
+func (h *TaskHandler) validateDependency(requirementID, taskID, dependsOnID string) error {
+	if dependsOnID == "" {
+		return fmt.Errorf("depends_on_id is required")
+	}
+	if taskID != "" && taskID == dependsOnID {
+		return fmt.Errorf("task cannot depend on itself")
+	}
+	var dependencyRequirementID string
+	if err := h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", dependsOnID).Scan(&dependencyRequirementID); err == sql.ErrNoRows {
+		return fmt.Errorf("dependency task not found")
+	} else if err != nil {
+		return err
+	}
+	if dependencyRequirementID != requirementID {
+		return fmt.Errorf("dependencies must belong to the same requirement")
+	}
+	if taskID == "" {
+		return nil
+	}
+	var createsCycle bool
+	if err := h.db.QueryRow(`
+		WITH RECURSIVE upstream(id) AS (
+			SELECT depends_on_id FROM task_dependencies WHERE task_id = $1
+			UNION
+			SELECT td.depends_on_id
+			FROM task_dependencies td
+			JOIN upstream u ON td.task_id = u.id
+		)
+		SELECT EXISTS(SELECT 1 FROM upstream WHERE id = $2)`, dependsOnID, taskID).Scan(&createsCycle); err != nil {
+		return err
+	}
+	if createsCycle {
+		return fmt.Errorf("dependency would create a cycle")
+	}
+	return nil
+}
+
 func (h *TaskHandler) updateRequirementProgress(taskID string) {
 	var reqID string
-	h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", taskID).Scan(&reqID)
+	_ = h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", taskID).Scan(&reqID)
 	if reqID == "" {
 		return
 	}
+	_, _ = h.db.Exec(`
+		UPDATE requirements
+		SET progress = COALESCE((
+			SELECT FLOOR(AVG(progress))::int FROM tasks WHERE requirement_id = $1
+		), 0), updated_at = now()
+	WHERE id = $1`, reqID)
+}
 
-	var acStr string
-	h.db.QueryRow("SELECT acceptance_criteria FROM requirements WHERE id = $1", reqID).Scan(&acStr)
-	acItems := parseTextArray(acStr)
-	if len(acItems) == 0 {
-		return
-	}
+func isStoredTaskStatus(status string) bool {
+	return status == "todo" || status == "in_progress" || status == "done"
+}
 
-	completed := 0
-	for i := range acItems {
-		var allDone bool
-		err := h.db.QueryRow(`
-			SELECT COALESCE(
-				EXISTS(SELECT 1 FROM tasks WHERE requirement_id = $1 AND $2 = ANY(acceptance_criteria_ids) AND status != 'done'),
-				NOT EXISTS(SELECT 1 FROM tasks WHERE requirement_id = $1 AND $2 = ANY(acceptance_criteria_ids))
-			) = false AND EXISTS(SELECT 1 FROM tasks WHERE requirement_id = $1 AND $2 = ANY(acceptance_criteria_ids))`,
-			reqID, i).Scan(&allDone)
-		if err == nil && allDone {
-			completed++
-		}
+func nullTimePtr(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
 	}
-
-	progress := completed * 100 / len(acItems)
-	status := "active"
-	if progress == 100 {
-		status = "completed"
-	}
-	h.db.Exec("UPDATE requirements SET progress = $1, status = $2, updated_at = now() WHERE id = $3", progress, status, reqID)
+	return &value.Time
 }
 
 func parseIntArray(pgArray string) []int {

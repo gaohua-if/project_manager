@@ -26,7 +26,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
 		WHERE 1=1`
@@ -66,12 +66,17 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 		var acStr string
 		var deadline sql.NullString
 		var feishuURL sql.NullString
-		rows.Scan(&req.ID, &req.Title, &req.Description, &feishuURL, &acStr,
+		var completedAt sql.NullTime
+		if err := rows.Scan(&req.ID, &req.Title, &req.Description, &feishuURL, &acStr,
 			&req.CreatorID, &req.CreatorName, &req.CreatorRole, &req.Status, &req.Priority,
-			&req.Progress, &deadline, &req.CreatedAt, &req.UpdatedAt)
+			&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		req.FeishuDocURL = nullStringPtr(feishuURL)
 		req.Deadline = nullStringPtr(deadline)
 		req.AcceptanceCriteria = parseTextArray(acStr)
+		req.CompletedAt = nullTimePtr(completedAt)
 		reqs = append(reqs, req)
 	}
 	if err := rows.Err(); err != nil {
@@ -81,6 +86,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	for i := range reqs {
 		h.loadTeams(&reqs[i])
+		h.loadProjection(&reqs[i], u.ID)
 	}
 
 	writeJSON(w, http.StatusOK, reqs)
@@ -92,17 +98,18 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var acStr string
 	var deadline sql.NullString
 	var feishuURL sql.NullString
+	var completedAt sql.NullTime
 
 	err := h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
 		WHERE r.id = $1`, id).Scan(
 		&req.ID, &req.Title, &req.Description, &feishuURL, &acStr,
 		&req.CreatorID, &req.CreatorName, &req.CreatorRole, &req.Status, &req.Priority,
-		&req.Progress, &deadline, &req.CreatedAt, &req.UpdatedAt,
+		&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -111,7 +118,9 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 	req.FeishuDocURL = nullStringPtr(feishuURL)
 	req.Deadline = nullStringPtr(deadline)
 	req.AcceptanceCriteria = parseTextArray(acStr)
+	req.CompletedAt = nullTimePtr(completedAt)
 	h.loadTeams(&req)
+	h.loadProjection(&req, getUser(r).ID)
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -131,9 +140,12 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one team_id required"})
 		return
 	}
+	if req.Priority == "" {
+		req.Priority = "medium"
+	}
 
-	ac := []string{"(AI will generate acceptance criteria)"}
-	if h.ai != nil {
+	ac := req.AcceptanceCriteria
+	if len(ac) == 0 && h.ai != nil {
 		generated, err := h.ai.GenerateAcceptanceCriteria(r.Context(), req.Title, req.Description)
 		if err != nil {
 			log.Printf("AI generate AC failed (will use fallback): %v", err)
@@ -141,6 +153,9 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if len(generated) > 0 {
 			ac = generated
 		}
+	}
+	if len(ac) == 0 {
+		ac = []string{"验收标准待补充"}
 	}
 
 	var reqID string
@@ -163,14 +178,15 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var acStr string
 	var deadline sql.NullString
 	var feishuURL sql.NullString
+	var completedAt sql.NullTime
 	err = h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
 		FROM requirements r JOIN users u ON u.id = r.creator_id WHERE r.id = $1`, reqID).Scan(
 		&result.ID, &result.Title, &result.Description, &feishuURL, &acStr,
 		&result.CreatorID, &result.CreatorName, &result.CreatorRole, &result.Status, &result.Priority,
-		&result.Progress, &deadline, &result.CreatedAt, &result.UpdatedAt,
+		&result.Progress, &deadline, &completedAt, &result.CreatedAt, &result.UpdatedAt,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -179,7 +195,9 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	result.FeishuDocURL = nullStringPtr(feishuURL)
 	result.Deadline = nullStringPtr(deadline)
 	result.AcceptanceCriteria = parseTextArray(acStr)
+	result.CompletedAt = nullTimePtr(completedAt)
 	h.loadTeams(&result)
+	h.loadProjection(&result, u.ID)
 	writeJSON(w, http.StatusCreated, result)
 }
 
@@ -188,6 +206,10 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req model.UpdateRequirementRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Status != nil && !isRequirementStatus(*req.Status) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid requirement status"})
 		return
 	}
 
@@ -209,6 +231,11 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, fmt.Sprintf("status = $%d", argIdx))
 		args = append(args, *req.Status)
 		argIdx++
+		if *req.Status == "completed" {
+			sets = append(sets, "completed_at = COALESCE(completed_at, now())")
+		} else {
+			sets = append(sets, "completed_at = NULL")
+		}
 	}
 	if req.Priority != nil {
 		sets = append(sets, fmt.Sprintf("priority = $%d", argIdx))
@@ -225,6 +252,11 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *req.FeishuDocURL)
 		argIdx++
 	}
+	if req.AcceptanceCriteria != nil {
+		sets = append(sets, fmt.Sprintf("acceptance_criteria = $%d", argIdx))
+		args = append(args, arrayToTextArray(*req.AcceptanceCriteria))
+		argIdx++
+	}
 
 	if len(sets) == 0 {
 		h.Get(w, r)
@@ -235,9 +267,13 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args = append(args, id)
 	query := fmt.Sprintf("UPDATE requirements SET %s WHERE id = $%d", strings.Join(sets, ", "), argIdx)
 
-	_, err := h.db.Exec(query, args...)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 
@@ -357,6 +393,72 @@ func (h *RequirementHandler) loadTeams(req *model.Requirement) {
 		req.TeamIDs = append(req.TeamIDs, id)
 		req.TeamNames = append(req.TeamNames, name)
 	}
+}
+
+func (h *RequirementHandler) loadProjection(req *model.Requirement, userID string) {
+	rows, err := h.db.Query(`
+		SELECT t.id, t.requirement_id, r.title, t.title,
+			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name, ''),
+			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
+			t.completed_at, t.created_at, t.updated_at
+		FROM tasks t
+		JOIN requirements r ON r.id = t.requirement_id
+		LEFT JOIN users a ON a.id = t.assignee_id
+		WHERE t.requirement_id = $1
+		ORDER BY t.created_at`, req.ID)
+	tasks := []model.Task{}
+	if err == nil {
+		defer rows.Close()
+		taskHandler := NewTaskHandler(h.db)
+		for rows.Next() {
+			var task model.Task
+			var acStr string
+			var assigneeID, assigneeName, dueDate sql.NullString
+			var completedAt sql.NullTime
+			if rows.Scan(
+				&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
+				&acStr, &assigneeID, &assigneeName, &task.CreatorTLID,
+				&task.Status, &task.Priority, &task.Progress, &dueDate,
+				&completedAt, &task.CreatedAt, &task.UpdatedAt,
+			) != nil {
+				continue
+			}
+			task.AcceptanceCriteriaIDs = parseIntArray(acStr)
+			task.AssigneeID = nullStringPtr(assigneeID)
+			task.AssigneeName = nullStringPtr(assigneeName)
+			task.DueDate = nullStringPtr(dueDate)
+			task.CompletedAt = nullTimePtr(completedAt)
+			taskHandler.enrichTask(&task, userID)
+			tasks = append(tasks, task)
+		}
+	}
+	req.Progress = service.AggregateRequirementProgress(tasks)
+	req.TaskSummary, req.RiskSummary = service.SummarizeRequirementTasks(tasks)
+	_ = h.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM user_follows
+			WHERE user_id = $1 AND target_type = 'requirement' AND target_id = $2
+		)`, userID, req.ID).Scan(&req.IsFollowed)
+
+	tokenRows, tokenErr := h.db.Query(`
+		SELECT DISTINCT s.id
+		FROM sessions s
+		JOIN token_usage tu ON tu.session_id = s.id
+		WHERE s.requirement_id = $1 AND s.task_id IS NULL
+		ORDER BY s.id`, req.ID)
+	if tokenErr == nil {
+		defer tokenRows.Close()
+		for tokenRows.Next() {
+			var id string
+			if tokenRows.Scan(&id) == nil {
+				req.TokenSourceIDs = append(req.TokenSourceIDs, id)
+			}
+		}
+	}
+}
+
+func isRequirementStatus(status string) bool {
+	return status == "todo" || status == "review" || status == "active" || status == "completed" || status == "cancelled"
 }
 
 func parseTextArray(pgArray string) []string {

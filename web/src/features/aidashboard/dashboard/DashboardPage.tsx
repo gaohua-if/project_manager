@@ -12,6 +12,7 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
+import { useQuery } from "@tanstack/react-query";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { ReactNode } from "react";
@@ -19,6 +20,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+
+import { fetchDashboardFollows, fetchDashboardRisks } from "../api/client";
 
 import "./console-dashboard.css";
 
@@ -899,6 +902,16 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+	const followsQuery = useQuery({
+		queryKey: ["dashboard", "follows"],
+		queryFn: fetchDashboardFollows,
+		staleTime: 30_000
+	});
+	const risksQuery = useQuery({
+		queryKey: ["dashboard", "risks"],
+		queryFn: fetchDashboardRisks,
+		staleTime: 30_000
+	});
   const [previewRole, setPreviewRole] = useState<PreviewRole>("employee");
   const [reportStateById, setReportStateById] = useState<Record<string, ReportItem>>(() =>
     Object.fromEntries(
@@ -928,9 +941,11 @@ export function DashboardPage() {
     [uploadedReportSkills]
   );
   const tokenReport = TOKEN_DATA[previewRole][tokenRange];
+	const followItems: FollowItem[] = followsQuery.data ?? [];
+	const riskItems: RiskItem[] = risksQuery.data ?? [];
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
-  const followBlockedCount = data.follows.filter((item) => item.risk.includes("阻塞") || item.status === "阻塞").length;
-  const followUrgentCount = data.follows.filter((item) => item.risk.includes("临期") || item.deadline === "明天").length;
+  const followBlockedCount = followItems.filter((item) => item.risk.includes("阻塞") || item.status === "阻塞").length;
+  const followUrgentCount = followItems.filter((item) => item.risk.includes("临期") || item.deadline === "明天").length;
 
   const updateReport = (reportId: string, next: Partial<ReportItem>) => {
     setReportStateById((current) => ({
@@ -1059,16 +1074,23 @@ export function DashboardPage() {
             title="我关注的事项"
             extra={
               <Space size={6} wrap>
-                <Tag>{data.follows.length} 项</Tag>
+                <Tag>{followItems.length} 项</Tag>
                 {followBlockedCount > 0 ? <Tag color="red">{followBlockedCount} 阻塞</Tag> : null}
                 {followUrgentCount > 0 ? <Tag color="orange">{followUrgentCount} 临期</Tag> : null}
               </Space>
             }
           />
           <div className="console-follow-list">
-            {sortFollowItems(data.follows).map((item) => (
-              <FollowCard key={item.key} item={item} onView={handleFollowAction} />
-            ))}
+            {followItems.length > 0 ? (
+				sortFollowItems(followItems).map((item) => (
+					<FollowCard key={item.key} item={item} onView={handleFollowAction} />
+				))
+			) : (
+				<div className="console-report-status-card">
+					<p>{followsQuery.isError ? "关注事项加载失败" : "暂无关注事项"}</p>
+					<Button type="link" onClick={() => navigate("/requirements")}>前往需求看板关注</Button>
+				</div>
+			)}
           </div>
         </div>
 
@@ -1102,16 +1124,16 @@ export function DashboardPage() {
         <div className="console-panel">
           <PanelHeader
             icon={<AlertOutlined />}
-            title={`待处理风险 ${data.risks.length}`}
+            title={`待处理风险 ${riskItems.length}`}
           />
           <div className="console-risk-list">
-            {data.risks.length > 0 ? (
-              sortRisks(data.risks).map((item) => (
+            {riskItems.length > 0 ? (
+              sortRisks(riskItems).map((item) => (
                 <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
               ))
             ) : (
               <div className="console-report-status-card">
-                <p>暂无需要关注的风险</p>
+				<p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要关注的风险"}</p>
                 <Button type="link" onClick={() => navigate("/requirements")}>查看需求看板</Button>
               </div>
             )}
@@ -2446,4 +2468,3 @@ function getRiskPriority(risk: RiskItem) {
   if (risk.riskType === "dependency_blocker") return 2;
   return 3;
 }
-

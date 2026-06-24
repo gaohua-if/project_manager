@@ -13,7 +13,7 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
-import { requirementsBoardMockApi } from "../mock/requirementsBoardMockApi";
+import { requirementsBoardApi } from "../api/requirementsBoardApi";
 import type {
   MockTask,
   MockTokenSource,
@@ -46,17 +46,17 @@ export function RequirementDetailPage() {
 
   const requirementQuery = useQuery({
     queryKey: ["requirements-board", "requirement", id],
-    queryFn: () => requirementsBoardMockApi.getRequirement(id),
+    queryFn: () => requirementsBoardApi.getRequirement(id),
     enabled: Boolean(id)
   });
   const tasksQuery = useQuery({
     queryKey: ["requirements-board", "tasks", id],
-    queryFn: () => requirementsBoardMockApi.listTasks(id),
+    queryFn: () => requirementsBoardApi.listTasks(id),
     enabled: Boolean(id)
   });
   const tokenSourcesQuery = useQuery({
     queryKey: ["requirements-board", "token-sources"],
-    queryFn: () => requirementsBoardMockApi.listTokenSources(),
+    queryFn: () => requirementsBoardApi.listTokenSources(),
     staleTime: 60_000
   });
   const tokenSourceMap = useMemo(
@@ -77,7 +77,7 @@ export function RequirementDetailPage() {
         subTitle={
           requirementQuery.error instanceof Error
             ? requirementQuery.error.message
-            : "Mock 数据中没有该需求。"
+            : "未找到该需求或当前用户无权查看。"
         }
         extra={<Button onClick={() => navigate(backTo)}>返回需求看板</Button>}
       />

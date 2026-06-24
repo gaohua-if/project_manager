@@ -23,7 +23,7 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
-import { requirementsBoardMockApi } from "../../requirements/mock/requirementsBoardMockApi";
+import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
 import type { MockTaskDependency, MockTaskStatus, MockTokenSource } from "../../requirements/mock/types";
 
 const { Text } = Typography;
@@ -63,14 +63,14 @@ export function TaskDetailPage() {
 
   const taskQuery = useQuery({
     queryKey: ["requirements-board", "task", id],
-    queryFn: () => requirementsBoardMockApi.getTask(id),
+    queryFn: () => requirementsBoardApi.getTask(id),
     enabled: Boolean(id)
   });
   const task = taskQuery.data;
 
   const tokenSourcesQuery = useQuery({
     queryKey: ["requirements-board", "token-sources"],
-    queryFn: () => requirementsBoardMockApi.listTokenSources(),
+    queryFn: () => requirementsBoardApi.listTokenSources(),
     staleTime: 60_000
   });
   const tokenSourceMap = useMemo(
@@ -83,21 +83,25 @@ export function TaskDetailPage() {
 
   const statusMutation = useMutation({
     mutationFn: (status: Exclude<MockTaskStatus, "blocked">) =>
-      requirementsBoardMockApi.updateTaskStatus(id, status),
+      requirementsBoardApi.updateTaskStatus(id, status),
     onSuccess: () => {
-      message.success("任务状态已更新（Mock）");
+      message.success("任务状态已更新");
       void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "状态更新失败")
   });
 
   const progressMutation = useMutation({
     mutationFn: (nextProgress: number) =>
-      requirementsBoardMockApi.updateTaskProgress(id, nextProgress),
+      requirementsBoardApi.updateTaskProgress(id, nextProgress),
     onSuccess: () => {
       setProgressOverride(null);
-      message.success("任务进度已保存（Mock）");
+      message.success("任务进度已保存");
       void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "进度保存失败")
   });
@@ -143,13 +147,13 @@ export function TaskDetailPage() {
       <Result
         status="404"
         title="任务不存在"
-        subTitle="Mock 数据中没有该任务。"
+        subTitle="未找到该任务或当前用户无权查看。"
         extra={<Link to={backTo}>返回需求看板</Link>}
       />
     );
   }
 
-  const dependencyBlocked = task.dependencies.some((dependency) => dependency.status !== "done");
+  const dependencyBlocked = task.status === "blocked";
   const progress = progressOverride ?? task.progress;
 
   const linkedSources = task.token_source_ids

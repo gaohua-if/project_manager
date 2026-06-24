@@ -1,0 +1,241 @@
+.org-page {
+  width: 100%;
+}
+
+.org-page .page-panel__body {
+  gap: 16px;
+}
+
+.org-team-section {
+  padding: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.org-team-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.org-team-section__head strong {
+  color: #182033;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.org-team-section__head span {
+  color: #7a879a;
+  font-size: 12px;
+}
+
+.org-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.org-team-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e6ebf3;
+  border-radius: 10px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.org-team-card:hover {
+  border-color: #c2d0e8;
+  box-shadow: 0 6px 16px rgba(28, 39, 67, 0.07);
+}
+
+.org-team-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.org-team-card__name {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.org-team-card__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: #2563eb;
+  font-size: 11px;
+}
+
+.org-team-card__count strong {
+  color: #172033;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.org-team-card__row {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 8px;
+  align-items: center;
+  color: #526173;
+  font-size: 12px;
+}
+
+.org-team-card__row-label {
+  color: #8a95a6;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.org-team-card__avatars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.org-team-card__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 50%;
+  background: var(--avatar-color, #2563eb);
+}
+
+.org-team-card__avatar.is-pm {
+  --avatar-color: #7c3aed;
+}
+
+.org-team-card__avatar.is-tl {
+  --avatar-color: #d97706;
+}
+
+.org-team-card__avatar.is-employee {
+  --avatar-color: #059669;
+}
+
+.org-team-card__more {
+  margin-left: 4px;
+  color: #7a879a;
+  font-size: 11px;
+}
+
+.org-team-card__empty {
+  color: #b1bccf;
+  font-size: 12px;
+}
+
+.org-role-tag {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 0;
+}
+
+.org-role-tag.is-admin {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.org-role-tag.is-director {
+  color: #1d4ed8;
+  background: #eef5ff;
+}
+
+.org-role-tag.is-pm {
+  color: #6d28d9;
+  background: #f3edff;
+}
+
+.org-role-tag.is-team_leader {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.org-role-tag.is-employee {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.org-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.org-name-cell__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-color, #94a3b8);
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.18);
+}
+
+.org-name-cell__dot.is-admin {
+  --dot-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.18);
+}
+
+.org-name-cell__dot.is-director {
+  --dot-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.org-name-cell__dot.is-pm {
+  --dot-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+}
+
+.org-name-cell__dot.is-team_leader {
+  --dot-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.18);
+}
+
+.org-name-cell__dot.is-employee {
+  --dot-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18);
+}
+
+.org-name-cell strong {
+  color: #182033;
+  font-weight: 600;
+}
+
+.org-employee-id {
+  display: inline-flex;
+  padding: 1px 8px;
+  color: #475569;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.org-empty-frame {
+  padding: 36px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}

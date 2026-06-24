@@ -299,7 +299,7 @@ func (h *ReportHandler) generateReportContent(userID, date string) string {
 
 func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" {
+	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" && u.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
 		return
 	}
@@ -310,7 +310,7 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 	}
 
 	teamID := u.TeamID
-	if u.Role == "director" {
+	if u.Role == "director" || u.Role == "admin" {
 		if tid := r.URL.Query().Get("team_id"); tid != "" {
 			teamID = &tid
 		}
@@ -422,7 +422,7 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 
 func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" {
+	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" && u.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
 		return
 	}

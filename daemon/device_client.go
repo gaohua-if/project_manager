@@ -50,6 +50,7 @@ type UserMsg struct {
 
 type SessionInfo struct {
 	SessionRef     string
+	AgentType      string // "" (== claude_code, default) or "codex"
 	FilePath       string
 	ProjectDir     string
 	Cwd            string
@@ -173,8 +174,11 @@ func cmdSessions(args []string) {
 
 	home, _ := os.UserHomeDir()
 	claudeDir := filepath.Join(home, ".claude", "projects")
+	codexDir := filepath.Join(home, ".codex", "sessions")
 
 	sessions := scanSessions(claudeDir, showAll)
+	sessions = append(sessions, scanCodexSessions(codexDir, showAll)...)
+	sortSessionsNewestFirst(sessions)
 	if projectFilter != "" {
 		var filtered []*SessionInfo
 		for _, s := range sessions {
@@ -196,9 +200,9 @@ func cmdSessions(args []string) {
 	}
 
 	// Header
-	fmt.Printf("\n  %-4s  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
-		"#", "Date", "Tokens", "Duration", "Model", "Project", "Summary")
-	fmt.Println("  " + strings.Repeat("-", 108))
+	fmt.Printf("\n  %-4s  %-6s  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
+		"#", "Agent", "Date", "Tokens", "Duration", "Model", "Project", "Summary")
+	fmt.Println("  " + strings.Repeat("-", 116))
 
 	for i, s := range sessions {
 		dateStr := s.StartedAt.Format("2006-01-02 15:04")
@@ -218,16 +222,21 @@ func cmdSessions(args []string) {
 		if len(summary) > 35 {
 			summary = summary[:32] + "..."
 		}
+		agent := s.AgentType
+		if agent == "" {
+			agent = "claude"
+		}
 
-		fmt.Printf("  %-4d  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
-			i+1, dateStr, s.FormatTokens(), durStr, model, project, summary)
+		fmt.Printf("  %-4d  %-6s  %-19s  %-9s  %-9s  %-10s  %-22s  %s\n",
+			i+1, agent, dateStr, s.FormatTokens(), durStr, model, project, summary)
 		if len(s.SubFiles) > 0 {
 			fmt.Printf("        %-38s %d sub-agent(s)\n", "", len(s.SubFiles))
 		}
 	}
 
 	fmt.Printf("\n  Total: %d sessions\n", len(sessions))
-	fmt.Printf("  Session logs: %s/\n\n", claudeDir)
+	fmt.Printf("  Claude logs: %s/\n", claudeDir)
+	fmt.Printf("  Codex logs:  %s/\n\n", codexDir)
 }
 
 // ---- upload ----
@@ -249,6 +258,8 @@ func cmdUpload(args []string) {
 
 	home, _ := os.UserHomeDir()
 	sessions := scanSessions(filepath.Join(home, ".claude", "projects"), true)
+	sessions = append(sessions, scanCodexSessions(filepath.Join(home, ".codex", "sessions"), true)...)
+	sortSessionsNewestFirst(sessions)
 
 	if len(sessions) == 0 {
 		fmt.Println("No sessions found to upload.")
@@ -468,6 +479,9 @@ func runConsumerOnce(cfg *Config, consumerCfg ConsumerConfig) error {
 	fmt.Printf("[consumer] processing report_date=%s\n", targetDate)
 
 	sessions := scanSessions(consumerCfg.ClaudeDir, true)
+	home, _ := os.UserHomeDir()
+	sessions = append(sessions, scanCodexSessions(filepath.Join(home, ".codex", "sessions"), true)...)
+	sortSessionsNewestFirst(sessions)
 	sessions = filterSessionsForReport(sessions, targetDate, consumerCfg.ProjectFilter)
 	if len(sessions) == 0 {
 		fmt.Printf("[consumer] no sessions found for %s\n", targetDate)
@@ -737,6 +751,12 @@ func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
 	})
 
 	// Sort newest first
+	sortSessionsNewestFirst(sessions)
+
+	return sessions
+}
+
+func sortSessionsNewestFirst(sessions []*SessionInfo) {
 	for i := 0; i < len(sessions); i++ {
 		for j := i + 1; j < len(sessions); j++ {
 			if sessions[j].StartedAt.After(sessions[i].StartedAt) {
@@ -744,8 +764,6 @@ func scanSessions(claudeDir string, showAll bool) []*SessionInfo {
 			}
 		}
 	}
-
-	return sessions
 }
 
 func decodeProjectDir(dir string) string {
@@ -912,6 +930,9 @@ func buildUploadPayload(s *SessionInfo) map[string]any {
 		"session_ref": s.SessionRef,
 		"started_at":  s.StartedAt.Format(time.RFC3339),
 		"model":       s.Model,
+	}
+	if s.AgentType != "" {
+		p["agent_type"] = s.AgentType
 	}
 	if !s.EndedAt.IsZero() && !s.StartedAt.IsZero() {
 		p["ended_at"] = s.EndedAt.Format(time.RFC3339)

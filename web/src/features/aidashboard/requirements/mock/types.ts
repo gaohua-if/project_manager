@@ -46,6 +46,7 @@ export interface MockRequirement {
   team_ids: string[];
   team_names: string[];
   token_source_ids: string[];
+  risk_summary?: { blocked: number; overdue: number; due_soon: number };
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ export interface MockTask {
   dependencies: MockTaskDependency[];
   blocking: MockTaskDependency[];
   token_source_ids: string[];
+  risk_types?: Array<"blocked" | "overdue" | "due_soon">;
   created_at: string;
   updated_at: string;
 }
@@ -87,4 +89,13 @@ export interface CreateMockTaskInput {
   priority: MockTaskPriority;
   due_date?: string;
   dependency_task_ids?: string[];
+}
+
+export type FavoriteTargetType = "requirement" | "task";
+
+export interface MockFavorite {
+  user_id: string;
+  target_type: FavoriteTargetType;
+  target_id: string;
+  created_at: string;
 }

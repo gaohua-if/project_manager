@@ -5,10 +5,23 @@ export interface Team {
   name: string;
 }
 
-export type RequirementStatus = "active" | "completed" | "cancelled";
+export type RequirementStatus = "todo" | "review" | "active" | "completed" | "cancelled";
 export type RequirementPriority = "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
+export type StoredTaskStatus = Exclude<TaskStatus, "blocked">;
 export type TaskPriority = "low" | "medium" | "high";
+
+export interface RequirementTaskSummaryDTO {
+  total: number;
+  done: number;
+  blocked: number;
+}
+
+export interface RequirementRiskSummaryDTO {
+  blocked: number;
+  overdue: number;
+  due_soon: number;
+}
 
 export interface Requirement {
   id: string;
@@ -25,6 +38,11 @@ export interface Requirement {
   deadline?: string;
   team_ids: string[];
   team_names: string[];
+  token_source_ids: string[];
+  task_summary: RequirementTaskSummaryDTO;
+  risk_summary: RequirementRiskSummaryDTO;
+  is_followed: boolean;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -52,12 +70,73 @@ export interface Task {
   assignee_name?: string;
   creator_tl_id: string;
   status: TaskStatus;
+  display_status: TaskStatus;
   priority: TaskPriority;
+  progress: number;
   due_date?: string;
   dependencies?: TaskDep[];
   blocking?: TaskDep[];
+  risk_types: Array<"blocked" | "overdue" | "due_soon">;
+  token_source_ids: string[];
+  is_followed: boolean;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export type RequirementListItemDTO = Requirement;
+export type RequirementDetailDTO = Requirement;
+export type RequirementTaskDTO = Task;
+export type TaskDependencyDTO = TaskDep;
+
+export type FollowTargetType = "requirement" | "task";
+
+export interface RequirementFollowStateDTO {
+  user_id: string;
+  target_type: FollowTargetType;
+  target_id: string;
+  created_at: string;
+}
+
+export interface DashboardNavigationTargetDTO {
+  requirementId: string;
+  taskId?: string;
+  url: string;
+}
+
+export interface DashboardFollowItemDTO {
+  key: string;
+  type: "需求" | "任务";
+  title: string;
+  requirement?: string;
+  requirementId: string;
+  taskId?: string;
+  owner: string;
+  status: string;
+  deadline: string;
+  risk: string;
+  dependency?: string;
+  activity?: string;
+  navigation: DashboardNavigationTargetDTO;
+}
+
+export interface DashboardRiskItemDTO {
+  key: string;
+  riskType: "deadline" | "dependency_blocker";
+  title: string;
+  source: string;
+  target: string;
+  relatedObjectType: "requirement" | "task";
+  requirementId: string;
+  taskId: string;
+  owner: string;
+  deadline: string;
+  reason: string;
+  level: "高" | "中" | "低";
+  tone: "red" | "orange" | "gold" | "blue";
+  actionText: string;
+  targetUrl: string;
+  navigation: DashboardNavigationTargetDTO;
 }
 
 export interface Session {

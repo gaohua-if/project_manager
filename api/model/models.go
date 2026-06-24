@@ -20,46 +20,136 @@ type User struct {
 }
 
 type Requirement struct {
-	ID                 string    `json:"id"`
-	Title              string    `json:"title"`
-	Description        string    `json:"description"`
-	FeishuDocURL       *string   `json:"feishu_doc_url,omitempty"`
-	AcceptanceCriteria []string  `json:"acceptance_criteria"`
-	CreatorID          string    `json:"creator_id"`
-	CreatorName        string    `json:"creator_name"`
-	CreatorRole        string    `json:"creator_role"`
-	Status             string    `json:"status"`
-	Priority           string    `json:"priority"`
-	Progress           int       `json:"progress"`
-	Deadline           *string   `json:"deadline,omitempty"`
-	TeamIDs            []string  `json:"team_ids"`
-	TeamNames          []string  `json:"team_names"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                 string                 `json:"id"`
+	Title              string                 `json:"title"`
+	Description        string                 `json:"description"`
+	FeishuDocURL       *string                `json:"feishu_doc_url,omitempty"`
+	AcceptanceCriteria []string               `json:"acceptance_criteria"`
+	CreatorID          string                 `json:"creator_id"`
+	CreatorName        string                 `json:"creator_name"`
+	CreatorRole        string                 `json:"creator_role"`
+	Status             string                 `json:"status"`
+	Priority           string                 `json:"priority"`
+	Progress           int                    `json:"progress"`
+	Deadline           *string                `json:"deadline,omitempty"`
+	TeamIDs            []string               `json:"team_ids"`
+	TeamNames          []string               `json:"team_names"`
+	TokenSourceIDs     []string               `json:"token_source_ids"`
+	TaskSummary        RequirementTaskSummary `json:"task_summary"`
+	RiskSummary        RequirementRiskSummary `json:"risk_summary"`
+	IsFollowed         bool                   `json:"is_followed"`
+	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type Task struct {
-	ID                    string    `json:"id"`
-	RequirementID         string    `json:"requirement_id"`
-	RequirementTitle      string    `json:"requirement_title,omitempty"`
-	Title                 string    `json:"title"`
-	AcceptanceCriteriaIDs []int     `json:"acceptance_criteria_ids"`
-	AssigneeID            *string   `json:"assignee_id,omitempty"`
-	AssigneeName          *string   `json:"assignee_name,omitempty"`
-	CreatorTLID           string    `json:"creator_tl_id"`
-	Status                string    `json:"status"`
-	Priority              string    `json:"priority"`
-	DueDate               *string   `json:"due_date,omitempty"`
-	Dependencies          []TaskDep `json:"dependencies,omitempty"`
-	Blocking              []TaskDep `json:"blocking,omitempty"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	ID                    string     `json:"id"`
+	RequirementID         string     `json:"requirement_id"`
+	RequirementTitle      string     `json:"requirement_title,omitempty"`
+	Title                 string     `json:"title"`
+	AcceptanceCriteriaIDs []int      `json:"acceptance_criteria_ids"`
+	AssigneeID            *string    `json:"assignee_id,omitempty"`
+	AssigneeName          *string    `json:"assignee_name,omitempty"`
+	CreatorTLID           string     `json:"creator_tl_id"`
+	Status                string     `json:"status"`
+	DisplayStatus         string     `json:"display_status"`
+	Priority              string     `json:"priority"`
+	Progress              int        `json:"progress"`
+	DueDate               *string    `json:"due_date,omitempty"`
+	Dependencies          []TaskDep  `json:"dependencies,omitempty"`
+	Blocking              []TaskDep  `json:"blocking,omitempty"`
+	RiskTypes             []string   `json:"risk_types"`
+	TokenSourceIDs        []string   `json:"token_source_ids"`
+	IsFollowed            bool       `json:"is_followed"`
+	CompletedAt           *time.Time `json:"completed_at,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
 }
 
 type TaskDep struct {
 	TaskID    string `json:"task_id"`
 	TaskTitle string `json:"task_title"`
 	Status    string `json:"status"`
+}
+
+type RequirementTaskSummary struct {
+	Total   int `json:"total"`
+	Done    int `json:"done"`
+	Blocked int `json:"blocked"`
+}
+
+type RequirementRiskSummary struct {
+	Blocked int `json:"blocked"`
+	Overdue int `json:"overdue"`
+	DueSoon int `json:"due_soon"`
+}
+
+type RequirementFollowState struct {
+	Requirement bool `json:"requirement"`
+	TaskCount   int  `json:"task_count"`
+}
+
+// P0 API DTO aliases keep the contract names explicit while reusing the
+// existing transport structs used by legacy handlers.
+type RequirementListItemDTO = Requirement
+type RequirementDetailDTO = Requirement
+type RequirementTaskDTO = Task
+type TaskDependencyDTO = TaskDep
+type RequirementRiskSummaryDTO = RequirementRiskSummary
+type RequirementFollowStateDTO = RequirementFollowState
+
+type UserFollow struct {
+	UserID     string    `json:"user_id"`
+	TargetType string    `json:"target_type"`
+	TargetID   string    `json:"target_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type FollowRequest struct {
+	TargetType string `json:"target_type"`
+	TargetID   string `json:"target_id"`
+}
+
+type DashboardNavigationTarget struct {
+	RequirementID string  `json:"requirementId"`
+	TaskID        *string `json:"taskId,omitempty"`
+	URL           string  `json:"url"`
+}
+
+type DashboardFollowItem struct {
+	Key           string                    `json:"key"`
+	Type          string                    `json:"type"`
+	Title         string                    `json:"title"`
+	Requirement   string                    `json:"requirement,omitempty"`
+	RequirementID string                    `json:"requirementId"`
+	TaskID        *string                   `json:"taskId,omitempty"`
+	Owner         string                    `json:"owner"`
+	Status        string                    `json:"status"`
+	Deadline      string                    `json:"deadline"`
+	Risk          string                    `json:"risk"`
+	Dependency    string                    `json:"dependency,omitempty"`
+	Activity      string                    `json:"activity,omitempty"`
+	Navigation    DashboardNavigationTarget `json:"navigation"`
+}
+
+type DashboardRiskItem struct {
+	Key               string                    `json:"key"`
+	RiskType          string                    `json:"riskType"`
+	Title             string                    `json:"title"`
+	Source            string                    `json:"source"`
+	Target            string                    `json:"target"`
+	RelatedObjectType string                    `json:"relatedObjectType"`
+	RequirementID     string                    `json:"requirementId"`
+	TaskID            string                    `json:"taskId"`
+	Owner             string                    `json:"owner"`
+	Deadline          string                    `json:"deadline"`
+	Reason            string                    `json:"reason"`
+	Level             string                    `json:"level"`
+	Tone              string                    `json:"tone"`
+	ActionText        string                    `json:"actionText"`
+	TargetURL         string                    `json:"targetUrl"`
+	Navigation        DashboardNavigationTarget `json:"navigation"`
 }
 
 type Session struct {
@@ -140,21 +230,23 @@ type AdminResetPasswordRequest struct {
 }
 
 type CreateRequirementRequest struct {
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
-	FeishuDocURL *string  `json:"feishu_doc_url,omitempty"`
-	Priority     string   `json:"priority"`
-	Deadline     *string  `json:"deadline,omitempty"`
-	TeamIDs      []string `json:"team_ids"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	FeishuDocURL       *string  `json:"feishu_doc_url,omitempty"`
+	Priority           string   `json:"priority"`
+	Deadline           *string  `json:"deadline,omitempty"`
+	TeamIDs            []string `json:"team_ids"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
 }
 
 type UpdateRequirementRequest struct {
-	Title        *string `json:"title,omitempty"`
-	Description  *string `json:"description,omitempty"`
-	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
-	Priority     *string `json:"priority,omitempty"`
-	Status       *string `json:"status,omitempty"`
-	Deadline     *string `json:"deadline,omitempty"`
+	Title              *string   `json:"title,omitempty"`
+	Description        *string   `json:"description,omitempty"`
+	FeishuDocURL       *string   `json:"feishu_doc_url,omitempty"`
+	Priority           *string   `json:"priority,omitempty"`
+	Status             *string   `json:"status,omitempty"`
+	Deadline           *string   `json:"deadline,omitempty"`
+	AcceptanceCriteria *[]string `json:"acceptance_criteria,omitempty"`
 }
 
 type CreateTaskRequest struct {
@@ -174,10 +266,19 @@ type UpdateTaskRequest struct {
 	Status                *string `json:"status,omitempty"`
 	Priority              *string `json:"priority,omitempty"`
 	DueDate               *string `json:"due_date,omitempty"`
+	Progress              *int    `json:"progress,omitempty"`
 }
 
 type UpdateTaskStatusRequest struct {
 	Status string `json:"status"`
+}
+
+type UpdateTaskProgressRequest struct {
+	Progress int `json:"progress"`
+}
+
+type UpdateSessionRequirementRequest struct {
+	RequirementID *string `json:"requirement_id"`
 }
 
 type AddDependencyRequest struct {
@@ -190,6 +291,7 @@ type BatchSessionUpload struct {
 
 type SessionUpload struct {
 	SessionRef   string         `json:"session_ref"`
+	AgentType    string         `json:"agent_type,omitempty"`
 	StartedAt    time.Time      `json:"started_at"`
 	EndedAt      *time.Time     `json:"ended_at,omitempty"`
 	DurationSecs *int           `json:"duration_secs,omitempty"`

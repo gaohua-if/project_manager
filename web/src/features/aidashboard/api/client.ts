@@ -6,9 +6,12 @@ import { HttpError } from "@/shared/request/types";
 
 import type {
   ACStatus,
+  DashboardFollowItemDTO,
+  DashboardRiskItemDTO,
   DailyReport,
   Document,
   Requirement,
+  RequirementFollowStateDTO,
   Session,
   SessionTokens,
   Task,
@@ -59,6 +62,7 @@ export const createRequirement = (data: {
   deadline?: string;
   team_ids: string[];
   feishu_doc_url?: string;
+  acceptance_criteria?: string[];
 }) => unwrap(api.post<Requirement>("/requirements", data));
 export const updateRequirement = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Requirement>(`/requirements/${id}`, data));
@@ -84,10 +88,33 @@ export const updateTask = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Task>(`/tasks/${id}`, data));
 export const updateTaskStatus = (id: string, status: string) =>
   unwrap(api.put<Task>(`/tasks/${id}/status`, { status }));
+export const updateTaskProgress = (id: string, progress: number) =>
+  unwrap(api.put<Task>(`/tasks/${id}/progress`, { progress }));
 export const addTaskDependency = (taskId: string, dependsOnId: string) =>
   unwrap(api.post<Task>(`/tasks/${taskId}/dependencies`, { depends_on_id: dependsOnId }));
 export const removeTaskDependency = (taskId: string, depId: string) =>
   unwrap(api.delete<Task>(`/tasks/${taskId}/dependencies/${depId}`));
+
+// ───────────────────────── Follows / Dashboard projections ─────────────────────────
+
+export const fetchFollows = () => unwrap(api.get<RequirementFollowStateDTO[]>("/follows"));
+export const followTarget = (targetType: "requirement" | "task", targetId: string) =>
+  unwrap(
+    api.post<{ favorited: true; target_type: "requirement" | "task"; target_id: string }>(
+      "/follows",
+      { target_type: targetType, target_id: targetId }
+    )
+  );
+export const unfollowTarget = (targetType: "requirement" | "task", targetId: string) =>
+  unwrap(
+    api.delete<{ favorited: false; target_type: "requirement" | "task"; target_id: string }>(
+      `/follows/${targetType}/${targetId}`
+    )
+  );
+export const fetchDashboardFollows = () =>
+  unwrap(api.get<DashboardFollowItemDTO[]>("/dashboard/follows"));
+export const fetchDashboardRisks = () =>
+  unwrap(api.get<DashboardRiskItemDTO[]>("/dashboard/risks"));
 
 // ───────────────────────── Sessions ─────────────────────────
 
@@ -95,6 +122,12 @@ export const fetchSessions = (params?: Record<string, string>) =>
   unwrap(api.get<Session[]>("/sessions", params));
 export const updateSessionTask = (sessionId: string, taskId: string | null) =>
   unwrap(api.put<Session>(`/sessions/${sessionId}/task`, { task_id: taskId }));
+export const updateSessionRequirement = (sessionId: string, requirementId: string | null) =>
+  unwrap(
+    api.put<Session>(`/sessions/${sessionId}/requirement`, {
+      requirement_id: requirementId
+    })
+  );
 export const withdrawSession = (sessionId: string) =>
   unwrap(api.delete<{ status: string }>(`/sessions/${sessionId}`));
 

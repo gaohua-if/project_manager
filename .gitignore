@@ -36,3 +36,4 @@ daemon/tmp/
 *.so
 *.dylib
 dist/
+.cache/

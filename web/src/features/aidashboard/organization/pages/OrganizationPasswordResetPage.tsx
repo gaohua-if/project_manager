@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import "../../aidashboard-pattern.css";
 import { adminResetPassword, fetchUsers } from "../../api/client";
+import { UserHero } from "../components/UserHero";
 import { useAuth } from "@/shared/auth/authContext";
 import { FormPageWrap } from "@/shared/components/FormPageWrap/FormPageWrap";
 import { FormSubmitButton } from "@/shared/components/FormSubmitButton/FormSubmitButton";
@@ -17,6 +18,31 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 interface PasswordFormValues {
   password: string;
   confirm: string;
+}
+
+function ResultPanel({
+  status,
+  title,
+  subTitle,
+  backTo
+}: {
+  status: "403" | "404";
+  title: string;
+  subTitle: string;
+  backTo: string;
+}) {
+  return (
+    <PagePanel
+      title="重置密码"
+      className="aidashboard-form-page"
+      backTo={backTo}
+      breadcrumbs={[{ title: "组织", path: "/organization" }, { title: "重置密码" }]}
+    >
+      <div className="org-result-wrap">
+        <Result status={status} title={title} subTitle={subTitle} />
+      </div>
+    </PagePanel>
+  );
 }
 
 export function OrganizationPasswordResetPage() {
@@ -64,13 +90,27 @@ export function OrganizationPasswordResetPage() {
   };
 
   if (currentUser?.role !== "admin") {
-    return <Result status="403" title="暂无权限" subTitle="仅管理员可重置成员密码。" />;
+    return (
+      <ResultPanel
+        status="403"
+        title="暂无权限"
+        subTitle="仅管理员可重置成员密码。"
+        backTo={backTo}
+      />
+    );
   }
 
   if (usersQuery.isLoading) return <PageSkeleton rows={8} />;
 
   if (!targetUser)
-    return <Result status="404" title="用户不存在" subTitle="该用户可能已被删除。" />;
+    return (
+      <ResultPanel
+        status="404"
+        title="用户不存在"
+        subTitle="该用户可能已被删除。"
+        backTo={backTo}
+      />
+    );
 
   return (
     <PagePanel
@@ -86,6 +126,13 @@ export function OrganizationPasswordResetPage() {
         { title: targetUser.name }
       ]}
     >
+      <UserHero user={targetUser} variant="danger" />
+      <Alert
+        className="org-reset-warning"
+        type="warning"
+        showIcon
+        message="重置后该成员需用新密码登录，请将新密码安全同步给本人。"
+      />
       <FormPageWrap className="aidashboard-form-wrap" maxWidth="100%" density="cozy" card>
         <Spin spinning={submitting}>
           {formError ? (

@@ -23,7 +23,7 @@ import { useFormLeaveConfirm } from "@/shared/hooks/useFormLeaveConfirm";
 import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
-import { requirementsBoardMockApi } from "../../requirements/mock/requirementsBoardMockApi";
+import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
 import type { MockTaskPriority } from "../../requirements/mock/types";
 
 const { Text } = Typography;
@@ -53,17 +53,17 @@ export function TaskCreatePage() {
 
   const requirementsQuery = useQuery({
     queryKey: ["requirements-board", "requirements"],
-    queryFn: () => requirementsBoardMockApi.listRequirements(),
+    queryFn: () => requirementsBoardApi.listRequirements(),
     staleTime: 60_000
   });
   const assigneesQuery = useQuery({
     queryKey: ["requirements-board", "assignees"],
-    queryFn: () => requirementsBoardMockApi.listAssignees(),
+    queryFn: () => requirementsBoardApi.listAssignees(),
     staleTime: 5 * 60_000
   });
   const tasksQuery = useQuery({
     queryKey: ["requirements-board", "tasks"],
-    queryFn: () => requirementsBoardMockApi.listTasks(),
+    queryFn: () => requirementsBoardApi.listTasks(),
     staleTime: 30_000
   });
 
@@ -78,7 +78,7 @@ export function TaskCreatePage() {
 
   const createMutation = useMutation({
     mutationFn: (values: CreateTaskFormValues) =>
-      requirementsBoardMockApi.createTask({
+      requirementsBoardApi.createTask({
         requirement_id: values.requirement_id,
         title: values.title.trim(),
         acceptance_criteria_ids: values.acceptance_criteria_ids ?? [],
@@ -139,7 +139,7 @@ export function TaskCreatePage() {
               className="aidashboard-form__error"
               type="error"
               showIcon
-              message="创建任务所需 Mock 数据加载失败"
+              message="创建任务所需数据加载失败"
               action={
                 <Button
                   onClick={() => {

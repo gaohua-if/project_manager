@@ -1,0 +1,225 @@
+import {
+  addTaskDependency,
+  createRequirement,
+  createTask,
+  fetchFollows,
+  fetchRequirement,
+  fetchRequirements,
+  fetchSessionTokens,
+  fetchTask,
+  fetchTasks,
+  fetchTeams,
+  fetchUsers,
+  followTarget,
+  removeTaskDependency,
+  unfollowTarget,
+  updateRequirement,
+  updateSessionRequirement,
+  updateSessionTask,
+  updateTaskProgress,
+  updateTaskStatus
+} from "../../api/client";
+import type { Requirement, Task } from "../../api/types";
+import type {
+  CreateMockRequirementInput,
+  CreateMockTaskInput,
+  FavoriteTargetType,
+  MockFavorite,
+  MockRequirement,
+  MockTask,
+  MockTaskStatus,
+  MockTokenSource,
+  RequirementStage
+} from "../mock/types";
+
+function normalizeRequirement(requirement: Requirement): MockRequirement {
+  return {
+    id: requirement.id,
+    title: requirement.title,
+    description: requirement.description,
+    feishu_doc_url: requirement.feishu_doc_url,
+    acceptance_criteria: requirement.acceptance_criteria ?? [],
+    creator_id: requirement.creator_id,
+    creator_name: requirement.creator_name,
+    creator_role: requirement.creator_role,
+    status: requirement.status,
+    priority: requirement.priority,
+    progress: requirement.progress ?? 0,
+    deadline: requirement.deadline,
+    team_ids: requirement.team_ids ?? [],
+    team_names: requirement.team_names ?? [],
+    token_source_ids: requirement.token_source_ids ?? [],
+    risk_summary: requirement.risk_summary ?? { blocked: 0, overdue: 0, due_soon: 0 },
+    created_at: requirement.created_at,
+    updated_at: requirement.updated_at
+  };
+}
+
+function normalizeTask(task: Task): MockTask {
+  return {
+    id: task.id,
+    requirement_id: task.requirement_id,
+    requirement_title: task.requirement_title ?? "",
+    title: task.title,
+    acceptance_criteria_ids: task.acceptance_criteria_ids ?? [],
+    assignee_id: task.assignee_id,
+    assignee_name: task.assignee_name,
+    status: (task.display_status || task.status) as MockTaskStatus,
+    priority: task.priority,
+    progress: task.progress ?? 0,
+    due_date: task.due_date,
+    dependencies: task.dependencies ?? [],
+    blocking: task.blocking ?? [],
+    risk_types: task.risk_types ?? [],
+    token_source_ids: task.token_source_ids ?? [],
+    created_at: task.created_at,
+    updated_at: task.updated_at
+  };
+}
+
+function dateDaysAgo(days: number) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+async function getNormalizedTask(taskId: string) {
+  return normalizeTask(await fetchTask(taskId));
+}
+
+export const requirementsBoardApi = {
+  async listRequirements() {
+    return (await fetchRequirements()).map(normalizeRequirement);
+  },
+
+  async getRequirement(id: string) {
+    return normalizeRequirement(await fetchRequirement(id));
+  },
+
+  async createRequirement(input: CreateMockRequirementInput) {
+    return normalizeRequirement(await createRequirement(input));
+  },
+
+  async updateRequirementStage(id: string, status: RequirementStage) {
+    return normalizeRequirement(await updateRequirement(id, { status }));
+  },
+
+  async listTasks(requirementId?: string) {
+    return (
+      await fetchTasks({
+        scope: "requirements",
+        ...(requirementId ? { requirement_id: requirementId } : {})
+      })
+    ).map(normalizeTask);
+  },
+
+  async getTask(id: string) {
+    return getNormalizedTask(id);
+  },
+
+  async createTask(input: CreateMockTaskInput) {
+    const created = await createTask({
+      requirement_id: input.requirement_id,
+      title: input.title,
+      acceptance_criteria_ids: input.acceptance_criteria_ids,
+      assignee_id: input.assignee_id,
+      priority: input.priority,
+      due_date: input.due_date,
+      depends_on_ids: input.dependency_task_ids
+    });
+    return getNormalizedTask(created.id);
+  },
+
+  async updateTaskProgress(taskId: string, progress: number) {
+    return normalizeTask(await updateTaskProgress(taskId, progress));
+  },
+
+  async updateTaskStatus(taskId: string, status: Exclude<MockTaskStatus, "blocked">) {
+    return normalizeTask(await updateTaskStatus(taskId, status));
+  },
+
+  async addTaskDependency(taskId: string, dependsOnId: string) {
+    return normalizeTask(await addTaskDependency(taskId, dependsOnId));
+  },
+
+  async removeTaskDependency(taskId: string, dependsOnId: string) {
+    return normalizeTask(await removeTaskDependency(taskId, dependsOnId));
+  },
+
+  async listTeams() {
+    return fetchTeams();
+  },
+
+  async listAssignees() {
+    const users = await fetchUsers();
+    return users
+      .filter((user) => user.role === "employee")
+      .map((user) => ({
+        id: user.id,
+        name: user.name,
+        employee_id: user.employee_id,
+        team_id: user.team_id ?? ""
+      }));
+  },
+
+  async listFavorites(): Promise<MockFavorite[]> {
+    return (await fetchFollows()).map((follow) => ({
+      user_id: follow.user_id,
+      target_type: follow.target_type,
+      target_id: follow.target_id,
+      created_at: follow.created_at
+    }));
+  },
+
+  async toggleFavorite(targetType: FavoriteTargetType, targetId: string) {
+    const follows = await fetchFollows();
+    const followed = follows.some(
+      (item) => item.target_type === targetType && item.target_id === targetId
+    );
+    return followed
+      ? unfollowTarget(targetType, targetId)
+      : followTarget(targetType, targetId);
+  },
+
+  async listTokenSources(): Promise<MockTokenSource[]> {
+    try {
+      const sources = await fetchSessionTokens({
+        from: dateDaysAgo(90),
+        to: new Date().toISOString().slice(0, 10),
+        scope: "mine"
+      });
+      return sources.map((source) => ({
+        id: source.session_id,
+        recorded_at: source.started_at,
+        tool: source.agent_type,
+        uploader: source.user_name,
+        token: source.total_tokens,
+        summary: source.session_ref
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async linkTaskTokenSources(taskId: string, sourceIds: string[]) {
+    await Promise.all(sourceIds.map((sourceId) => updateSessionTask(sourceId, taskId)));
+    return getNormalizedTask(taskId);
+  },
+
+  async unlinkTaskTokenSource(taskId: string, sourceId: string) {
+    await updateSessionTask(sourceId, null);
+    return getNormalizedTask(taskId);
+  },
+
+  async linkRequirementTokenSources(requirementId: string, sourceIds: string[]) {
+    await Promise.all(
+      sourceIds.map((sourceId) => updateSessionRequirement(sourceId, requirementId))
+    );
+    return normalizeRequirement(await fetchRequirement(requirementId));
+  },
+
+  async unlinkRequirementTokenSource(requirementId: string, sourceId: string) {
+    await updateSessionRequirement(sourceId, null);
+    return normalizeRequirement(await fetchRequirement(requirementId));
+  }
+};

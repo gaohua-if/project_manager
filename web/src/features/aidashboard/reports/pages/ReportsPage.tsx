@@ -3,17 +3,23 @@ import {
   Alert,
   App,
   Button,
-  Card,
   DatePicker,
   Empty,
   Input,
   Segmented,
-  Space,
-  Spin,
-  Tag,
-  Typography
+  Skeleton,
+  Space
 } from "antd";
-import { RobotOutlined } from "@ant-design/icons";
+import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  EditOutlined,
+  FileTextOutlined,
+  LinkOutlined,
+  RobotOutlined,
+  TeamOutlined
+} from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 
@@ -28,10 +34,15 @@ import {
   updateTeamReport
 } from "../../api/client";
 import type { DailyReport, TeamMemberReport, TeamReport } from "../../api/types";
+import {
+  RequirementMetricCard,
+  RequirementMetricGrid
+} from "../../requirements/components/RequirementMetricCard";
 import { useAuth } from "@/shared/auth/authContext";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const { Text, Paragraph } = Typography;
+import "./ReportsPage.css";
+
 const { TextArea } = Input;
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -39,6 +50,35 @@ const weekAgoStr = () => new Date(Date.now() - 7 * 86400000).toISOString().split
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "请稍后重试";
+}
+
+function reportStateClass(edited: boolean) {
+  return edited ? "is-edited" : "is-auto";
+}
+
+function FeishuLink({ url }: { url: string }) {
+  return (
+    <a className="reports-feishu-link" href={url} target="_blank" rel="noreferrer">
+      <LinkOutlined />
+      飞书文档
+    </a>
+  );
+}
+
+function ReportsSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="reports-loading-frame">
+      <Skeleton active paragraph={{ rows }} />
+    </div>
+  );
+}
+
+function ReportsEmpty({ description }: { description: string }) {
+  return (
+    <div className="reports-empty-frame">
+      <Empty description={description} />
+    </div>
+  );
 }
 
 export function ReportsPage() {
@@ -87,11 +127,19 @@ function EmployeeReportsView() {
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
 
+  const today = todayStr();
+  const todayCount = reports.filter((r) => r.report_date === today).length;
+  const weekCount = reports.length;
+  const editedCount = reports.filter((r) => r.edited).length;
+  const feishuCount = reports.filter((r) => r.feishu_doc_url).length;
+
   return (
     <PagePanel
       title="个人日报"
       description="查看和编辑你的日报"
       breadcrumbs={[{ title: "报告" }, { title: "个人日报" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
       actions={
         <Button
           type="primary"
@@ -103,85 +151,123 @@ function EmployeeReportsView() {
         </Button>
       }
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        {reportsQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="日报加载失败"
-            description={errorMessage(reportsQuery.error)}
-            action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
-          />
-        ) : reportsQuery.isLoading ? (
-          <Card>
-            <div style={{ textAlign: "center", padding: 32 }}>
-              <Spin />
-            </div>
-          </Card>
-        ) : reports.length === 0 ? (
-          <Card>
-            <Empty description="暂无报告，点击「生成 AI 日报」开始" />
-          </Card>
-        ) : (
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            {reports.map((r) => (
-              <Card
-                key={r.id}
-                size="small"
-                title={
-                  <Space>
-                    <Text strong>{r.report_date}</Text>
-                    <Tag color={r.edited ? "gold" : "blue"}>{r.edited ? "已编辑" : "自动生成"}</Tag>
-                  </Space>
-                }
-                extra={
-                  <Space>
-                    {r.feishu_doc_url ? (
-                      <a href={r.feishu_doc_url} target="_blank" rel="noreferrer">
-                        <Button size="small">飞书文档</Button>
-                      </a>
-                    ) : null}
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        if (editingId === r.id) {
-                          saveMutation.mutate(r.id);
-                        } else {
-                          setEditingId(r.id);
-                          setEditContent(r.content);
-                          setEditFeishuUrl(r.feishu_doc_url || "");
-                        }
-                      }}
-                      loading={editingId === r.id && saveMutation.isPending}
-                    >
-                      {editingId === r.id ? "保存" : "编辑"}
+      <RequirementMetricGrid>
+        <RequirementMetricCard
+          tone="primary"
+          icon={<CalendarOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "today",
+            title: "今日日报",
+            value: todayCount,
+            description: todayCount > 0 ? "今日已生成" : "今日待生成"
+          }}
+        />
+        <RequirementMetricCard
+          tone="info"
+          icon={<FileTextOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "week",
+            title: "本周日报",
+            value: weekCount,
+            description: "近 7 天"
+          }}
+        />
+        <RequirementMetricCard
+          tone="warning"
+          icon={<EditOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "edited",
+            title: "已编辑",
+            value: editedCount,
+            description: "手动调整后的日报"
+          }}
+        />
+        <RequirementMetricCard
+          tone="success"
+          icon={<LinkOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "feishu",
+            title: "关联飞书",
+            value: feishuCount,
+            description: "已挂飞书文档"
+          }}
+        />
+      </RequirementMetricGrid>
+
+      {reportsQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="日报加载失败"
+          description={errorMessage(reportsQuery.error)}
+          action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
+        />
+      ) : reportsQuery.isLoading ? (
+        <ReportsSkeleton />
+      ) : reports.length === 0 ? (
+        <ReportsEmpty description="暂无报告，点击「生成 AI 日报」开始" />
+      ) : (
+        <div className="reports-day-grid">
+          {reports.map((r) => (
+            <article
+              key={r.id}
+              className={`reports-report-card ${reportStateClass(r.edited)}`}
+            >
+              <header className="reports-report-card__head">
+                <span className="reports-report-card__head-left">
+                  <span className="reports-report-card__date">{r.report_date}</span>
+                  <span className={`reports-tag ${reportStateClass(r.edited)}`}>
+                    {r.edited ? "已编辑" : "自动生成"}
+                  </span>
+                </span>
+                <span className="reports-report-card__head-right">
+                  {r.feishu_doc_url ? <FeishuLink url={r.feishu_doc_url} /> : null}
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      if (editingId === r.id) {
+                        saveMutation.mutate(r.id);
+                      } else {
+                        setEditingId(r.id);
+                        setEditContent(r.content);
+                        setEditFeishuUrl(r.feishu_doc_url || "");
+                      }
+                    }}
+                    loading={editingId === r.id && saveMutation.isPending}
+                  >
+                    {editingId === r.id ? "保存" : "编辑"}
+                  </Button>
+                  {editingId === r.id ? (
+                    <Button size="small" onClick={() => setEditingId(null)}>
+                      取消
                     </Button>
-                  </Space>
-                }
-              >
-                {editingId === r.id ? (
-                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                    <TextArea
-                      rows={8}
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                    />
-                    <Input
-                      placeholder="飞书文档 URL"
-                      value={editFeishuUrl}
-                      onChange={(e) => setEditFeishuUrl(e.target.value)}
-                    />
-                  </Space>
-                ) : (
-                  <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                    {r.content}
-                  </Paragraph>
-                )}
-              </Card>
-            ))}
-          </Space>
-        )}
-      </Space>
+                  ) : null}
+                </span>
+              </header>
+              {editingId === r.id ? (
+                <div className="reports-edit-shell">
+                  <TextArea
+                    rows={8}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                  />
+                  <Input
+                    placeholder="飞书文档 URL"
+                    value={editFeishuUrl}
+                    onChange={(e) => setEditFeishuUrl(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <p className="reports-report-card__content">{r.content}</p>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
     </PagePanel>
   );
 }
@@ -217,11 +303,19 @@ function PMReportsView() {
     return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a));
   }, [reports]);
 
+  const today = todayStr();
+  const todayCount = reports.filter((r) => r.report_date === today).length;
+  const editedCount = reports.filter((r) => r.edited).length;
+  const autoCount = reports.length - editedCount;
+  const feishuCount = reports.filter((r) => r.feishu_doc_url).length;
+
   return (
     <PagePanel
       title="日报"
       description="查看团队成员日报"
       breadcrumbs={[{ title: "报告" }, { title: "日报" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
       actions={
         <Button
           type="primary"
@@ -233,54 +327,99 @@ function PMReportsView() {
         </Button>
       }
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        {reportsQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="日报加载失败"
-            description={errorMessage(reportsQuery.error)}
-            action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
-          />
-        ) : reportsQuery.isLoading ? (
-          <Card>
-            <div style={{ textAlign: "center", padding: 32 }}>
-              <Spin />
+      <RequirementMetricGrid>
+        <RequirementMetricCard
+          tone="primary"
+          icon={<CalendarOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "today",
+            title: "今日报告",
+            value: todayCount,
+            description: "今日已生成数"
+          }}
+        />
+        <RequirementMetricCard
+          tone="warning"
+          icon={<EditOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "edited",
+            title: "已编辑",
+            value: editedCount,
+            description: "手动调整后"
+          }}
+        />
+        <RequirementMetricCard
+          tone="info"
+          icon={<RobotOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "auto",
+            title: "自动生成",
+            value: autoCount,
+            description: "未经编辑的 AI 日报"
+          }}
+        />
+        <RequirementMetricCard
+          tone="success"
+          icon={<LinkOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "feishu",
+            title: "关联飞书",
+            value: feishuCount,
+            description: "已挂飞书文档"
+          }}
+        />
+      </RequirementMetricGrid>
+
+      {reportsQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="日报加载失败"
+          description={errorMessage(reportsQuery.error)}
+          action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
+        />
+      ) : reportsQuery.isLoading ? (
+        <ReportsSkeleton />
+      ) : reports.length === 0 ? (
+        <ReportsEmpty description="暂无报告" />
+      ) : (
+        grouped.map(([date, dateReports]) => (
+          <section className="reports-day-section" key={date}>
+            <header className="reports-day-section__head">
+              <span className="reports-day-section__date">{date}</span>
+              <span className="reports-day-section__rule" aria-hidden="true" />
+              <span className="reports-day-section__count">{dateReports.length} 份</span>
+            </header>
+            <div className="reports-day-grid">
+              {dateReports.map((r) => (
+                <article
+                  key={r.id}
+                  className={`reports-report-card ${reportStateClass(r.edited)}`}
+                >
+                  <header className="reports-report-card__head">
+                    <span className="reports-report-card__head-left">
+                      <span className="reports-report-card__author">{r.user_name}</span>
+                      <span className={`reports-tag ${reportStateClass(r.edited)}`}>
+                        {r.edited ? "已编辑" : "自动生成"}
+                      </span>
+                    </span>
+                    {r.feishu_doc_url ? (
+                      <span className="reports-report-card__head-right">
+                        <FeishuLink url={r.feishu_doc_url} />
+                      </span>
+                    ) : null}
+                  </header>
+                  <p className="reports-report-card__content">{r.content}</p>
+                </article>
+              ))}
             </div>
-          </Card>
-        ) : reports.length === 0 ? (
-          <Card>
-            <Empty description="暂无报告" />
-          </Card>
-        ) : (
-          grouped.map(([date, dateReports]) => (
-            <Card key={date} size="small" title={date}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {dateReports.map((r) => (
-                  <Card key={r.id} type="inner" size="small">
-                    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                      <Space>
-                        <Text strong>{r.user_name}</Text>
-                        <Tag color={r.edited ? "gold" : "blue"}>
-                          {r.edited ? "已编辑" : "自动生成"}
-                        </Tag>
-                        {r.feishu_doc_url ? (
-                          <a href={r.feishu_doc_url} target="_blank" rel="noreferrer">
-                            飞书 ↗
-                          </a>
-                        ) : null}
-                      </Space>
-                      <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                        {r.content}
-                      </Paragraph>
-                    </Space>
-                  </Card>
-                ))}
-              </Space>
-            </Card>
-          ))
-        )}
-      </Space>
+          </section>
+        ))
+      )}
     </PagePanel>
   );
 }
@@ -331,29 +470,125 @@ function TLReportsView() {
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
 
+  const memberTotal = memberReports.length;
+  const submitted = memberReports.filter((m) => m.has_report).length;
+  const missing = memberTotal - submitted;
+  const edited = memberReports.filter((m) => m.has_report && m.content && m.content.length > 0).length;
+
   return (
     <PagePanel
       title="团队日报"
       description="生成团队日报并查看成员日报"
       breadcrumbs={[{ title: "报告" }, { title: "团队日报" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Segmented
-          value={tab}
-          onChange={(v) => setTab(v as "team" | "members")}
-          options={[
-            { label: "团队日报", value: "team" },
-            { label: "成员日报", value: "members" }
-          ]}
+      <RequirementMetricGrid>
+        <RequirementMetricCard
+          tone="primary"
+          icon={<TeamOutlined />}
+          loading={memberReportsQuery.isLoading}
+          metric={{
+            key: "total",
+            title: "成员总数",
+            value: memberTotal,
+            description: memberDate.format("YYYY-MM-DD")
+          }}
         />
+        <RequirementMetricCard
+          tone="success"
+          icon={<CheckCircleOutlined />}
+          loading={memberReportsQuery.isLoading}
+          metric={{
+            key: "submitted",
+            title: "今日已交",
+            value: submitted,
+            description:
+              memberTotal > 0 ? `提交率 ${Math.round((submitted * 100) / memberTotal)}%` : "暂无成员"
+          }}
+        />
+        <RequirementMetricCard
+          tone="danger"
+          icon={<CloseCircleOutlined />}
+          loading={memberReportsQuery.isLoading}
+          metric={{
+            key: "missing",
+            title: "今日未交",
+            value: missing,
+            description: missing > 0 ? "需要提醒" : "全员到齐"
+          }}
+        />
+        <RequirementMetricCard
+          tone="warning"
+          icon={<EditOutlined />}
+          loading={memberReportsQuery.isLoading}
+          metric={{
+            key: "edited",
+            title: "已编辑",
+            value: edited,
+            description: "成员有内容的日报"
+          }}
+        />
+      </RequirementMetricGrid>
 
-        {tab === "team" ? (
-          <Card
-            title="今日团队日报"
-            extra={
-              <Space>
-                {teamReport && !editingTeam ? (
+      <div className="reports-toolbar">
+        <div className="reports-toolbar__meta">
+          <strong>{tab === "team" ? "团队日报" : "成员日报"}</strong>
+          <span>·</span>
+          <span>{tab === "team" ? "今日" : memberDate.format("YYYY-MM-DD")}</span>
+        </div>
+        <div className="reports-toolbar__right">
+          <Segmented
+            value={tab}
+            onChange={(v) => setTab(v as "team" | "members")}
+            options={[
+              { label: "团队日报", value: "team" },
+              { label: "成员日报", value: "members" }
+            ]}
+          />
+          {tab === "members" ? (
+            <DatePicker
+              value={memberDate}
+              onChange={(v) => v && setMemberDate(v)}
+              allowClear={false}
+            />
+          ) : (
+            <Button
+              type="primary"
+              icon={<RobotOutlined />}
+              loading={generateMutation.isPending}
+              onClick={() => generateMutation.mutate()}
+            >
+              生成团队日报
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {tab === "team" ? (
+        teamReportQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="团队日报加载失败"
+            description={errorMessage(teamReportQuery.error)}
+            action={<Button onClick={() => void teamReportQuery.refetch()}>重试</Button>}
+          />
+        ) : teamReportQuery.isLoading ? (
+          <ReportsSkeleton />
+        ) : !teamReport ? (
+          <ReportsEmpty description="尚未生成团队日报，点击「生成团队日报」创建" />
+        ) : (
+          <section className="reports-team-card">
+            <header className="reports-team-card__head">
+              <span className="reports-team-card__title">{teamReport.team_name}</span>
+              <span className="reports-team-card__meta">
+                <span className="reports-tag is-team">团队</span>
+                <span>{teamReport.report_date}</span>
+                {teamReport.feishu_doc_url ? <FeishuLink url={teamReport.feishu_doc_url} /> : null}
+                {!editingTeam ? (
                   <Button
+                    size="small"
                     onClick={() => {
                       setEditingTeam(true);
                       setTeamContent(teamReport.content);
@@ -363,33 +598,10 @@ function TLReportsView() {
                     编辑
                   </Button>
                 ) : null}
-                <Button
-                  type="primary"
-                  icon={<RobotOutlined />}
-                  loading={generateMutation.isPending}
-                  onClick={() => generateMutation.mutate()}
-                >
-                  生成团队日报
-                </Button>
-              </Space>
-            }
-          >
-            {teamReportQuery.isError ? (
-              <Alert
-                type="error"
-                showIcon
-                message="团队日报加载失败"
-                description={errorMessage(teamReportQuery.error)}
-                action={<Button onClick={() => void teamReportQuery.refetch()}>重试</Button>}
-              />
-            ) : teamReportQuery.isLoading ? (
-              <div style={{ textAlign: "center", padding: 32 }}>
-                <Spin />
-              </div>
-            ) : !teamReport ? (
-              <Empty description="尚未生成团队日报，点击「生成团队日报」创建" />
-            ) : editingTeam ? (
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              </span>
+            </header>
+            {editingTeam ? (
+              <div className="reports-edit-shell">
                 <TextArea
                   rows={10}
                   value={teamContent}
@@ -400,7 +612,8 @@ function TLReportsView() {
                   value={teamFeishuUrl}
                   onChange={(e) => setTeamFeishuUrl(e.target.value)}
                 />
-                <Space>
+                <div className="reports-edit-shell__actions">
+                  <Button onClick={() => setEditingTeam(false)}>取消</Button>
                   <Button
                     type="primary"
                     loading={saveMutation.isPending}
@@ -408,79 +621,49 @@ function TLReportsView() {
                   >
                     保存
                   </Button>
-                  <Button onClick={() => setEditingTeam(false)}>取消</Button>
-                </Space>
-              </Space>
-            ) : (
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                <Space>
-                  <Tag color="blue">{teamReport.team_name}</Tag>
-                  <Text type="secondary">{teamReport.report_date}</Text>
-                  {teamReport.feishu_doc_url ? (
-                    <a href={teamReport.feishu_doc_url} target="_blank" rel="noreferrer">
-                      飞书 ↗
-                    </a>
-                  ) : null}
-                </Space>
-                <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                  {teamReport.content}
-                </Paragraph>
-              </Space>
-            )}
-          </Card>
-        ) : (
-          <Card
-            title="成员日报"
-            extra={
-              <DatePicker
-                value={memberDate}
-                onChange={(v) => v && setMemberDate(v)}
-                allowClear={false}
-              />
-            }
-          >
-            {memberReportsQuery.isError ? (
-              <Alert
-                type="error"
-                showIcon
-                message="成员日报加载失败"
-                description={errorMessage(memberReportsQuery.error)}
-                action={<Button onClick={() => void memberReportsQuery.refetch()}>重试</Button>}
-              />
-            ) : memberReportsQuery.isLoading ? (
-              <div style={{ textAlign: "center", padding: 32 }}>
-                <Spin />
+                </div>
               </div>
-            ) : memberReports.length === 0 ? (
-              <Empty description="该日期未找到团队成员日报" />
             ) : (
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {memberReports.map((mr) => (
-                  <Card key={mr.user_id} type="inner" size="small">
-                    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                      <Space>
-                        <Text strong>{mr.user_name}</Text>
-                        <Tag color={mr.has_report ? "success" : "default"}>
-                          {mr.has_report ? "已提交" : "未提交"}
-                        </Tag>
-                      </Space>
-                      {mr.has_report ? (
-                        <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                          {mr.content}
-                        </Paragraph>
-                      ) : (
-                        <Text type="secondary" italic>
-                          该日期暂无报告。
-                        </Text>
-                      )}
-                    </Space>
-                  </Card>
-                ))}
-              </Space>
+              <p className="reports-team-card__body">{teamReport.content}</p>
             )}
-          </Card>
-        )}
-      </Space>
+          </section>
+        )
+      ) : memberReportsQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="成员日报加载失败"
+          description={errorMessage(memberReportsQuery.error)}
+          action={<Button onClick={() => void memberReportsQuery.refetch()}>重试</Button>}
+        />
+      ) : memberReportsQuery.isLoading ? (
+        <ReportsSkeleton />
+      ) : memberReports.length === 0 ? (
+        <ReportsEmpty description="该日期未找到团队成员日报" />
+      ) : (
+        <div className="reports-member-grid">
+          {memberReports.map((mr) => (
+            <article
+              key={mr.user_id}
+              className={`reports-report-card ${mr.has_report ? "is-auto" : "is-missing"}`}
+            >
+              <header className="reports-report-card__head">
+                <span className="reports-report-card__head-left">
+                  <span className="reports-report-card__author">{mr.user_name}</span>
+                  <span className={`reports-tag ${mr.has_report ? "is-submitted" : "is-missing"}`}>
+                    {mr.has_report ? "已提交" : "未提交"}
+                  </span>
+                </span>
+              </header>
+              {mr.has_report ? (
+                <p className="reports-report-card__content">{mr.content}</p>
+              ) : (
+                <span className="reports-report-card__empty">该日期暂无报告。</span>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
     </PagePanel>
   );
 }
@@ -547,6 +730,12 @@ function DirectorReportsView() {
     return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a));
   }, [teamReports]);
 
+  const today = todayStr();
+  const todayReports = reports.filter((r) => r.report_date === today).length;
+  const teamsCovered = new Set(teamReports.map((r) => r.team_id)).size;
+  const editedCount = reports.filter((r) => r.edited).length;
+  const autoCount = reports.length - editedCount;
+
   const activeQuery = tab === "teams" ? teamReportsQuery : reportsQuery;
   const activeError = tab === "teams" ? teamReportsQuery.error : reportsQuery.error;
 
@@ -555,6 +744,8 @@ function DirectorReportsView() {
       title="部门报告"
       description="查看全部门的小组日报与员工日报"
       breadcrumbs={[{ title: "报告" }, { title: "部门报告" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
       actions={
         <Button
           type="primary"
@@ -566,81 +757,140 @@ function DirectorReportsView() {
         </Button>
       }
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Segmented
-          value={tab}
-          onChange={(v) => setTab(v as "teams" | "employees")}
-          options={[
-            { label: "小组日报", value: "teams" },
-            { label: "员工日报", value: "employees" }
-          ]}
+      <RequirementMetricGrid>
+        <RequirementMetricCard
+          tone="primary"
+          icon={<CalendarOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "today",
+            title: "今日报告",
+            value: todayReports,
+            description: "今日全部门已生成"
+          }}
         />
+        <RequirementMetricCard
+          tone="info"
+          icon={<TeamOutlined />}
+          loading={teamReportsQuery.isLoading}
+          metric={{
+            key: "teams",
+            title: "涉及团队",
+            value: teamsCovered,
+            description: "已生成团队日报数"
+          }}
+        />
+        <RequirementMetricCard
+          tone="warning"
+          icon={<EditOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "edited",
+            title: "已编辑",
+            value: editedCount,
+            description: "经成员调整的报告"
+          }}
+        />
+        <RequirementMetricCard
+          tone="success"
+          icon={<RobotOutlined />}
+          loading={reportsQuery.isLoading}
+          metric={{
+            key: "auto",
+            title: "自动生成",
+            value: autoCount,
+            description: "未经编辑的 AI 日报"
+          }}
+        />
+      </RequirementMetricGrid>
 
-        {activeQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="报告加载失败"
-            description={errorMessage(activeError)}
-            action={<Button onClick={() => void activeQuery.refetch()}>重试</Button>}
+      <div className="reports-toolbar">
+        <div className="reports-toolbar__meta">
+          <strong>{tab === "teams" ? "小组日报" : "员工日报"}</strong>
+          <span>·</span>
+          <span>近 7 天</span>
+        </div>
+        <div className="reports-toolbar__right">
+          <Segmented
+            value={tab}
+            onChange={(v) => setTab(v as "teams" | "employees")}
+            options={[
+              { label: "小组日报", value: "teams" },
+              { label: "员工日报", value: "employees" }
+            ]}
           />
-        ) : activeQuery.isLoading ? (
-          <Card>
-            <div style={{ textAlign: "center", padding: 32 }}>
-              <Spin />
-            </div>
-          </Card>
-        ) : tab === "teams" ? (
-          groupedTeamReports.length === 0 ? (
-            <Card>
-              <Empty description="暂无团队日报。各团队 TL 可在其 Reports 页面生成。" />
-            </Card>
-          ) : (
-            groupedTeamReports.map(([date, rs]) => (
-              <Card key={date} size="small" title={date}>
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  {rs.map((r) => (
-                    <Card key={r.id} type="inner" size="small">
-                      <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                        <Space>
-                          <Tag color="blue">{r.team_name}</Tag>
-                          <Text type="secondary">由 {r.leader_name} 生成</Text>
-                          {r.feishu_doc_url ? (
-                            <a href={r.feishu_doc_url} target="_blank" rel="noreferrer">
-                              飞书 ↗
-                            </a>
-                          ) : null}
-                        </Space>
-                        <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                          {r.content}
-                        </Paragraph>
-                      </Space>
-                    </Card>
-                  ))}
-                </Space>
-              </Card>
-            ))
-          )
-        ) : groupedEmployeeReports.length === 0 ? (
-          <Card>
-            <Empty description="暂无员工日报" />
-          </Card>
+        </div>
+      </div>
+
+      {activeQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="报告加载失败"
+          description={errorMessage(activeError)}
+          action={<Button onClick={() => void activeQuery.refetch()}>重试</Button>}
+        />
+      ) : activeQuery.isLoading ? (
+        <ReportsSkeleton />
+      ) : tab === "teams" ? (
+        groupedTeamReports.length === 0 ? (
+          <ReportsEmpty description="暂无团队日报。各团队 TL 可在其 Reports 页面生成。" />
         ) : (
-          groupedEmployeeReports.map(([date, dateReports]) => (
-            <Card key={date} size="small" title={date}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            {groupedTeamReports.map(([date, rs]) => (
+              <section className="reports-day-section" key={date}>
+                <header className="reports-day-section__head">
+                  <span className="reports-day-section__date">{date}</span>
+                  <span className="reports-day-section__rule" aria-hidden="true" />
+                  <span className="reports-day-section__count">{rs.length} 个团队</span>
+                </header>
+                <div className="reports-day-grid">
+                  {rs.map((r) => (
+                    <article className="reports-report-card is-auto" key={r.id}>
+                      <header className="reports-report-card__head">
+                        <span className="reports-report-card__head-left">
+                          <span className="reports-report-card__author">{r.team_name}</span>
+                          <span className="reports-tag is-team">团队</span>
+                        </span>
+                        <span className="reports-report-card__head-right">
+                          {r.feishu_doc_url ? <FeishuLink url={r.feishu_doc_url} /> : null}
+                        </span>
+                      </header>
+                      <p className="reports-report-card__content">{r.content}</p>
+                      <span className="reports-report-card__date">由 {r.leader_name} 生成</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </Space>
+        )
+      ) : groupedEmployeeReports.length === 0 ? (
+        <ReportsEmpty description="暂无员工日报" />
+      ) : (
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          {groupedEmployeeReports.map(([date, dateReports]) => (
+            <section className="reports-day-section" key={date}>
+              <header className="reports-day-section__head">
+                <span className="reports-day-section__date">{date}</span>
+                <span className="reports-day-section__rule" aria-hidden="true" />
+                <span className="reports-day-section__count">{dateReports.length} 份</span>
+              </header>
+              <div className="reports-day-grid">
                 {dateReports.map((r) => (
-                  <Card
+                  <article
                     key={r.id}
-                    type="inner"
-                    size="small"
-                    extra={
-                      <Space>
-                        {r.feishu_doc_url ? (
-                          <a href={r.feishu_doc_url} target="_blank" rel="noreferrer">
-                            <Button size="small">飞书文档</Button>
-                          </a>
-                        ) : null}
+                    className={`reports-report-card ${reportStateClass(r.edited)}`}
+                  >
+                    <header className="reports-report-card__head">
+                      <span className="reports-report-card__head-left">
+                        <span className="reports-report-card__author">{r.user_name}</span>
+                        <span className={`reports-tag ${reportStateClass(r.edited)}`}>
+                          {r.edited ? "已编辑" : "自动生成"}
+                        </span>
+                      </span>
+                      <span className="reports-report-card__head-right">
+                        {r.feishu_doc_url ? <FeishuLink url={r.feishu_doc_url} /> : null}
                         <Button
                           size="small"
                           onClick={() => {
@@ -656,42 +906,36 @@ function DirectorReportsView() {
                         >
                           {editingId === r.id ? "保存" : "编辑"}
                         </Button>
-                      </Space>
-                    }
-                  >
-                    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                      <Space>
-                        <Text strong>{r.user_name}</Text>
-                        <Tag color={r.edited ? "gold" : "blue"}>
-                          {r.edited ? "已编辑" : "自动生成"}
-                        </Tag>
-                      </Space>
-                      {editingId === r.id ? (
-                        <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                          <TextArea
-                            rows={6}
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                          />
-                          <Input
-                            placeholder="飞书文档 URL"
-                            value={editFeishuUrl}
-                            onChange={(e) => setEditFeishuUrl(e.target.value)}
-                          />
-                        </Space>
-                      ) : (
-                        <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-                          {r.content}
-                        </Paragraph>
-                      )}
-                    </Space>
-                  </Card>
+                        {editingId === r.id ? (
+                          <Button size="small" onClick={() => setEditingId(null)}>
+                            取消
+                          </Button>
+                        ) : null}
+                      </span>
+                    </header>
+                    {editingId === r.id ? (
+                      <div className="reports-edit-shell">
+                        <TextArea
+                          rows={6}
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                        />
+                        <Input
+                          placeholder="飞书文档 URL"
+                          value={editFeishuUrl}
+                          onChange={(e) => setEditFeishuUrl(e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <p className="reports-report-card__content">{r.content}</p>
+                    )}
+                  </article>
                 ))}
-              </Space>
-            </Card>
-          ))
-        )}
-      </Space>
+              </div>
+            </section>
+          ))}
+        </Space>
+      )}
     </PagePanel>
   );
 }
