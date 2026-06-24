@@ -10,7 +10,7 @@ import {
   RightOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Checkbox, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Slider, Space, Steps, Tag } from "antd";
+import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag } from "antd";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { ReactNode } from "react";
@@ -24,7 +24,7 @@ import "./console-dashboard.css";
 type PreviewRole = "employee" | "team_leader" | "director" | "pm";
 type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已发送" | "发送失败" | "生成失败";
 type ReportGenerateMode = "系统自动生成" | "手动生成";
-type ReportModalStep = "work" | "progress" | "editor";
+type ReportModalStep = "sessions" | "source" | "editor";
 type ReportKind =
   | "personal_daily"
   | "personal_weekly"
@@ -131,7 +131,6 @@ interface TaskProgressSuggestion {
   status: string;
   sessionIds: string[];
   note: string;
-  tomorrowPlan?: string;
   syncState?: "已修改" | "待同步";
 }
 
@@ -337,7 +336,7 @@ const DEFAULT_MARKDOWN = `# 6 月 22 日日报
 
 ## 今日完成
 * 收敛控制台首页信息架构，移除大盘式概览。
-* 将日报入口调整为选择今日工作并确认任务进展。
+* 将日报生成入口调整为个人 session 生成个人日报。
 * 梳理风险项、我关注的、日报 / 周报入口的页面层级。
 
 ## 风险与阻塞
@@ -370,8 +369,8 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日任务进展和 Token 来源生成日报草稿，请确认后发送。",
-        sourceSummary: "今日任务进展、已关联 Token 来源",
+        description: "系统已根据今日 session 生成日报，请确认后发送。",
+        sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:42",
         nextAt: "19:00"
@@ -382,8 +381,8 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成草稿。",
-        sourceSummary: "本周个人日报、Token 来源摘要、我负责的任务、我关注的任务、风险与阻塞",
+        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
+        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "-"
       })
     ],
@@ -488,8 +487,8 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日任务进展和 Token 来源生成日报草稿，请确认后发送。",
-        sourceSummary: "今日任务进展、已关联 Token 来源",
+        description: "系统已根据今日 session 生成日报，请确认后发送。",
+        sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:30",
         nextAt: "19:00"
@@ -501,7 +500,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         name: "本周周报",
         status: "草稿待确认",
         description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
-        sourceSummary: "本周个人日报、Token 来源摘要、我负责的任务、我关注的任务、风险与阻塞",
+        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "17:40"
       })
     ],
@@ -627,7 +626,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         name: "今日日报",
         status: "已发送",
         description: "今日日报已发送。",
-        sourceSummary: "今日任务进展、已关联 Token 来源",
+        sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 1,
         updatedAt: "17:55"
       }),
@@ -638,7 +637,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         name: "本周周报",
         status: "草稿待确认",
         description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
-        sourceSummary: "本周个人日报、Token 来源摘要、我负责的任务、我关注的任务、风险与阻塞",
+        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "17:20"
       })
     ],
@@ -749,7 +748,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
   pm: {
     label: "PM",
     userLine: "周芷若 · 平台 PM",
-    workCue: "2 个需求缺少验收标准，日报发送目标仍待确认。",
+    workCue: "2 个需求缺少 AC，日报发送目标仍待确认。",
     personalReports: [
       createReport({
         id: "pm-personal-daily",
@@ -757,8 +756,8 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "待生成",
-        description: "今日尚未生成日报，可选择今日工作并确认任务进展。",
-        sourceSummary: "今日任务进展、已关联 Token 来源",
+        description: "今日尚未生成日报，可选择 session 生成日报。",
+        sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         updatedAt: "-"
       }),
       createReport({
@@ -767,8 +766,8 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成草稿。",
-        sourceSummary: "本周个人日报、Token 来源摘要、我负责的任务、我关注的任务、风险与阻塞",
+        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
+        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
         updatedAt: "-"
       })
     ],
@@ -871,7 +870,7 @@ export function DashboardPage() {
     )
   );
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportModalStep, setReportModalStep] = useState<ReportModalStep>("work");
+  const [reportModalStep, setReportModalStep] = useState<ReportModalStep>("sessions");
   const [activeReportId, setActiveReportId] = useState<string>("employee-personal-daily");
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(["session-am", "session-pm"]);
   const [draftMarkdown, setDraftMarkdown] = useState(DEFAULT_MARKDOWN);
@@ -917,14 +916,6 @@ export function DashboardPage() {
       nextAt: activeReport.kind === "personal_daily" ? "19:00" : undefined
     });
     setReportModalStep("editor");
-  };
-
-  const advanceReportFlow = () => {
-    if (reportModalStep === "work" && activeReport.kind === "personal_daily") {
-      setReportModalStep("progress");
-      return;
-    }
-    startGenerateDraft();
   };
 
   const saveDraft = () => {
@@ -1078,11 +1069,11 @@ export function DashboardPage() {
         footer={renderReportModalFooter({
           step: reportModalStep,
           report: activeReport,
-          selectedCount: taskSuggestions.length,
+          selectedCount: selectedSessionIds.length,
           modifiedTaskCount,
           onCancel: () => setIsReportModalOpen(false),
-          onNext: advanceReportFlow,
-          onGenerate: advanceReportFlow,
+          onNext: startGenerateDraft,
+          onGenerate: startGenerateDraft,
           onSave: saveDraft,
           onSend: sendReport
         })}
@@ -1097,9 +1088,6 @@ export function DashboardPage() {
           draftMarkdown={draftMarkdown}
           onSelectedSessionIdsChange={setSelectedSessionIds}
           onEditTask={openTaskEditModal}
-          onTaskChange={(updated) =>
-            setTaskSuggestions((current) => current.map((task) => task.key === updated.key ? updated : task))
-          }
           onDraftMarkdownChange={setDraftMarkdown}
         />
       </Modal>
@@ -1520,15 +1508,15 @@ function getInitialReportModalStep(report: ReportItem): ReportModalStep {
 }
 
 function getGenerateStepForReport(report: ReportItem): ReportModalStep {
-  return report.kind === "personal_daily" ? "work" : "progress";
+  return report.kind === "personal_daily" ? "sessions" : "source";
 }
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
   if (step === "editor") {
     return report.status === "已发送" ? `查看${report.name}` : `编辑${report.name}`;
   }
-  if (step === "work") return "选择今日工作";
-  return report.kind === "personal_daily" ? "确认任务进展" : `确认${report.name}来源`;
+
+  return `生成${report.name}`;
 }
 
 function SessionUploadCard({
@@ -1560,7 +1548,7 @@ function SessionUploadCard({
       <div className="console-report-status-card">
         {renderSessionUploadSummary(range, report)}
         <div className="console-token-footer">
-          <span>基于已关联 Token 来源汇总</span>
+          <span>基于已上传 session 解析</span>
           <Button type="link" icon={<LinkOutlined />} onClick={onViewDetail}>
             查看 Token 明细
           </Button>
@@ -1873,7 +1861,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 
 function getReportSourceSteps(report: ReportItem) {
   if (report.kind === "personal_daily") {
-    return [{ title: "选择今日工作" }, { title: "确认任务进展" }, { title: "编辑并发送日报" }];
+    return [{ title: "选择 session" }, { title: "编辑内容" }];
   }
 
   return [{ title: "确认来源" }, { title: "编辑内容" }];
@@ -1899,7 +1887,7 @@ function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
 
 function getEditorMeta(report: ReportItem) {
   if (report.kind === "personal_daily") {
-    return ["任务进度来自结构化确认", "Token 来源仅作为工作证据"];
+    return [`已选 ${report.sessionCount} 个 session`, report.skill];
   }
 
   return [report.sourceSummary, report.skill];
@@ -1930,7 +1918,7 @@ function renderReportModalFooter({
   onSave: () => void;
   onSend: () => void;
 }) {
-  if (step === "work") {
+  if (step === "sessions") {
     return (
       <Space>
         <Button onClick={onCancel}>取消</Button>
@@ -1941,12 +1929,12 @@ function renderReportModalFooter({
     );
   }
 
-  if (step === "progress") {
+  if (step === "source") {
     return (
       <Space>
         <Button onClick={onCancel}>取消</Button>
         <Button type="primary" onClick={onGenerate}>
-          生成日报草稿
+          生成报告
         </Button>
       </Space>
     );
@@ -1963,12 +1951,10 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
         </span>
       ) : null}
-      <Button onClick={onSave}>保存草稿</Button>
-      <Button onClick={onSend}>仅发送日报</Button>
+      <Button onClick={onSave}>保存修改</Button>
       <Button type="primary" icon={<SendOutlined />} onClick={onSend}>
-        {report.kind === "personal_daily" ? "发送日报并同步任务进展" : getSendButtonText(report)}
+        {getSendButtonText(report)}
       </Button>
-      <Button onClick={onCancel}>关闭</Button>
     </Space>
   );
 }
@@ -1983,14 +1969,20 @@ function TaskProgressSuggestionList({
   return (
     <aside className="console-task-suggestion-list">
       <div className="console-session-modal__section">
-        <strong>本次将同步的任务更新</strong>
-        <span>只同步第二步结构化确认的内容；修改 Markdown 不会反向修改任务进度。</span>
+        <strong>任务进展建议</strong>
+        <span>LLM 根据已选 session 生成，可按需修改。</span>
       </div>
       {tasks.map((task) => (
         <article key={task.key} className="console-task-suggestion-card">
           <strong>任务：{task.taskName}</strong>
-          <span>进度更新至 {task.progress}% · {task.status}</span>
-          <span>{task.sessionIds.length ? "已关联 Token 来源" : "人工更新"}</span>
+          <span>建议进度：{task.progress}%，{task.status}</span>
+          <span>关联 session：{task.sessionIds.length} 个</span>
+          <ul>
+            {task.sessionIds.map((sessionId) => {
+              const session = getSessionById(sessionId);
+              return <li key={sessionId}>{session ? `${session.tool} ${session.timeRange}` : sessionId}</li>;
+            })}
+          </ul>
           <Space size={8}>
             {task.syncState ? <Tag color="blue">{task.syncState}</Tag> : null}
             <Button type="link" onClick={() => onEditTask(task)}>修改</Button>
@@ -1999,6 +1991,10 @@ function TaskProgressSuggestionList({
       ))}
     </aside>
   );
+}
+
+function getSessionById(sessionId: string) {
+  return SESSION_OPTIONS.find((session) => session.value === sessionId);
 }
 
 function TaskProgressEditModal({
@@ -2035,15 +2031,11 @@ function TaskProgressEditModal({
         </div>
         <label>
           <span>进度：</span>
-          <div className="console-task-progress-control">
-          <Slider
-            min={0}
-            max={100}
+          <Select
             value={task.progress}
+            options={[25, 50, 75, 100].map((value) => ({ label: `${value}%`, value }))}
             onChange={(progress) => onChange({ ...task, progress })}
           />
-          <InputNumber min={0} max={100} value={task.progress} addonAfter="%" onChange={(progress) => onChange({ ...task, progress: progress ?? 0 })} />
-          </div>
         </label>
         <label>
           <span>状态：</span>
@@ -2054,7 +2046,7 @@ function TaskProgressEditModal({
           />
         </label>
         <div className="console-session-modal__section">
-          <strong>关联 Token 来源（可选）：</strong>
+          <strong>关联 session：</strong>
           <Checkbox.Group
             value={task.sessionIds}
             onChange={(value) => onChange({ ...task, sessionIds: value as string[] })}
@@ -2062,28 +2054,19 @@ function TaskProgressEditModal({
             <div className="console-task-edit-sessions">
               {SESSION_OPTIONS.map((session) => (
                 <Checkbox key={session.value} value={session.value}>
-                  {session.summary} · {session.timeRange}
+                  {session.tool} {session.timeRange}
                 </Checkbox>
               ))}
             </div>
           </Checkbox.Group>
         </div>
         <label>
-          <span>今日进展：</span>
+          <span>备注：</span>
           <Input.TextArea
             value={task.note}
             rows={3}
-            placeholder="说明今天完成了什么"
-            onChange={(event) => onChange({ ...task, note: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>明日计划：</span>
-          <Input.TextArea
-            value={task.tomorrowPlan}
-            rows={2}
             placeholder="可选填写"
-            onChange={(event) => onChange({ ...task, tomorrowPlan: event.target.value })}
+            onChange={(event) => onChange({ ...task, note: event.target.value })}
           />
         </label>
       </div>
@@ -2100,7 +2083,6 @@ function ReportModalContent({
   draftMarkdown,
   onSelectedSessionIdsChange,
   onEditTask,
-  onTaskChange,
   onDraftMarkdownChange
 }: {
   step: ReportModalStep;
@@ -2111,10 +2093,9 @@ function ReportModalContent({
   draftMarkdown: string;
   onSelectedSessionIdsChange: (value: string[]) => void;
   onEditTask: (task: TaskProgressSuggestion) => void;
-  onTaskChange: (task: TaskProgressSuggestion) => void;
   onDraftMarkdownChange: (value: string) => void;
 }) {
-  if (step === "work") {
+  if (step === "sessions") {
     return (
       <div className="console-report-modal">
         <Steps
@@ -2123,75 +2104,28 @@ function ReportModalContent({
           items={getReportSourceSteps(report)}
         />
         <div className="console-session-modal__section">
-          <strong>我的待更新任务</strong>
-          <span>包括我负责、我参与、最近更新和系统推荐关联的未完成任务。</span>
+          <strong>6 月 22 日可用 session</strong>
+          <span>默认勾选系统认为应进入日报的 session，可手动调整。</span>
         </div>
-        <div className="console-session-list">
-          {taskSuggestions.map((task, index) => (
-            <label key={task.key} className="console-session-item">
-              <Checkbox defaultChecked />
-              <span>
-                <strong>{task.taskName}</strong>
-                <em>{task.status} · 当前进度 {task.progress}%</em>
-              </span>
-              <Tag color={index === 0 ? "blue" : "default"}>{index === 0 ? "系统推荐" : "我负责"}</Tag>
-            </label>
-          ))}
-        </div>
-        <Button type="dashed">添加其他任务</Button>
-        <Collapse
-          ghost
-          items={[{
-            key: "token-sources",
-            label: "今日 Token 来源（辅助证据）",
-            children: (
-              <Checkbox.Group value={selectedSessionIds} onChange={(value) => onSelectedSessionIdsChange(value as string[])}>
-                <div className="console-session-list">
-                  {SESSION_OPTIONS.map((session) => (
-                    <label key={session.value} className="console-session-item">
-                      <Checkbox value={session.value} />
-                      <span>
-                        <strong>{session.summary}</strong>
-                        <em>{session.tool} · {session.timeRange}</em>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </Checkbox.Group>
-            )
-          }]}
-        />
+        <Checkbox.Group value={selectedSessionIds} onChange={(value) => onSelectedSessionIdsChange(value as string[])}>
+          <div className="console-session-list">
+            {SESSION_OPTIONS.map((session) => (
+              <label key={session.value} className="console-session-item">
+                <Checkbox value={session.value} />
+                <span>
+                  <strong>{session.tool}</strong>
+                  <em>{session.timeRange} · {session.summary}</em>
+                </span>
+                {session.recommended ? <Tag color="blue">默认勾选</Tag> : null}
+              </label>
+            ))}
+          </div>
+        </Checkbox.Group>
       </div>
     );
   }
 
-  if (step === "progress") {
-    if (report.kind === "personal_daily") {
-      return (
-        <div className="console-report-modal">
-          <Steps size="small" current={1} items={getReportSourceSteps(report)} />
-          <div className="console-session-modal__section">
-            <strong>确认任务进展</strong>
-            <span>进度由你确认；Token 来源可选，没有来源也可保存为人工更新。</span>
-          </div>
-          <div className="console-progress-task-list">
-            {taskSuggestions.map((task) => (
-              <article key={task.key} className="console-progress-task-card">
-                <strong>{task.taskName}</strong>
-                <Input.TextArea rows={2} value={task.note} placeholder="今日进展" onChange={(event) => onTaskChange({ ...task, note: event.target.value, syncState: "待同步" })} />
-                <div className="console-task-progress-control">
-                  <Slider min={0} max={100} value={task.progress} onChange={(progress) => onTaskChange({ ...task, progress, syncState: "待同步" })} />
-                  <InputNumber min={0} max={100} value={task.progress} addonAfter="%" onChange={(progress) => onTaskChange({ ...task, progress: progress ?? 0, syncState: "待同步" })} />
-                </div>
-                <Select value={task.status} options={["未开始", "进行中", "已完成"].map((value) => ({ label: value, value }))} onChange={(status) => onTaskChange({ ...task, status, syncState: "待同步" })} />
-                <Input value={task.tomorrowPlan} placeholder="明日计划（可选）" onChange={(event) => onTaskChange({ ...task, tomorrowPlan: event.target.value, syncState: "待同步" })} />
-                <Collapse ghost items={[{ key: "sources", label: task.sessionIds.length ? "已关联 Token 来源" : "关联 Token 来源（可选）", children: <Checkbox.Group value={task.sessionIds} options={SESSION_OPTIONS.map((session) => ({ label: session.summary, value: session.value }))} onChange={(values) => onTaskChange({ ...task, sessionIds: values as string[], syncState: "待同步" })} /> }]} />
-              </article>
-            ))}
-          </div>
-        </div>
-      );
-    }
+  if (step === "source") {
     return (
       <div className="console-report-modal">
         <Steps
@@ -2217,7 +2151,7 @@ function ReportModalContent({
     <div className="console-report-modal">
       <Steps
         size="small"
-        current={report.kind === "personal_daily" ? 2 : 1}
+        current={1}
         items={getReportSourceSteps(report)}
       />
       <div className="console-editor-shell__meta">
@@ -2336,3 +2270,4 @@ function getRiskPriority(risk: RiskItem) {
   if (risk.riskType === "dependency_blocker") return 2;
   return 3;
 }
+

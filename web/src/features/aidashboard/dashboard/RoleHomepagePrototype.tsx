@@ -323,16 +323,16 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
   },
   tl: {
     title: "TL 首页",
-    description: "任务拆解 + 验收标准关联、团队报告、成员面板、本队 Token、上级关注事项",
+    description: "任务拆解 + AC 关联、团队报告、成员面板、本队 Token、上级关注事项",
     eyebrow: "团队执行工作台",
-    intent: "优先处理上级关注、任务拆解缺口、验收标准关联和团队报告 Review。",
+    intent: "优先处理上级关注、任务拆解缺口、AC 关联和团队报告 Review。",
     primaryTitle: "上级关注与拆解缺口",
     primaryIcon: <CheckSquareOutlined />,
     primary: [
       {
-        title: "REQ-042 还有 3 项验收标准未关联任务",
-        desc: "PM 已关注该需求，统一权限模型需要补齐验收标准到任务的拆解关系。",
-        meta: "任务拆解 + 验收标准关联",
+        title: "REQ-042 还有 3 个 AC 未关联任务",
+        desc: "PM 已关注该需求，统一权限模型需要补齐 AC 到任务的拆解关系。",
+        meta: "任务拆解 + AC 关联",
         tag: "缺关联",
         tone: "red",
         to: "/requirements",
@@ -407,7 +407,7 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
       }
     ],
     metrics: [
-      { label: "待拆验收标准", value: "3", note: "REQ-042", tone: "red" },
+      { label: "待拆 AC", value: "3", note: "REQ-042", tone: "red" },
       { label: "团队报告", value: "2", note: "待 Review", tone: "blue" },
       { label: "今日活跃", value: "11/13", note: "有 Session", tone: "green" },
       { label: "本队 Token", value: "1.4M", note: "辅助", tone: "purple" }
@@ -815,7 +815,7 @@ const pmActionItems: PMActionItem[] = [
     priority: "高",
     requirement: "统一权限模型",
     triggerReason: "总监关注 · 缺验收标准",
-    status: "验收标准 5/7",
+    status: "AC 5/7",
     owner: "PM 陈",
     nextAction: "补齐验收标准",
     deadline: "07-12",
@@ -1609,7 +1609,7 @@ function PMHomepagePrototype() {
       width: 110,
       render: (source: string) => source === "-" ? <Typography.Text type="secondary">-</Typography.Text> : <Tag color="blue">{source}</Tag>
     },
-    { title: "验收标准", dataIndex: "ac", width: 96 },
+    { title: "AC", dataIndex: "ac", width: 80 },
     {
       title: "任务进度",
       dataIndex: "taskProgress",
@@ -1782,7 +1782,7 @@ function PMHomepagePrototype() {
               <div className="pm-ai-alert">
                 <AlertOutlined />
                 <div>
-                  <strong>REQ-037 本周 22 个 Session，但验收标准和任务状态 2 天无变化。</strong>
+                  <strong>REQ-037 本周 22 个 Session，但 AC 和任务状态 2 天无变化。</strong>
                   <span>AI 数据仅作为辅助信号，建议检查任务拆解或范围是否需要调整。</span>
                 </div>
                 <Link to="/requirements">查看摘要</Link>
@@ -1851,7 +1851,7 @@ function DirectorHomepagePrototype() {
       width: 160
     },
     {
-      title: "验收标准完成",
+      title: "AC 完成",
       dataIndex: "ac",
       width: 80
     },
@@ -2124,7 +2124,7 @@ function DirectorHomepagePrototype() {
               <strong>{selectedRequirement.key}</strong> · {selectedRequirement.status}
             </p>
             <p>团队：{selectedRequirement.owner}</p>
-            <p>验收标准：{selectedRequirement.ac}</p>
+            <p>AC：{selectedRequirement.ac}</p>
             <p>进度：{selectedRequirement.progress}%</p>
             <p>关注：{selectedRequirement.focus}</p>
             <p>说明：这里展示需求概况，不包含完整需求管理操作。</p>
