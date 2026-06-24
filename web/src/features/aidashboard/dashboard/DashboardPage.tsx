@@ -9,8 +9,9 @@ import {
   LinkOutlined,
   RightOutlined,
   SendOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag } from "antd";
+import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { ReactNode } from "react";
@@ -39,6 +40,7 @@ type RiskType = "deadline" | "dependency_blocker";
 type RiskRelatedObjectType = "requirement" | "task";
 type TokenRange = "yesterday" | "last3days" | "last7days";
 type SessionUploadStatus = "上报完整" | "有上报记录" | "暂无记录" | "解析异常";
+type ReportSkillOption = { label: string; value: string; source?: "system" | "upload" };
 
 interface FollowItem {
   key: string;
@@ -162,7 +164,27 @@ const SESSION_OPTIONS = [
     summary: "日报流程讨论",
     value: "session-evening",
     recommended: false
+  },
+  {
+    tool: "Terminal session",
+    timeRange: "18:10 - 18:25",
+    summary: "类型检查与构建验证",
+    value: "session-build",
+    recommended: false
+  },
+  {
+    tool: "Codex session",
+    timeRange: "19:00 - 19:20",
+    summary: "日报内容复查",
+    value: "session-review",
+    recommended: false
   }
+];
+
+const REPORT_SKILL_OPTIONS: ReportSkillOption[] = [
+  { label: "默认日报 Skill", value: "默认日报 Skill", source: "system" },
+  { label: "研发日报 Skill", value: "研发日报 Skill", source: "system" },
+  { label: "管理汇总 Skill", value: "管理汇总 Skill", source: "system" }
 ];
 
 const TASK_PROGRESS_SUGGESTIONS: TaskProgressSuggestion[] = [
@@ -180,6 +202,22 @@ const TASK_PROGRESS_SUGGESTIONS: TaskProgressSuggestion[] = [
     progress: 25,
     status: "进行中",
     sessionIds: ["session-pm"],
+    note: ""
+  },
+  {
+    key: "task-skill-upload-flow",
+    taskName: "Skill 上传预设流程",
+    progress: 50,
+    status: "进行中",
+    sessionIds: ["session-evening", "session-review"],
+    note: ""
+  },
+  {
+    key: "task-modal-scroll-boundary",
+    taskName: "日报弹窗滚动边界设计",
+    progress: 75,
+    status: "进行中",
+    sessionIds: ["session-build"],
     note: ""
   }
 ];
@@ -873,6 +911,8 @@ export function DashboardPage() {
   const [reportModalStep, setReportModalStep] = useState<ReportModalStep>("sessions");
   const [activeReportId, setActiveReportId] = useState<string>("employee-personal-daily");
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(["session-am", "session-pm"]);
+  const [reportSkillDraft, setReportSkillDraft] = useState<string>(REPORT_SKILL_OPTIONS[0].value);
+  const [uploadedReportSkills, setUploadedReportSkills] = useState<ReportSkillOption[]>([]);
   const [draftMarkdown, setDraftMarkdown] = useState(DEFAULT_MARKDOWN);
   const [taskSuggestions, setTaskSuggestions] = useState<TaskProgressSuggestion[]>(TASK_PROGRESS_SUGGESTIONS);
   const [editingTaskKey, setEditingTaskKey] = useState<string | null>(null);
@@ -883,8 +923,14 @@ export function DashboardPage() {
   const summaryReports = (data.summaryReports ?? []).map((reportItem) => reportStateById[reportItem.id] ?? reportItem);
   const dailyReport = personalReports.find((reportItem) => reportItem.kind === "personal_daily") ?? personalReports[0];
   const activeReport = reportStateById[activeReportId] ?? dailyReport;
+  const reportSkillOptions = useMemo(
+    () => [...REPORT_SKILL_OPTIONS, ...uploadedReportSkills],
+    [uploadedReportSkills]
+  );
   const tokenReport = TOKEN_DATA[previewRole][tokenRange];
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
+  const followBlockedCount = data.follows.filter((item) => item.risk.includes("阻塞") || item.status === "阻塞").length;
+  const followUrgentCount = data.follows.filter((item) => item.risk.includes("临期") || item.deadline === "明天").length;
 
   const updateReport = (reportId: string, next: Partial<ReportItem>) => {
     setReportStateById((current) => ({
@@ -899,9 +945,27 @@ export function DashboardPage() {
   const openReportModal = (reportItem: ReportItem, step?: ReportModalStep) => {
     setSelectedSessionIds(selectedSessionIds.length > 0 ? selectedSessionIds : ["session-am", "session-pm"]);
     setActiveReportId(reportItem.id);
+    setReportSkillDraft(reportItem.skill);
     setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
     setReportModalStep(step ?? getInitialReportModalStep(reportItem));
     setIsReportModalOpen(true);
+  };
+
+  const uploadReportSkill = (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".md")) {
+      return false;
+    }
+
+    void file.text().then((content) => {
+      const uploadedSkillName = getUploadedSkillName(file.name, content);
+      setUploadedReportSkills((current) => {
+        if (current.some((item) => item.value === uploadedSkillName)) return current;
+        return [...current, { label: uploadedSkillName, value: uploadedSkillName, source: "upload" }];
+      });
+      setReportSkillDraft(uploadedSkillName);
+    });
+
+    return false;
   };
 
   const startGenerateDraft = () => {
@@ -911,7 +975,7 @@ export function DashboardPage() {
       status: "草稿待确认",
       sessionCount: activeReport.kind === "personal_daily" ? selectedSessionIds.length : activeReport.sessionCount,
       generateMode: activeReport.kind === "personal_daily" ? "手动生成" : "系统自动生成",
-      skill: "默认日报 Skill",
+      skill: reportSkillDraft,
       updatedAt: "刚刚",
       nextAt: activeReport.kind === "personal_daily" ? "19:00" : undefined
     });
@@ -921,6 +985,11 @@ export function DashboardPage() {
   const saveDraft = () => {
     if (!activeReport) return;
     updateReport(activeReport.id, { status: "草稿待确认", updatedAt: "刚刚" });
+  };
+
+  const goBackReportModalStep = () => {
+    if (!activeReport) return;
+    setReportModalStep(getGenerateStepForReport(activeReport));
   };
 
   const sendReport = () => {
@@ -984,6 +1053,25 @@ export function DashboardPage() {
           />
         </div>
 
+        <div className="console-panel console-panel--follow">
+          <PanelHeader
+            icon={<FlagOutlined />}
+            title="我关注的事项"
+            extra={
+              <Space size={6} wrap>
+                <Tag>{data.follows.length} 项</Tag>
+                {followBlockedCount > 0 ? <Tag color="red">{followBlockedCount} 阻塞</Tag> : null}
+                {followUrgentCount > 0 ? <Tag color="orange">{followUrgentCount} 临期</Tag> : null}
+              </Space>
+            }
+          />
+          <div className="console-follow-list">
+            {sortFollowItems(data.follows).map((item) => (
+              <FollowCard key={item.key} item={item} onView={handleFollowAction} />
+            ))}
+          </div>
+        </div>
+
         <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
           <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
             <ReportSection
@@ -1018,19 +1106,9 @@ export function DashboardPage() {
           />
           <div className="console-risk-list">
             {data.risks.length > 0 ? (
-              <>
-                <div className="console-risk-list__head">
-                  <span>风险</span>
-                  <span>标题 / 原因</span>
-                  <span>影响对象</span>
-                  <span>负责人</span>
-                  <span>截止</span>
-                  <span>操作</span>
-                </div>
-                {sortRisks(data.risks).map((item) => (
-                  <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
-                ))}
-              </>
+              sortRisks(data.risks).map((item) => (
+                <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
+              ))
             ) : (
               <div className="console-report-status-card">
                 <p>暂无需要关注的风险</p>
@@ -1039,30 +1117,10 @@ export function DashboardPage() {
             )}
           </div>
         </div>
-
-        <div className="console-panel">
-          <PanelHeader
-            icon={<FlagOutlined />}
-            title="关注对象变化"
-            extra={<Tag>{data.follows.length} 条</Tag>}
-          />
-          <div className="console-follow-list">
-            <div className="console-follow-list__head">
-              <span>对象 / 状态</span>
-              <span>标题 / 所属</span>
-              <span>负责人</span>
-              <span>截止</span>
-              <span>变化 / 提醒</span>
-              <span>操作</span>
-            </div>
-            {sortFollowItems(data.follows).map((item) => (
-              <FollowCard key={item.key} item={item} onView={handleFollowAction} />
-            ))}
-          </div>
-        </div>
       </section>
 
       <Modal
+        className="console-report-workflow-modal"
         title={getReportModalTitle(activeReport, reportModalStep)}
         open={isReportModalOpen}
         width={reportModalStep === "editor" ? 860 : 720}
@@ -1074,6 +1132,7 @@ export function DashboardPage() {
           onCancel: () => setIsReportModalOpen(false),
           onNext: startGenerateDraft,
           onGenerate: startGenerateDraft,
+          onBack: goBackReportModalStep,
           onSave: saveDraft,
           onSend: sendReport
         })}
@@ -1084,9 +1143,14 @@ export function DashboardPage() {
           report={activeReport}
           coverage={data.coverage}
           selectedSessionIds={selectedSessionIds}
+          selectedSkill={reportSkillDraft}
+          skillOptions={reportSkillOptions}
+          uploadedSkills={uploadedReportSkills}
           taskSuggestions={taskSuggestions}
           draftMarkdown={draftMarkdown}
           onSelectedSessionIdsChange={setSelectedSessionIds}
+          onSelectedSkillChange={setReportSkillDraft}
+          onSkillUpload={uploadReportSkill}
           onEditTask={openTaskEditModal}
           onDraftMarkdownChange={setDraftMarkdown}
         />
@@ -1295,7 +1359,7 @@ function renderReportActions(
   if (report.status === "已发送") {
     return (
       <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看报告
+        编辑{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1345,7 +1409,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        查看{getReportActionNoun(report)}
+        编辑{getReportActionNoun(report)}
       </Button>
     );
   }
@@ -1471,7 +1535,7 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
   if (report.status === "已发送") {
     return (
       <Button type="link" onClick={() => onOpen(report, "editor")}>
-        查看周报
+        编辑周报
       </Button>
     );
   }
@@ -1513,7 +1577,7 @@ function getGenerateStepForReport(report: ReportItem): ReportModalStep {
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
   if (step === "editor") {
-    return report.status === "已发送" ? `查看${report.name}` : `编辑${report.name}`;
+    return `编辑${report.name}`;
   }
 
   return `生成${report.name}`;
@@ -1894,6 +1958,8 @@ function getEditorMeta(report: ReportItem) {
 }
 
 function getSendButtonText(report: ReportItem) {
+  if (report.scope === "team") return report.kind.includes("weekly") ? "发送组周报" : "发送组报";
+  if (report.scope === "department") return report.kind.includes("weekly") ? "发送部门周报" : "发送部门报告";
   return report.kind.includes("weekly") ? "发送周报" : "发送日报";
 }
 
@@ -1905,6 +1971,7 @@ function renderReportModalFooter({
   onCancel,
   onNext,
   onGenerate,
+  onBack,
   onSave,
   onSend
 }: {
@@ -1915,13 +1982,14 @@ function renderReportModalFooter({
   onCancel: () => void;
   onNext: () => void;
   onGenerate: () => void;
+  onBack: () => void;
   onSave: () => void;
   onSend: () => void;
 }) {
   if (step === "sessions") {
     return (
       <Space>
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>稍后处理</Button>
         <Button type="primary" disabled={selectedCount === 0} onClick={onNext}>
           下一步
         </Button>
@@ -1932,16 +2000,12 @@ function renderReportModalFooter({
   if (step === "source") {
     return (
       <Space>
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>稍后处理</Button>
         <Button type="primary" onClick={onGenerate}>
           生成报告
         </Button>
       </Space>
     );
-  }
-
-  if (report.status === "已发送") {
-    return <Button onClick={onCancel}>关闭</Button>;
   }
 
   return (
@@ -1951,6 +2015,7 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
         </span>
       ) : null}
+      <Button onClick={onBack}>上一步</Button>
       <Button onClick={onSave}>保存修改</Button>
       <Button type="primary" icon={<SendOutlined />} onClick={onSend}>
         {getSendButtonText(report)}
@@ -1970,31 +2035,44 @@ function TaskProgressSuggestionList({
     <aside className="console-task-suggestion-list">
       <div className="console-session-modal__section">
         <strong>任务进展建议</strong>
-        <span>LLM 根据已选 session 生成，可按需修改。</span>
+        <span>LLM 根据已选 session 生成 {tasks.length} 条建议，可按需修改。</span>
       </div>
-      {tasks.map((task) => (
-        <article key={task.key} className="console-task-suggestion-card">
-          <strong>任务：{task.taskName}</strong>
-          <span>建议进度：{task.progress}%，{task.status}</span>
-          <span>关联 session：{task.sessionIds.length} 个</span>
-          <ul>
-            {task.sessionIds.map((sessionId) => {
-              const session = getSessionById(sessionId);
-              return <li key={sessionId}>{session ? `${session.tool} ${session.timeRange}` : sessionId}</li>;
-            })}
-          </ul>
-          <Space size={8}>
-            {task.syncState ? <Tag color="blue">{task.syncState}</Tag> : null}
-            <Button type="link" onClick={() => onEditTask(task)}>修改</Button>
-          </Space>
-        </article>
-      ))}
+      <div className="console-task-suggestion-scroll">
+        {tasks.map((task) => (
+          <article key={task.key} className="console-task-suggestion-card">
+            <div className="console-task-suggestion-card__top">
+              <strong>{task.taskName}</strong>
+              <Button size="small" onClick={() => onEditTask(task)}>编辑任务</Button>
+            </div>
+            <div className="console-task-suggestion-card__meta">
+              <Tag color="blue">{task.status}</Tag>
+              <span>建议进度 {task.progress}%</span>
+              <span>{task.sessionIds.length} 个 session</span>
+            </div>
+            <ul>
+              {task.sessionIds.map((sessionId) => {
+                const session = getSessionById(sessionId);
+                return <li key={sessionId}>{session ? `${session.tool} ${session.timeRange}` : sessionId}</li>;
+              })}
+            </ul>
+            {task.syncState ? <Tag className="console-task-suggestion-card__sync" color="blue">{task.syncState}</Tag> : null}
+          </article>
+        ))}
+      </div>
     </aside>
   );
 }
 
 function getSessionById(sessionId: string) {
   return SESSION_OPTIONS.find((session) => session.value === sessionId);
+}
+
+function getUploadedSkillName(fileName: string, content: string) {
+  const frontmatterName = content.match(/^\s*name:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim();
+  const baseName = fileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+  const rawName = frontmatterName || baseName || "上传 Skill";
+
+  return /skill/i.test(rawName) || rawName.includes("Skill") ? rawName : `${rawName} Skill`;
 }
 
 function TaskProgressEditModal({
@@ -2079,9 +2157,14 @@ function ReportModalContent({
   report,
   coverage,
   selectedSessionIds,
+  selectedSkill,
+  skillOptions,
+  uploadedSkills,
   taskSuggestions,
   draftMarkdown,
   onSelectedSessionIdsChange,
+  onSelectedSkillChange,
+  onSkillUpload,
   onEditTask,
   onDraftMarkdownChange
 }: {
@@ -2089,9 +2172,14 @@ function ReportModalContent({
   report: ReportItem;
   coverage: ReportCoverage;
   selectedSessionIds: string[];
+  selectedSkill: string;
+  skillOptions: ReportSkillOption[];
+  uploadedSkills: ReportSkillOption[];
   taskSuggestions: TaskProgressSuggestion[];
   draftMarkdown: string;
   onSelectedSessionIdsChange: (value: string[]) => void;
+  onSelectedSkillChange: (value: string) => void;
+  onSkillUpload: (file: File) => boolean;
   onEditTask: (task: TaskProgressSuggestion) => void;
   onDraftMarkdownChange: (value: string) => void;
 }) {
@@ -2104,8 +2192,8 @@ function ReportModalContent({
           items={getReportSourceSteps(report)}
         />
         <div className="console-session-modal__section">
-          <strong>6 月 22 日可用 session</strong>
-          <span>默认勾选系统认为应进入日报的 session，可手动调整。</span>
+          <strong>选择生成来源</strong>
+          <span>已找到 {SESSION_OPTIONS.length} 个 session，默认勾选系统认为应进入日报的记录。</span>
         </div>
         <Checkbox.Group value={selectedSessionIds} onChange={(value) => onSelectedSessionIdsChange(value as string[])}>
           <div className="console-session-list">
@@ -2121,6 +2209,13 @@ function ReportModalContent({
             ))}
           </div>
         </Checkbox.Group>
+        <GenerationSettingsPanel
+          selectedSkill={selectedSkill}
+          skillOptions={skillOptions}
+          uploadedSkills={uploadedSkills}
+          onSelectedSkillChange={onSelectedSkillChange}
+          onSkillUpload={onSkillUpload}
+        />
       </div>
     );
   }
@@ -2141,11 +2236,17 @@ function ReportModalContent({
           <Tag color="blue">{report.generateMode}</Tag>
           <span>{getReportSourceMeta(report, coverage)}</span>
         </div>
+        <GenerationSettingsPanel
+          selectedSkill={selectedSkill}
+          skillOptions={skillOptions}
+          uploadedSkills={uploadedSkills}
+          onSelectedSkillChange={onSelectedSkillChange}
+          onSkillUpload={onSkillUpload}
+          compact
+        />
       </div>
     );
   }
-
-  const isReadOnly = report.status === "已发送";
 
   return (
     <div className="console-report-modal">
@@ -2165,7 +2266,6 @@ function ReportModalContent({
           className="console-markdown-textarea"
           value={draftMarkdown}
           rows={18}
-          readOnly={isReadOnly}
           onChange={(event) => onDraftMarkdownChange(event.target.value)}
         />
         {report.kind === "personal_daily" ? (
@@ -2173,6 +2273,68 @@ function ReportModalContent({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function GenerationSettingsPanel({
+  selectedSkill,
+  skillOptions,
+  uploadedSkills,
+  onSelectedSkillChange,
+  onSkillUpload,
+  compact
+}: {
+  selectedSkill: string;
+  skillOptions: ReportSkillOption[];
+  uploadedSkills: ReportSkillOption[];
+  onSelectedSkillChange: (value: string) => void;
+  onSkillUpload: (file: File) => boolean;
+  compact?: boolean;
+}) {
+  return (
+    <section className={`console-generation-settings${compact ? " console-generation-settings--compact" : ""}`}>
+      <div className="console-generation-settings__head">
+        <span>
+          <strong>Skill 预设</strong>
+          <em>选择日报生成口径；上传 skill.md 后会加入预设，并用于本次生成。</em>
+        </span>
+        <Tag color="blue">{selectedSkill}</Tag>
+      </div>
+      <div className="console-generation-settings__body">
+        <label>
+          <span>当前预设</span>
+          <Select
+            value={selectedSkill}
+            options={skillOptions.map((option) => ({
+              label: option.label,
+              value: option.value
+            }))}
+            popupMatchSelectWidth={false}
+            onChange={onSelectedSkillChange}
+          />
+        </label>
+        <div className="console-generation-settings__upload">
+          <span>上传预设</span>
+          <Upload
+            accept=".md,text/markdown"
+            beforeUpload={(file) => onSkillUpload(file)}
+            maxCount={1}
+            showUploadList={false}
+          >
+            <Button icon={<UploadOutlined />}>上传 skill.md</Button>
+          </Upload>
+        </div>
+      </div>
+      {uploadedSkills.length > 0 ? (
+        <div className="console-generation-settings__presets" aria-label="已上传 Skill">
+          {uploadedSkills.map((skill) => (
+            <Tag key={skill.value} color={skill.value === selectedSkill ? "blue" : "default"}>
+              {skill.label}
+            </Tag>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -2191,24 +2353,26 @@ function ReportStatusTag({ status }: { status: ReportStatus }) {
 
 function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowItem) => void }) {
   const isTask = item.type === "任务";
+  const tone = getFollowTone(item);
 
   return (
-    <article className="console-follow-card">
-      <Space size={8} wrap>
-        <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
-        <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
-      </Space>
-      <div className="console-follow-card__title">
-        <strong>{item.title}</strong>
-        <span>{isTask && item.requirement ? `所属需求：${item.requirement}` : item.dependency}</span>
+    <article className={`console-follow-card console-follow-card--${tone}`}>
+      <span className="console-follow-card__rail" aria-hidden="true" />
+      <div className="console-follow-card__main">
+        <Space size={8} wrap>
+          <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
+          <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
+        </Space>
       </div>
-      <span>{item.owner}</span>
-      <span>{item.deadline}</span>
-      <div className="console-follow-card__reminder">
-        <Tag color={item.risk.includes("阻塞") || item.status === "阻塞" ? "red" : "orange"}>
-          {item.risk}
-        </Tag>
-        {item.activity ? <em>{item.activity}</em> : null}
+      <strong className="console-follow-card__title">{item.title}</strong>
+      <div className="console-follow-card__change">
+        <Tag color={tone === "red" ? "red" : tone === "orange" ? "orange" : "blue"}>{item.risk}</Tag>
+        {item.activity ? <span>{item.activity}</span> : null}
+      </div>
+      <div className="console-follow-card__meta">
+        <span>
+          <ClockCircleOutlined /> {item.owner} · {item.deadline}
+        </span>
       </div>
       <Button
         type="link"
@@ -2222,14 +2386,20 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
   );
 }
 
+function getFollowTone(item: FollowItem) {
+  if (item.risk.includes("阻塞") || item.status === "阻塞" || item.risk.includes("超期")) return "red";
+  if (item.risk.includes("临期") || item.deadline === "明天") return "orange";
+  return "blue";
+}
+
 function sortFollowItems(items: FollowItem[]) {
   return [...items].sort((a, b) => getFollowPriority(a) - getFollowPriority(b));
 }
 
 function getFollowPriority(item: FollowItem) {
   if (item.risk.includes("超期") || item.risk.includes("已超期")) return 1;
-  if (item.risk.includes("临期") || item.deadline === "明天") return 2;
-  if (item.risk.includes("依赖") || item.status === "阻塞") return 3;
+  if (item.risk.includes("依赖") || item.status === "阻塞") return 2;
+  if (item.risk.includes("临期") || item.deadline === "明天") return 3;
   if (item.status === "进行中") return 4;
   if (item.status === "已完成") return 9;
   return 5;
@@ -2238,16 +2408,22 @@ function getFollowPriority(item: FollowItem) {
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
   return (
     <article className={`console-risk-card console-risk-card--${item.tone}`}>
-      <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
-      <div className="console-risk-card__title">
+      <span className="console-risk-card__rail" aria-hidden="true" />
+      <div className="console-risk-card__main">
+        <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
         <strong>{item.title}</strong>
-        <p>{item.reason}</p>
+        <span>{item.reason}</span>
       </div>
-      <span>{item.target}</span>
-      <span>{item.owner}</span>
-      <span>
-        <ClockCircleOutlined /> {item.deadline}
-      </span>
+      <div className="console-risk-card__impact">
+        <em>影响对象</em>
+        <span>{item.target}</span>
+      </div>
+      <div className="console-risk-card__meta">
+        <span>{item.owner}</span>
+        <span>
+          <ClockCircleOutlined /> {item.deadline}
+        </span>
+      </div>
       <Button type="link" icon={<LinkOutlined />} onClick={() => onAction(item)}>
         {getRiskActionLabel(item)}
       </Button>
