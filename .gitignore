@@ -35,3 +35,4 @@ daemon/tmp/
 *.dll
 *.so
 *.dylib
+dist/

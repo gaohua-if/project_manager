@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Checkbox,
+  Collapse,
   DatePicker,
   Form,
   Input,
@@ -33,7 +34,8 @@ interface CreateTaskFormValues {
   assignee_id: string;
   priority: MockTaskPriority;
   due_date?: dayjs.Dayjs;
-  acceptance_criteria_ids: number[];
+  dependency_task_ids?: string[];
+  acceptance_criteria_ids?: number[];
 }
 
 export function TaskCreatePage() {
@@ -59,11 +61,20 @@ export function TaskCreatePage() {
     queryFn: () => requirementsBoardMockApi.listAssignees(),
     staleTime: 5 * 60_000
   });
+  const tasksQuery = useQuery({
+    queryKey: ["requirements-board", "tasks"],
+    queryFn: () => requirementsBoardMockApi.listTasks(),
+    staleTime: 30_000
+  });
 
   const requirements = requirementsQuery.data ?? [];
   const assignees = assigneesQuery.data ?? [];
+  const allTasks = tasksQuery.data ?? [];
   const selectedRequirementId = Form.useWatch("requirement_id", form);
   const selectedRequirement = requirements.find((item) => item.id === selectedRequirementId);
+  const dependencyOptions = allTasks
+    .filter((task) => task.requirement_id === selectedRequirementId)
+    .map((task) => ({ value: task.id, label: task.title }));
 
   const createMutation = useMutation({
     mutationFn: (values: CreateTaskFormValues) =>
@@ -73,7 +84,8 @@ export function TaskCreatePage() {
         acceptance_criteria_ids: values.acceptance_criteria_ids ?? [],
         assignee_id: values.assignee_id,
         priority: values.priority,
-        due_date: values.due_date?.format("YYYY-MM-DD")
+        due_date: values.due_date?.format("YYYY-MM-DD"),
+        dependency_task_ids: values.dependency_task_ids
       })
   });
   const submitting = createMutation.isPending;
@@ -85,6 +97,7 @@ export function TaskCreatePage() {
     form.setFieldsValue({
       priority: "medium",
       acceptance_criteria_ids: [],
+      dependency_task_ids: [],
       requirement_id: initialRequirementId
     });
     markClean();
@@ -105,7 +118,7 @@ export function TaskCreatePage() {
   return (
     <PagePanel
       title="创建任务"
-      description="将需求拆解为可执行任务，并关联负责人和验收标准"
+      description="将需求拆解为可执行任务，并关联负责人和上游依赖"
       className="aidashboard-form-page"
       backTo={backTo}
       onBack={handleCancel}
@@ -209,30 +222,63 @@ export function TaskCreatePage() {
                 <Form.Item label="截止日期" name="due_date">
                   <DatePicker />
                 </Form.Item>
+                <Form.Item
+                  className="aidashboard-form__full-row"
+                  label="上游依赖"
+                  name="dependency_task_ids"
+                  tooltip="选择当前任务依赖的同需求下其它任务，被依赖任务未完成时本任务会显示为阻塞"
+                >
+                  <Select
+                    mode="multiple"
+                    placeholder={
+                      selectedRequirementId
+                        ? dependencyOptions.length
+                          ? "选择上游依赖任务"
+                          : "当前需求暂无可选任务"
+                        : "先选择所属需求"
+                    }
+                    disabled={!selectedRequirementId || !dependencyOptions.length}
+                    options={dependencyOptions}
+                    allowClear
+                  />
+                </Form.Item>
               </div>
             </section>
 
             {selectedRequirement?.acceptance_criteria.length ? (
-              <section className="aidashboard-form__section">
-                <div className="aidashboard-form__section-head">
-                  <h2>关联验收标准</h2>
-                  <p>选择当前任务负责交付的验收标准。</p>
-                </div>
-                <Form.Item label="验收标准" name="acceptance_criteria_ids">
-                  <Checkbox.Group className="aidashboard-form__ac-options">
-                    <Space direction="vertical" wrap size={8}>
-                      {selectedRequirement.acceptance_criteria.map((criterion, index) => (
-                        <Checkbox key={criterion} value={index}>
-                          <Text type="secondary" className="aidashboard-form__ac-index">
-                            标准 {index + 1}
-                          </Text>{" "}
-                          <Text className="aidashboard-form__ac-text">{criterion}</Text>
-                        </Checkbox>
-                      ))}
-                    </Space>
-                  </Checkbox.Group>
-                </Form.Item>
-              </section>
+              <Collapse
+                className="aidashboard-form__collapse"
+                ghost
+                items={[
+                  {
+                    key: "ac",
+                    label: (
+                      <span>
+                        关联验收标准（可选）
+                        <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                          {selectedRequirement.acceptance_criteria.length} 项
+                        </Text>
+                      </span>
+                    ),
+                    children: (
+                      <Form.Item label="验收标准" name="acceptance_criteria_ids">
+                        <Checkbox.Group className="aidashboard-form__ac-options">
+                          <Space direction="vertical" wrap size={8}>
+                            {selectedRequirement.acceptance_criteria.map((criterion, index) => (
+                              <Checkbox key={criterion} value={index}>
+                                <Text type="secondary" className="aidashboard-form__ac-index">
+                                  标准 {index + 1}
+                                </Text>{" "}
+                                <Text className="aidashboard-form__ac-text">{criterion}</Text>
+                              </Checkbox>
+                            ))}
+                          </Space>
+                        </Checkbox.Group>
+                      </Form.Item>
+                    )
+                  }
+                ]}
+              />
             ) : null}
 
             <FormSubmitButton

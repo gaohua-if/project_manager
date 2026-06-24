@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   CalendarOutlined,
+  CloseOutlined,
   ClockCircleOutlined,
   DownOutlined,
   FileTextOutlined,
@@ -20,20 +21,24 @@ import {
   Alert,
   App,
   Button,
-  Collapse,
+  DatePicker,
   Descriptions,
   Drawer,
   Empty,
+  Form,
   Input,
   InputNumber,
+  Modal,
   Progress,
   Select,
   Segmented,
   Skeleton,
   Slider,
   Space,
+  Table,
   Tag
 } from "antd";
+import type { TableProps } from "antd";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -52,8 +57,12 @@ import {
 } from "../components/RequirementMetricCard";
 import { requirementsBoardMockApi } from "../mock/requirementsBoardMockApi";
 import type {
+  MockAssignee,
   MockRequirement,
   MockTask,
+  MockTaskPriority,
+  MockTaskStatus,
+  MockTokenSource,
   RequirementPriority,
   RequirementStage
 } from "../mock/types";
@@ -71,13 +80,16 @@ const STATUS_COLUMNS: Array<{
   { value: "todo", label: "待开始", description: "等待拆解或排期", tone: "gray" },
   { value: "review", label: "评审", description: "确认范围和验收标准", tone: "purple" },
   { value: "active", label: "进行中", description: "任务正在推进", tone: "blue" },
-  { value: "completed", label: "完成", description: "已完成交付验收", tone: "green" }
+  { value: "completed", label: "完成", description: "最近完成", tone: "green" }
 ];
+
+const COMPLETED_RECENT_DAYS = 7;
+const COMPLETED_RECENT_LIMIT = 10;
 
 const CANCELLED_COLUMN = {
   value: "cancelled" as const,
   label: "已取消",
-  description: "仅展示筛选出的取消需求",
+  description: "已取消的需求",
   tone: "gray"
 };
 
@@ -100,6 +112,7 @@ const RISK_OPTIONS: Array<{ value: RiskFilter; label: string }> = [
 
 const EMPTY_REQUIREMENTS: MockRequirement[] = [];
 const EMPTY_TASKS: MockTask[] = [];
+const EMPTY_TOKEN_SOURCES: MockTokenSource[] = [];
 
 const STAGE_META: Record<RequirementStage, { label: string; color: string }> = {
   todo: { label: "待开始", color: "default" },
@@ -155,6 +168,27 @@ function formatTokens(value: number) {
   return String(value);
 }
 
+function sumTokensFromSources(ids: string[], sourceMap: Map<string, MockTokenSource>) {
+  return ids.reduce((total, id) => total + (sourceMap.get(id)?.token ?? 0), 0);
+}
+
+function aggregateRequirementTokens(
+  requirement: MockRequirement,
+  requirementTasks: MockTask[],
+  sourceMap: Map<string, MockTokenSource>
+) {
+  const reqLevel = sumTokensFromSources(requirement.token_source_ids, sourceMap);
+  const taskLevel = requirementTasks.reduce(
+    (total, task) => total + sumTokensFromSources(task.token_source_ids, sourceMap),
+    0
+  );
+  return reqLevel + taskLevel;
+}
+
+function formatTokenSourceTime(value: string) {
+  return dayjs(value).format("MM-DD HH:mm");
+}
+
 function RequirementProgress({ value }: { value: number }) {
   return (
     <div className="requirements-board__progress">
@@ -174,6 +208,7 @@ export function RequirementsListPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedRequirement, setSelectedRequirement] = useState<MockRequirement>();
   const [selectedTask, setSelectedTask] = useState<MockTask>();
+  const [creatorOpen, setCreatorOpen] = useState(false);
 
   const view = (searchParams.get("view") as BoardView | null) ?? "board";
   const keyword = searchParams.get("keyword") ?? "";
@@ -203,6 +238,16 @@ export function RequirementsListPage() {
     queryFn: () => requirementsBoardMockApi.listTasks(),
     staleTime: 30_000
   });
+  const tokenSourcesQuery = useQuery({
+    queryKey: ["requirements-board", "token-sources"],
+    queryFn: () => requirementsBoardMockApi.listTokenSources(),
+    staleTime: 60_000
+  });
+  const tokenSources = tokenSourcesQuery.data ?? EMPTY_TOKEN_SOURCES;
+  const tokenSourceMap = useMemo(
+    () => new Map(tokenSources.map((source) => [source.id, source])),
+    [tokenSources]
+  );
 
   const canMoveRequirement = Boolean(
     user && ["admin", "director", "pm", "team_leader"].includes(user.role)
@@ -313,7 +358,7 @@ export function RequirementsListPage() {
         key: "blocked",
         title: "依赖阻塞",
         value: tasks.filter((item) => item.status === "blocked").length,
-        description: "仅由任务依赖产生",
+        description: "任务依赖未完成",
         tone: "danger",
         icon: <WarningOutlined />
       }
@@ -340,17 +385,28 @@ export function RequirementsListPage() {
     });
   };
 
-  const addTask = (requirementId: string) =>
-    navigate(`/tasks/create?requirement_id=${encodeURIComponent(requirementId)}`);
+  const addTask = (requirementId: string) => {
+    const target = requirements.find((item) => item.id === requirementId);
+    if (!target) return;
+    setSelectedRequirement(target);
+    setSelectedTask(undefined);
+    setCreatorOpen(true);
+  };
 
-  const refreshAll = () => void Promise.all([requirementsQuery.refetch(), tasksQuery.refetch()]);
+  const refreshAll = () =>
+    void Promise.all([
+      requirementsQuery.refetch(),
+      tasksQuery.refetch(),
+      tokenSourcesQuery.refetch()
+    ]);
 
   return (
     <PagePanel
       title="需求看板"
       className="requirements-board-page"
-      description="按需求阶段查看整体推进，在任务树中定位进度、依赖与执行证据"
+      description="按阶段管理需求推进，跟踪任务进度、依赖与 Token 来源"
       breadcrumbs={[{ title: "业务" }, { title: "需求看板" }]}
+      showNav={false}
     >
       <RequirementMetricGrid>
         {metrics.map((metric) => (
@@ -371,7 +427,7 @@ export function RequirementsListPage() {
               <h2>{view === "board" ? "按阶段推进" : "需求与任务树"}</h2>
               <p>
                 {view === "board"
-                  ? "需求卡片仅展示摘要；拖动卡片可调整推进阶段。"
+                  ? "拖动卡片调整需求所处阶段。"
                   : "展开需求查看任务负责人、状态、进度、依赖和最近更新。"}
               </p>
             </div>
@@ -482,9 +538,24 @@ export function RequirementsListPage() {
                 }`}
               >
                 {visibleColumns.map((column) => {
-                  const columnRequirements = filteredRequirements.filter(
+                  const allColumnRequirements = filteredRequirements.filter(
                     (item) => item.status === column.value
                   );
+                  const isCompletedColumn =
+                    column.value === "completed" && status !== "completed";
+                  const recentCompleted = isCompletedColumn
+                    ? allColumnRequirements
+                        .filter(
+                          (item) =>
+                            dayjs().diff(dayjs(item.updated_at), "day") < COMPLETED_RECENT_DAYS
+                        )
+                        .sort((a, b) => dayjs(b.updated_at).diff(dayjs(a.updated_at)))
+                        .slice(0, COMPLETED_RECENT_LIMIT)
+                    : null;
+                  const columnRequirements = recentCompleted ?? allColumnRequirements;
+                  const hiddenCompletedCount = isCompletedColumn
+                    ? allColumnRequirements.length - columnRequirements.length
+                    : 0;
                   return (
                     <Droppable droppableId={column.value} key={column.value}>
                       {(provided, snapshot) => (
@@ -509,6 +580,7 @@ export function RequirementsListPage() {
                                 key={requirement.id}
                                 requirement={requirement}
                                 tasks={tasksByRequirement.get(requirement.id) ?? []}
+                                tokenSourceMap={tokenSourceMap}
                                 index={index}
                                 draggable={canMoveRequirement && column.value !== "cancelled"}
                                 onOpen={() => setSelectedRequirement(requirement)}
@@ -517,7 +589,28 @@ export function RequirementsListPage() {
                             ))}
                             {provided.placeholder}
                             {!columnRequirements.length ? (
-                              <div className="requirements-board__column-empty">暂无需求</div>
+                              <div className="requirements-board__column-empty">
+                                {isCompletedColumn ? "暂无最近完成需求" : "暂无需求"}
+                              </div>
+                            ) : null}
+                            {isCompletedColumn && hiddenCompletedCount > 0 ? (
+                              <button
+                                type="button"
+                                className="requirements-board__column-more"
+                                onClick={() =>
+                                  setSearchParams(
+                                    (previous) => {
+                                      const nextParams = new URLSearchParams(previous);
+                                      nextParams.set("status", "completed");
+                                      nextParams.set("view", "tree");
+                                      return nextParams;
+                                    },
+                                    { replace: true }
+                                  )
+                                }
+                              >
+                                查看全部已完成（{allColumnRequirements.length}）
+                              </button>
                             ) : null}
                           </div>
                         </section>
@@ -532,6 +625,7 @@ export function RequirementsListPage() {
               requirements={filteredRequirements}
               expanded={expanded}
               tasksByRequirement={tasksByRequirement}
+              tokenSourceMap={tokenSourceMap}
               onToggle={toggleRequirement}
               onOpenRequirement={setSelectedRequirement}
               onOpenTask={(task) => setSelectedTask(task)}
@@ -544,13 +638,21 @@ export function RequirementsListPage() {
       <RequirementDrawer
         requirement={selectedRequirement}
         tasks={selectedRequirement ? (tasksByRequirement.get(selectedRequirement.id) ?? []) : []}
-        onClose={() => setSelectedRequirement(undefined)}
-        onAddTask={addTask}
+        tokenSources={tokenSources}
+        tokenSourceMap={tokenSourceMap}
+        creatorOpen={creatorOpen}
+        onCreatorOpenChange={setCreatorOpen}
+        onClose={() => {
+          setSelectedRequirement(undefined);
+          setCreatorOpen(false);
+        }}
         onOpenTask={(task) => setSelectedTask(task)}
         onOpenDetail={(requirementId) => navigate(`/requirements/${requirementId}`)}
       />
       <TaskDrawer
         task={selectedTask}
+        tokenSources={tokenSources}
+        tokenSourceMap={tokenSourceMap}
         onClose={() => setSelectedTask(undefined)}
         onSaved={(updated) => setSelectedTask(updated)}
       />
@@ -561,6 +663,7 @@ export function RequirementsListPage() {
 function RequirementCard({
   requirement,
   tasks,
+  tokenSourceMap,
   index,
   draggable,
   onOpen,
@@ -568,14 +671,14 @@ function RequirementCard({
 }: {
   requirement: MockRequirement;
   tasks: MockTask[];
+  tokenSourceMap: Map<string, MockTokenSource>;
   index: number;
   draggable: boolean;
   onOpen: () => void;
   onAddTask: () => void;
 }) {
-  const completedTasks = tasks.filter((task) => task.status === "done").length;
   const blockedTasks = tasks.filter((task) => task.status === "blocked").length;
-  const tokenTotal = tasks.reduce((total, task) => total + task.token_total, 0);
+  const tokenTotal = aggregateRequirementTokens(requirement, tasks, tokenSourceMap);
 
   return (
     <Draggable draggableId={requirement.id} index={index} isDragDisabled={!draggable}>
@@ -599,7 +702,6 @@ function RequirementCard({
             <RequirementPriorityTag priority={requirement.priority} />
             {blockedTasks ? <Tag color="error">{blockedTasks} 个依赖阻塞</Tag> : null}
             {isDeadlineRisk(requirement) ? <Tag color="warning">截止风险</Tag> : null}
-            {!requirement.acceptance_criteria.length ? <Tag color="warning">缺验收标准</Tag> : null}
           </div>
 
           {!tasks.length ? (
@@ -617,12 +719,8 @@ function RequirementCard({
                 添加任务
               </Button>
             </div>
-          ) : (
-            <div className="requirements-board__card-summary">
-              <strong>任务 {completedTasks}/{tasks.length}</strong>
-              {tokenTotal > 0 ? <span>Token {formatTokens(tokenTotal)}</span> : null}
-            </div>
-          )}
+          ) : null}
+
           <footer>
             <span>
               <TeamOutlined /> {requirement.team_names.join("、") || "未分配团队"}
@@ -630,6 +728,7 @@ function RequirementCard({
             <span>
               <CalendarOutlined /> {formatDate(requirement.deadline)}
             </span>
+            {tokenTotal > 0 ? <span>Token {formatTokens(tokenTotal)}</span> : null}
           </footer>
         </article>
       )}
@@ -641,6 +740,7 @@ function RequirementTree({
   requirements,
   expanded,
   tasksByRequirement,
+  tokenSourceMap,
   onToggle,
   onOpenRequirement,
   onOpenTask,
@@ -649,6 +749,7 @@ function RequirementTree({
   requirements: MockRequirement[];
   expanded: Set<string>;
   tasksByRequirement: Map<string, MockTask[]>;
+  tokenSourceMap: Map<string, MockTokenSource>;
   onToggle: (id: string) => void;
   onOpenRequirement: (requirement: MockRequirement) => void;
   onOpenTask: (task: MockTask) => void;
@@ -727,54 +828,57 @@ function RequirementTree({
               ) : null}
 
               {isExpanded
-                ? requirementTasks.map((task) => (
-                    <div
-                      className="requirements-tree__row is-task"
-                      key={task.id}
-                      onClick={() => onOpenTask(task)}
-                    >
-                      <div className="requirements-tree__title">
-                        <span className="requirements-tree__indent" />
-                        <Tag color="purple">任务</Tag>
-                        <div>
-                          <strong>{task.title}</strong>
-                          <small>{formatDateTime(task.updated_at)} 更新</small>
+                ? requirementTasks.map((task) => {
+                    const taskTokens = sumTokensFromSources(task.token_source_ids, tokenSourceMap);
+                    return (
+                      <div
+                        className="requirements-tree__row is-task"
+                        key={task.id}
+                        onClick={() => onOpenTask(task)}
+                      >
+                        <div className="requirements-tree__title">
+                          <span className="requirements-tree__indent" />
+                          <Tag color="purple">任务</Tag>
+                          <div>
+                            <strong>{task.title}</strong>
+                            <small>{formatDateTime(task.updated_at)} 更新</small>
+                          </div>
                         </div>
+                        <span>{task.assignee_name || "未分配"}</span>
+                        <TaskStatusTag status={task.status} />
+                        <RequirementProgress value={task.progress} />
+                        <div className="requirements-tree__dependencies">
+                          {task.dependencies.length ? (
+                            task.dependencies.map((dependency) => (
+                              <Tag
+                                key={dependency.task_id}
+                                color={dependency.status === "done" ? "success" : "warning"}
+                              >
+                                {dependency.task_title}
+                              </Tag>
+                            ))
+                          ) : (
+                            <span>-</span>
+                          )}
+                        </div>
+                        <div className="requirements-tree__update">
+                          <span>{formatRecentUpdate(task.updated_at)}</span>
+                          {taskTokens > 0 ? <small>Token {formatTokens(taskTokens)}</small> : null}
+                        </div>
+                        <Space size={4}>
+                          <Button
+                            size="small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onOpenTask(task);
+                            }}
+                          >
+                            详情
+                          </Button>
+                        </Space>
                       </div>
-                      <span>{task.assignee_name || "未分配"}</span>
-                      <TaskStatusTag status={task.status} />
-                      <RequirementProgress value={task.progress} />
-                      <div className="requirements-tree__dependencies">
-                        {task.dependencies.length ? (
-                          task.dependencies.map((dependency) => (
-                            <Tag
-                              key={dependency.task_id}
-                              color={dependency.status === "done" ? "success" : "warning"}
-                            >
-                              {dependency.task_title}
-                            </Tag>
-                          ))
-                        ) : (
-                          <span>-</span>
-                        )}
-                      </div>
-                      <div className="requirements-tree__update">
-                        <span>{formatRecentUpdate(task.updated_at)}</span>
-                        <small>{task.token_total > 0 ? `${formatTokens(task.token_total)} Token` : "人工更新"}</small>
-                      </div>
-                      <Space size={4}>
-                        <Button
-                          size="small"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenTask(task);
-                          }}
-                        >
-                          详情
-                        </Button>
-                      </Space>
-                    </div>
-                  ))
+                    );
+                  })
                 : null}
             </div>
           );
@@ -784,29 +888,144 @@ function RequirementTree({
   );
 }
 
+interface TokenSourcePickerProps {
+  open: boolean;
+  sources: MockTokenSource[];
+  excludeIds: string[];
+  onCancel: () => void;
+  onConfirm: (ids: string[]) => Promise<void> | void;
+  confirmLoading?: boolean;
+}
+
+function TokenSourcePicker({
+  open,
+  sources,
+  excludeIds,
+  onCancel,
+  onConfirm,
+  confirmLoading
+}: TokenSourcePickerProps) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds]);
+  const available = useMemo(
+    () => sources.filter((source) => !excludeSet.has(source.id) && source.token > 0),
+    [sources, excludeSet]
+  );
+
+  const columns: TableProps<MockTokenSource>["columns"] = [
+    {
+      title: "时间",
+      dataIndex: "recorded_at",
+      width: 110,
+      render: (value: string) => formatTokenSourceTime(value)
+    },
+    { title: "工具", dataIndex: "tool", width: 100 },
+    { title: "上传人", dataIndex: "uploader", width: 100 },
+    {
+      title: "Token",
+      dataIndex: "token",
+      width: 90,
+      render: (value: number) => formatTokens(value)
+    },
+    { title: "摘要", dataIndex: "summary", ellipsis: true }
+  ];
+
+  return (
+    <Modal
+      title="关联 Token 来源"
+      open={open}
+      width={780}
+      onCancel={() => {
+        setSelected([]);
+        onCancel();
+      }}
+      okText={`关联${selected.length ? ` ${selected.length} 条` : ""}`}
+      okButtonProps={{ disabled: !selected.length, loading: confirmLoading }}
+      onOk={async () => {
+        await onConfirm(selected);
+        setSelected([]);
+      }}
+      destroyOnHidden
+    >
+      <p style={{ marginTop: 0, color: "#7a879a" }}>
+        选择已上传的来源条目关联到当前需求或任务。
+      </p>
+      <Table<MockTokenSource>
+        rowKey="id"
+        size="small"
+        columns={columns}
+        dataSource={available}
+        pagination={{ pageSize: 6, showSizeChanger: false }}
+        rowSelection={{
+          selectedRowKeys: selected,
+          onChange: (keys) => setSelected(keys as string[])
+        }}
+        locale={{ emptyText: "暂无可关联的 Token 来源" }}
+      />
+    </Modal>
+  );
+}
+
 function RequirementDrawer({
   requirement,
   tasks,
+  tokenSources,
+  tokenSourceMap,
+  creatorOpen,
+  onCreatorOpenChange,
   onClose,
-  onAddTask,
   onOpenTask,
   onOpenDetail
 }: {
   requirement?: MockRequirement;
   tasks: MockTask[];
+  tokenSources: MockTokenSource[];
+  tokenSourceMap: Map<string, MockTokenSource>;
+  creatorOpen: boolean;
+  onCreatorOpenChange: (open: boolean) => void;
   onClose: () => void;
-  onAddTask: (requirementId: string) => void;
   onOpenTask: (task: MockTask) => void;
   onOpenDetail: (requirementId: string) => void;
 }) {
-  const tokenTotal = tasks.reduce((total, task) => total + task.token_total, 0);
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const requirementTokens = requirement
+    ? sumTokensFromSources(requirement.token_source_ids, tokenSourceMap)
+    : 0;
+  const taskTokens = tasks.reduce(
+    (total, task) => total + sumTokensFromSources(task.token_source_ids, tokenSourceMap),
+    0
+  );
+  const totalTokens = requirementTokens + taskTokens;
   const completedCount = tasks.filter((task) => task.status === "done").length;
   const blockedCount = tasks.filter((task) => task.status === "blocked").length;
+
+  const linkMutation = useMutation({
+    mutationFn: (sourceIds: string[]) =>
+      requirementsBoardMockApi.linkRequirementTokenSources(requirement!.id, sourceIds),
+    onSuccess: () => {
+      message.success("已关联 Token 来源（Mock）");
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      setPickerOpen(false);
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "关联失败")
+  });
+  const unlinkMutation = useMutation({
+    mutationFn: (sourceId: string) =>
+      requirementsBoardMockApi.unlinkRequirementTokenSource(requirement!.id, sourceId),
+    onSuccess: () => {
+      message.success("已移除 Token 来源（Mock）");
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "移除失败")
+  });
 
   return (
     <Drawer
       className="requirements-drawer"
-      width={580}
+      width={720}
       open={Boolean(requirement)}
       onClose={onClose}
       title={
@@ -896,110 +1115,352 @@ function RequirementDrawer({
               <div className="requirements-drawer__execution-empty">
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="该需求尚未拆分任务，拆分任务后可聚合进度、依赖阻塞和 Token。"
+                  description="尚未拆分任务。"
                 />
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  onClick={() => onAddTask(requirement.id)}
+                  onClick={() => onCreatorOpenChange(true)}
                 >
-                  添加第一个任务
+                  添加任务
                 </Button>
               </div>
             ) : (
               <div className="requirements-drawer__task-list">
-                {tasks.map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    className="requirements-drawer__task-item"
-                    onClick={() => onOpenTask(task)}
-                  >
-                    <div>
-                      <strong>{task.title}</strong>
-                      <span>
-                        {task.assignee_name || "未分配"} · {formatDate(task.due_date)}
-                      </span>
-                    </div>
-                    <TaskStatusTag status={task.status} />
-                    <RequirementProgress value={task.progress} />
-                    <small>
-                      {task.dependencies.length ? `${task.dependencies.length} 个上游依赖` : "无上游依赖"}
-                      {task.token_total > 0 ? ` · ${formatTokens(task.token_total)} Token` : " · 人工更新"}
-                    </small>
-                  </button>
-                ))}
+                {tasks.map((task) => {
+                  const tTokens = sumTokensFromSources(task.token_source_ids, tokenSourceMap);
+                  return (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className="requirements-drawer__task-item"
+                      onClick={() => onOpenTask(task)}
+                    >
+                      <div>
+                        <strong>{task.title}</strong>
+                        <span>
+                          {task.assignee_name || "未分配"} · {formatDate(task.due_date)}
+                        </span>
+                      </div>
+                      <TaskStatusTag status={task.status} />
+                      <RequirementProgress value={task.progress} />
+                      <small>
+                        {task.dependencies.length
+                          ? `${task.dependencies.length} 个上游依赖`
+                          : "无上游依赖"}
+                        {tTokens > 0 ? ` · Token ${formatTokens(tTokens)}` : ""}
+                      </small>
+                    </button>
+                  );
+                })}
               </div>
             )}
             {tasks.length ? (
               <div className="requirements-drawer__execution-footer">
-                <Button icon={<PlusOutlined />} onClick={() => onAddTask(requirement.id)}>
+                <Button icon={<PlusOutlined />} onClick={() => onCreatorOpenChange(true)}>
                   继续添加任务
                 </Button>
               </div>
             ) : null}
           </section>
+
+          <TaskCreateModal
+            open={creatorOpen}
+            requirementId={requirement.id}
+            existingTasks={tasks}
+            onCancel={() => onCreatorOpenChange(false)}
+            onCreated={() => onCreatorOpenChange(false)}
+          />
+
           <section className="requirements-drawer__section">
             <div className="requirements-drawer__section-head">
               <h3>Token 摘要</h3>
-              {tokenTotal > 0 ? <strong>{formatTokens(tokenTotal)} Token</strong> : <span>暂无已关联 Token</span>}
+              <Space size={8}>
+                {totalTokens > 0 ? (
+                  <span>合计 {formatTokens(totalTokens)} Token</span>
+                ) : (
+                  <span>暂无关联 Token 来源</span>
+                )}
+                <Button size="small" icon={<LinkOutlined />} onClick={() => setPickerOpen(true)}>
+                  关联 Token 来源
+                </Button>
+              </Space>
             </div>
-            {tokenTotal > 0 ? (
-              <Collapse
-                ghost
-                items={[{
-                  key: "token-sources",
-                  label: "Token 来源明细",
-                  children: (
-                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                      {tasks.filter((task) => task.token_total > 0).map((task) => (
-                        <div key={task.id} className="requirements-drawer__token-source">
-                          <span>{task.title}</span>
-                          <strong>{formatTokens(task.token_total)} Token</strong>
-                        </div>
-                      ))}
-                    </Space>
-                  )
-                }]}
-              />
-            ) : null}
+            <TokenSourceList
+              requirementSources={requirement.token_source_ids
+                .map((id) => tokenSourceMap.get(id))
+                .filter((source): source is MockTokenSource => Boolean(source))}
+              taskSources={tasks
+                .flatMap((task) =>
+                  task.token_source_ids
+                    .map((id) => tokenSourceMap.get(id))
+                    .filter((source): source is MockTokenSource => Boolean(source))
+                    .map((source) => ({ source, taskTitle: task.title }))
+                )}
+              onRemoveRequirementSource={(id) => unlinkMutation.mutate(id)}
+              removing={unlinkMutation.isPending ? unlinkMutation.variables : undefined}
+            />
           </section>
+
+          <TokenSourcePicker
+            open={pickerOpen}
+            sources={tokenSources}
+            excludeIds={requirement.token_source_ids}
+            confirmLoading={linkMutation.isPending}
+            onCancel={() => setPickerOpen(false)}
+            onConfirm={(ids) => linkMutation.mutateAsync(ids)}
+          />
         </Space>
       ) : null}
     </Drawer>
   );
 }
 
+function TaskCreateModal({
+  open,
+  requirementId,
+  existingTasks,
+  onCancel,
+  onCreated
+}: {
+  open: boolean;
+  requirementId: string;
+  existingTasks: MockTask[];
+  onCancel: () => void;
+  onCreated: (task: MockTask) => void;
+}) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm<{
+    title: string;
+    assignee_id: string;
+    priority: MockTaskPriority;
+    due_date?: dayjs.Dayjs;
+    dependency_task_ids?: string[];
+  }>();
+
+  const assigneesQuery = useQuery({
+    queryKey: ["requirements-board", "assignees"],
+    queryFn: () => requirementsBoardMockApi.listAssignees(),
+    staleTime: 5 * 60_000
+  });
+
+  const dependencyOptions = existingTasks.map((task) => ({
+    value: task.id,
+    label: task.title
+  }));
+
+  const createMutation = useMutation({
+    mutationFn: (values: {
+      title: string;
+      assignee_id: string;
+      priority: MockTaskPriority;
+      due_date?: dayjs.Dayjs;
+      dependency_task_ids?: string[];
+    }) =>
+      requirementsBoardMockApi.createTask({
+        requirement_id: requirementId,
+        title: values.title.trim(),
+        acceptance_criteria_ids: [],
+        assignee_id: values.assignee_id,
+        priority: values.priority,
+        due_date: values.due_date?.format("YYYY-MM-DD"),
+        dependency_task_ids: values.dependency_task_ids
+      }),
+    onSuccess: (task) => {
+      message.success("任务已创建（Mock）");
+      form.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      onCreated(task);
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "创建任务失败")
+  });
+
+  const handleCancel = () => {
+    if (createMutation.isPending) return;
+    form.resetFields();
+    onCancel();
+  };
+
+  return (
+    <Modal
+      title="添加任务"
+      open={open}
+      width={560}
+      destroyOnHidden
+      onCancel={handleCancel}
+      onOk={() => form.submit()}
+      okText="创建任务"
+      cancelText="取消"
+      confirmLoading={createMutation.isPending}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ priority: "medium" }}
+        onFinish={(values) => createMutation.mutate(values)}
+      >
+        <Form.Item
+          label="任务标题"
+          name="title"
+          rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
+        >
+          <Input placeholder="任务标题" />
+        </Form.Item>
+        <Form.Item
+          label="负责人"
+          name="assignee_id"
+          rules={[{ required: true, message: "请选择负责人" }]}
+        >
+          <Select
+            placeholder="选择负责人"
+            loading={assigneesQuery.isLoading}
+            disabled={assigneesQuery.isLoading || assigneesQuery.isError}
+            options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
+              value: item.id,
+              label: `${item.name} (${item.employee_id})`
+            }))}
+          />
+        </Form.Item>
+        <Form.Item
+          label="优先级"
+          name="priority"
+          rules={[{ required: true, message: "请选择优先级" }]}
+        >
+          <Select
+            options={[
+              { value: "low", label: "低" },
+              { value: "medium", label: "中" },
+              { value: "high", label: "高" }
+            ]}
+          />
+        </Form.Item>
+        <Form.Item label="截止日期" name="due_date">
+          <DatePicker style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item label="上游依赖" name="dependency_task_ids">
+          <Select
+            mode="multiple"
+            placeholder={dependencyOptions.length ? "选择上游依赖任务" : "当前需求暂无可选任务"}
+            disabled={!dependencyOptions.length}
+            options={dependencyOptions}
+            allowClear
+          />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+}
+
+function TokenSourceList({
+  requirementSources,
+  taskSources,
+  onRemoveRequirementSource,
+  removing
+}: {
+  requirementSources: MockTokenSource[];
+  taskSources: Array<{ source: MockTokenSource; taskTitle: string }>;
+  onRemoveRequirementSource?: (id: string) => void;
+  removing?: string;
+}) {
+  if (!requirementSources.length && !taskSources.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联 Token 来源" />;
+  }
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {requirementSources.map((source) => (
+        <div key={source.id} className="requirements-drawer__token-row">
+          <div className="requirements-drawer__token-row-main">
+            <strong>{source.summary || "（无摘要）"}</strong>
+            <span>
+              {formatTokenSourceTime(source.recorded_at)} · {source.tool} · {source.uploader}
+            </span>
+          </div>
+          <div className="requirements-drawer__token-row-meta">
+            <Tag color="geekblue">需求关联</Tag>
+            <span>{formatTokens(source.token)} Token</span>
+            {onRemoveRequirementSource ? (
+              <Button
+                size="small"
+                type="text"
+                icon={<CloseOutlined />}
+                loading={removing === source.id}
+                onClick={() => onRemoveRequirementSource(source.id)}
+                aria-label="移除"
+              />
+            ) : null}
+          </div>
+        </div>
+      ))}
+      {taskSources.map(({ source, taskTitle }) => (
+        <div key={`${taskTitle}-${source.id}`} className="requirements-drawer__token-row">
+          <div className="requirements-drawer__token-row-main">
+            <strong>{source.summary || "（无摘要）"}</strong>
+            <span>
+              {formatTokenSourceTime(source.recorded_at)} · {source.tool} · {source.uploader}
+            </span>
+          </div>
+          <div className="requirements-drawer__token-row-meta">
+            <Tag color="purple">来自任务：{taskTitle}</Tag>
+            <span>{formatTokens(source.token)} Token</span>
+          </div>
+        </div>
+      ))}
+    </Space>
+  );
+}
+
 function TaskDrawer({
   task,
+  tokenSources,
+  tokenSourceMap,
   onClose,
   onSaved
 }: {
   task?: MockTask;
+  tokenSources: MockTokenSource[];
+  tokenSourceMap: Map<string, MockTokenSource>;
   onClose: () => void;
   onSaved: (task: MockTask) => void;
 }) {
   return (
     <Drawer
       className="requirements-drawer"
-      width={540}
+      width={640}
       open={Boolean(task)}
       onClose={onClose}
       title={task ? `任务详情 · ${task.title}` : "任务详情"}
     >
       {task ? (
-        <TaskDrawerContent key={`${task.id}-${task.updated_at}`} task={task} onSaved={onSaved} />
+        <TaskDrawerContent
+          key={`${task.id}-${task.updated_at}`}
+          task={task}
+          tokenSources={tokenSources}
+          tokenSourceMap={tokenSourceMap}
+          onSaved={onSaved}
+        />
       ) : null}
     </Drawer>
   );
 }
 
-function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: MockTask) => void }) {
-  const { message } = App.useApp();
+function TaskDrawerContent({
+  task,
+  tokenSources,
+  tokenSourceMap,
+  onSaved
+}: {
+  task: MockTask;
+  tokenSources: MockTokenSource[];
+  tokenSourceMap: Map<string, MockTokenSource>;
+  onSaved: (task: MockTask) => void;
+}) {
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState(task.progress);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const dependencyBlocked = task.dependencies.some((dependency) => dependency.status !== "done");
-  const mutation = useMutation({
+  const progressMutation = useMutation({
     mutationFn: () => requirementsBoardMockApi.updateTaskProgress(task.id, progress),
     onSuccess: (updated) => {
       message.success("任务进度已保存（Mock）");
@@ -1008,6 +1469,55 @@ function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: 
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "进度保存失败")
   });
+  const statusMutation = useMutation({
+    mutationFn: (next: Exclude<MockTaskStatus, "blocked">) =>
+      requirementsBoardMockApi.updateTaskStatus(task.id, next),
+    onSuccess: (updated) => {
+      message.success("任务状态已更新（Mock）");
+      onSaved(updated);
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "状态更新失败")
+  });
+  const requestStatusChange = (next: Exclude<MockTaskStatus, "blocked">) => {
+    if (next === "done" || next === "todo") {
+      modal.confirm({
+        title: next === "done" ? "确认标记完成？" : "确认重新打开？",
+        content: "状态变化会同步影响需求的聚合进度。",
+        okText: next === "done" ? "标记完成" : "重新打开",
+        cancelText: "取消",
+        onOk: () => statusMutation.mutateAsync(next)
+      });
+      return;
+    }
+    statusMutation.mutate(next);
+  };
+  const linkMutation = useMutation({
+    mutationFn: (sourceIds: string[]) =>
+      requirementsBoardMockApi.linkTaskTokenSources(task.id, sourceIds),
+    onSuccess: (updated) => {
+      message.success("已关联 Token 来源（Mock）");
+      onSaved(updated);
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      setPickerOpen(false);
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "关联失败")
+  });
+  const unlinkMutation = useMutation({
+    mutationFn: (sourceId: string) =>
+      requirementsBoardMockApi.unlinkTaskTokenSource(task.id, sourceId),
+    onSuccess: (updated) => {
+      message.success("已移除 Token 来源（Mock）");
+      onSaved(updated);
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "移除失败")
+  });
+
+  const linkedSources = task.token_source_ids
+    .map((id) => tokenSourceMap.get(id))
+    .filter((source): source is MockTokenSource => Boolean(source));
+  const linkedTotal = linkedSources.reduce((total, source) => total + source.token, 0);
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -1016,11 +1526,16 @@ function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: 
         <Descriptions column={1} size="small" colon={false}>
           <Descriptions.Item label="所属需求">{task.requirement_title}</Descriptions.Item>
           <Descriptions.Item label="负责人">{task.assignee_name || "未分配"}</Descriptions.Item>
-          <Descriptions.Item label="状态"><TaskStatusTag status={task.status} /></Descriptions.Item>
+          <Descriptions.Item label="状态">
+            <TaskStatusTag status={task.status} />
+          </Descriptions.Item>
           <Descriptions.Item label="上游依赖">
             {task.dependencies.length
               ? task.dependencies.map((dependency) => (
-                  <Tag key={dependency.task_id} color={dependency.status === "done" ? "success" : "error"}>
+                  <Tag
+                    key={dependency.task_id}
+                    color={dependency.status === "done" ? "success" : "error"}
+                  >
                     {dependency.task_title}
                   </Tag>
                 ))
@@ -1030,11 +1545,40 @@ function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: 
         {dependencyBlocked ? (
           <Alert type="warning" showIcon message="上游任务未完成，当前任务处于依赖阻塞" />
         ) : null}
+        <Space wrap size={8} style={{ marginTop: 12 }}>
+          {task.status !== "done" && !dependencyBlocked ? (
+            <Button
+              type="primary"
+              size="small"
+              loading={statusMutation.isPending}
+              onClick={() => requestStatusChange("done")}
+            >
+              标记完成
+            </Button>
+          ) : null}
+          {task.status === "done" ? (
+            <Button
+              size="small"
+              loading={statusMutation.isPending}
+              onClick={() => requestStatusChange("todo")}
+            >
+              重新打开
+            </Button>
+          ) : null}
+          {task.status === "todo" && !dependencyBlocked ? (
+            <Button
+              size="small"
+              loading={statusMutation.isPending}
+              onClick={() => requestStatusChange("in_progress")}
+            >
+              开始任务
+            </Button>
+          ) : null}
+        </Space>
       </section>
 
       <section className="requirements-drawer__section">
         <h3>进度更新</h3>
-        <p>进度由用户确认，可不关联 Token 来源。</p>
         <div className="requirements-drawer__progress-editor">
           <Slider min={0} max={100} value={progress} onChange={setProgress} />
           <InputNumber
@@ -1046,9 +1590,9 @@ function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: 
           />
           <Button
             type="primary"
-            loading={mutation.isPending}
+            loading={progressMutation.isPending}
             disabled={progress === task.progress}
-            onClick={() => mutation.mutate()}
+            onClick={() => progressMutation.mutate()}
           >
             保存进度
           </Button>
@@ -1058,21 +1602,54 @@ function TaskDrawerContent({ task, onSaved }: { task: MockTask; onSaved: (task: 
       <section className="requirements-drawer__section">
         <div className="requirements-drawer__section-head">
           <h3>Token 来源</h3>
-          {task.token_total > 0 ? <strong>已关联 {formatTokens(task.token_total)} Token</strong> : <span>人工更新</span>}
+          <Space size={8}>
+            {linkedTotal > 0 ? (
+              <span>已关联 {formatTokens(linkedTotal)} Token</span>
+            ) : (
+              <span>暂无关联 Token 来源</span>
+            )}
+            <Button size="small" icon={<LinkOutlined />} onClick={() => setPickerOpen(true)}>
+              关联 Token 来源
+            </Button>
+          </Space>
         </div>
-        {task.token_total > 0 ? (
-          <Collapse
-            ghost
-            items={[{
-              key: "sources",
-              label: "Token 来源明细",
-              children: <p>AI 编码工作记录 · {formatTokens(task.token_total)} Token</p>
-            }]}
-          />
+        {linkedSources.length ? (
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            {linkedSources.map((source) => (
+              <div key={source.id} className="requirements-drawer__token-row">
+                <div className="requirements-drawer__token-row-main">
+                  <strong>{source.summary || "（无摘要）"}</strong>
+                  <span>
+                    {formatTokenSourceTime(source.recorded_at)} · {source.tool} · {source.uploader}
+                  </span>
+                </div>
+                <div className="requirements-drawer__token-row-meta">
+                  <span>{formatTokens(source.token)} Token</span>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CloseOutlined />}
+                    loading={unlinkMutation.isPending && unlinkMutation.variables === source.id}
+                    onClick={() => unlinkMutation.mutate(source.id)}
+                    aria-label="移除"
+                  />
+                </div>
+              </div>
+            ))}
+          </Space>
         ) : (
-          <p>当前任务未关联 Token 来源，仍可正常更新进度。</p>
+          <p style={{ margin: 0, color: "#7a879a" }}>暂无关联 Token 来源。</p>
         )}
       </section>
+
+      <TokenSourcePicker
+        open={pickerOpen}
+        sources={tokenSources}
+        excludeIds={task.token_source_ids}
+        confirmLoading={linkMutation.isPending}
+        onCancel={() => setPickerOpen(false)}
+        onConfirm={(ids) => linkMutation.mutateAsync(ids)}
+      />
     </Space>
   );
 }

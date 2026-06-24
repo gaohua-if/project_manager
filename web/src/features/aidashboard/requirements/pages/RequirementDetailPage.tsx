@@ -2,6 +2,7 @@ import { PlusOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Card, Empty, Result, Space, Tag, Typography } from "antd";
 import type { TableProps } from "antd";
+import { useMemo } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { KeyValueInfoList } from "@/shared/components/DetailPatterns/KeyValueInfoList";
@@ -13,7 +14,12 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
 import { requirementsBoardMockApi } from "../mock/requirementsBoardMockApi";
-import type { MockTask, RequirementPriority, RequirementStage } from "../mock/types";
+import type {
+  MockTask,
+  MockTokenSource,
+  RequirementPriority,
+  RequirementStage
+} from "../mock/types";
 
 const { Text } = Typography;
 
@@ -48,6 +54,18 @@ export function RequirementDetailPage() {
     queryFn: () => requirementsBoardMockApi.listTasks(id),
     enabled: Boolean(id)
   });
+  const tokenSourcesQuery = useQuery({
+    queryKey: ["requirements-board", "token-sources"],
+    queryFn: () => requirementsBoardMockApi.listTokenSources(),
+    staleTime: 60_000
+  });
+  const tokenSourceMap = useMemo(
+    () =>
+      new Map(
+        (tokenSourcesQuery.data ?? []).map((source: MockTokenSource) => [source.id, source])
+      ),
+    [tokenSourcesQuery.data]
+  );
 
   if (!id) return <Result status="404" title="需求不存在" subTitle="缺少有效的需求 ID。" />;
   if (requirementQuery.isLoading) return <PageSkeleton rows={8} />;
@@ -101,9 +119,14 @@ export function RequirementDetailPage() {
     },
     {
       title: "Token 来源",
-      render: (_, task) =>
-        task.token_total > 0 ? `${task.token_total.toLocaleString()} Token` : "人工更新",
-      width: 210
+      render: (_, task) => {
+        const tokens = task.token_source_ids.reduce(
+          (total, sourceId) => total + (tokenSourceMap.get(sourceId)?.token ?? 0),
+          0
+        );
+        return tokens > 0 ? `${tokens.toLocaleString()} Token` : "-";
+      },
+      width: 160
     },
     {
       title: "操作",

@@ -6,6 +6,7 @@ import type {
   MockTask,
   MockTaskStatus,
   MockTeam,
+  MockTokenSource,
   RequirementStage
 } from "./types";
 
@@ -20,6 +21,73 @@ const assignees: MockAssignee[] = [
   { id: "user-li", name: "李四", employee_id: "lisi", team_id: "team-ai" },
   { id: "user-wang", name: "王五", employee_id: "wangwu", team_id: "team-platform" },
   { id: "user-zhao", name: "赵六", employee_id: "zhaoliu", team_id: "team-platform" }
+];
+
+const tokenSources: MockTokenSource[] = [
+  {
+    id: "ts-001",
+    recorded_at: "2026-06-24T09:30:00Z",
+    tool: "Claude Code",
+    uploader: "王五",
+    token: 86200,
+    summary: "实现日报聚合接口的初步联调"
+  },
+  {
+    id: "ts-002",
+    recorded_at: "2026-06-24T11:10:00Z",
+    tool: "Claude Code",
+    uploader: "王五",
+    token: 100200,
+    summary: "补齐聚合接口字段与单测"
+  },
+  {
+    id: "ts-003",
+    recorded_at: "2026-06-23T16:45:00Z",
+    tool: "Codex",
+    uploader: "赵六",
+    token: 94200,
+    summary: "日报任务进展视图组件搭建"
+  },
+  {
+    id: "ts-004",
+    recorded_at: "2026-06-22T14:00:00Z",
+    tool: "Claude Code",
+    uploader: "张三",
+    token: 128700,
+    summary: "设计 Token 来源与任务关联的数据模型"
+  },
+  {
+    id: "ts-005",
+    recorded_at: "2026-06-19T15:30:00Z",
+    tool: "Claude Code",
+    uploader: "王五",
+    token: 212500,
+    summary: "权限中间件收敛与回归"
+  },
+  {
+    id: "ts-006",
+    recorded_at: "2026-06-24T10:20:00Z",
+    tool: "Claude Code",
+    uploader: "陈 PM",
+    token: 42100,
+    summary: "需求范围对齐与会议纪要"
+  },
+  {
+    id: "ts-007",
+    recorded_at: "2026-06-23T09:00:00Z",
+    tool: "Codex",
+    uploader: "陈 PM",
+    token: 31500,
+    summary: "需求澄清与上下游接口梳理"
+  },
+  {
+    id: "ts-008",
+    recorded_at: "2026-06-22T17:20:00Z",
+    tool: "Claude Code",
+    uploader: "李四",
+    token: 0,
+    summary: "尚未上传完整内容（占位）"
+  }
 ];
 
 let requirements: MockRequirement[] = [
@@ -41,6 +109,7 @@ let requirements: MockRequirement[] = [
     deadline: "2026-07-05",
     team_ids: ["team-product", "team-platform"],
     team_names: ["产品设计", "平台研发"],
+    token_source_ids: ["ts-006"],
     created_at: "2026-06-12T09:20:00Z",
     updated_at: "2026-06-24T08:30:00Z"
   },
@@ -62,30 +131,14 @@ let requirements: MockRequirement[] = [
     deadline: "2026-07-12",
     team_ids: ["team-ai"],
     team_names: ["AI 工程"],
+    token_source_ids: ["ts-007"],
     created_at: "2026-06-18T10:00:00Z",
     updated_at: "2026-06-24T07:20:00Z"
   },
   {
-    id: "req-task-template",
-    title: "标准任务模板",
-    description: "为常见研发工作提供可复用的任务拆解模板。",
-    acceptance_criteria: ["支持选择模板创建任务", "模板可维护默认负责人角色和交付检查项"],
-    creator_id: "user-pm",
-    creator_name: "陈 PM",
-    creator_role: "pm",
-    status: "todo",
-    priority: "medium",
-    progress: 0,
-    deadline: "2026-07-20",
-    team_ids: ["team-product"],
-    team_names: ["产品设计"],
-    created_at: "2026-06-22T11:10:00Z",
-    updated_at: "2026-06-22T11:10:00Z"
-  },
-  {
     id: "req-permission",
     title: "角色权限矩阵优化",
-    description: "收敛需求、任务和 Session 的角色可见与编辑边界。",
+    description: "收敛需求、任务和 Token 来源的角色可见与编辑边界。",
     acceptance_criteria: ["权限规则覆盖五类角色", "越权操作返回明确提示"],
     creator_id: "user-director",
     creator_name: "李总监",
@@ -96,6 +149,7 @@ let requirements: MockRequirement[] = [
     deadline: "2026-06-21",
     team_ids: ["team-platform"],
     team_names: ["平台研发"],
+    token_source_ids: [],
     created_at: "2026-06-02T08:00:00Z",
     updated_at: "2026-06-21T16:40:00Z"
   },
@@ -112,10 +166,190 @@ let requirements: MockRequirement[] = [
     progress: 0,
     team_ids: ["team-product"],
     team_names: ["产品设计"],
+    token_source_ids: [],
     created_at: "2026-05-20T08:00:00Z",
     updated_at: "2026-06-01T14:00:00Z"
-  }
+  },
+  ...buildArchivedCompletedRequirements()
 ];
+
+function buildArchivedCompletedRequirements(): MockRequirement[] {
+  const records: Array<{
+    id: string;
+    title: string;
+    description: string;
+    updated: string;
+    deadline: string;
+    teamIds: string[];
+    teamNames: string[];
+    creatorId: string;
+    creatorName: string;
+    creatorRole: string;
+  }> = [
+    {
+      id: "req-archived-01",
+      title: "看板筛选状态持久化",
+      description: "将看板筛选条件写入查询参数，刷新后仍可恢复。",
+      updated: "2026-06-24T05:00:00Z",
+      deadline: "2026-06-22",
+      teamIds: ["team-platform"],
+      teamNames: ["平台研发"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-02",
+      title: "任务详情依赖图重构",
+      description: "依赖关系以列表形式展示，去除原有树形复杂度。",
+      updated: "2026-06-23T18:30:00Z",
+      deadline: "2026-06-22",
+      teamIds: ["team-ai"],
+      teamNames: ["AI 工程"],
+      creatorId: "user-director",
+      creatorName: "李总监",
+      creatorRole: "director"
+    },
+    {
+      id: "req-archived-03",
+      title: "需求看板拖拽体验优化",
+      description: "调整阶段切换的过渡动画与拖拽落点反馈。",
+      updated: "2026-06-23T11:00:00Z",
+      deadline: "2026-06-21",
+      teamIds: ["team-product"],
+      teamNames: ["产品设计"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-04",
+      title: "Token 来源筛选项",
+      description: "Token 来源列表支持按工具与上传者筛选。",
+      updated: "2026-06-22T14:15:00Z",
+      deadline: "2026-06-21",
+      teamIds: ["team-platform"],
+      teamNames: ["平台研发"],
+      creatorId: "user-director",
+      creatorName: "李总监",
+      creatorRole: "director"
+    },
+    {
+      id: "req-archived-05",
+      title: "需求验收标准批量录入",
+      description: "支持在创建需求时批量粘贴验收标准。",
+      updated: "2026-06-22T09:00:00Z",
+      deadline: "2026-06-20",
+      teamIds: ["team-product"],
+      teamNames: ["产品设计"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-06",
+      title: "任务进度滑块组件统一",
+      description: "替换旧版进度组件，使用滑块与数值同步编辑。",
+      updated: "2026-06-21T17:45:00Z",
+      deadline: "2026-06-20",
+      teamIds: ["team-platform"],
+      teamNames: ["平台研发"],
+      creatorId: "user-director",
+      creatorName: "李总监",
+      creatorRole: "director"
+    },
+    {
+      id: "req-archived-07",
+      title: "需求详情抽屉宽度调整",
+      description: "需求与任务抽屉宽度统一，提升信息密度。",
+      updated: "2026-06-20T16:00:00Z",
+      deadline: "2026-06-19",
+      teamIds: ["team-product"],
+      teamNames: ["产品设计"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-08",
+      title: "看板搜索高亮匹配",
+      description: "搜索结果中高亮匹配关键字，便于快速定位。",
+      updated: "2026-06-19T15:20:00Z",
+      deadline: "2026-06-18",
+      teamIds: ["team-ai"],
+      teamNames: ["AI 工程"],
+      creatorId: "user-director",
+      creatorName: "李总监",
+      creatorRole: "director"
+    },
+    {
+      id: "req-archived-09",
+      title: "任务详情快捷操作",
+      description: "在任务详情顶部提供常用状态切换按钮。",
+      updated: "2026-06-19T09:10:00Z",
+      deadline: "2026-06-18",
+      teamIds: ["team-platform"],
+      teamNames: ["平台研发"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-10",
+      title: "需求列表导出 CSV",
+      description: "支持当前筛选结果导出为 CSV 文件。",
+      updated: "2026-06-18T08:00:00Z",
+      deadline: "2026-06-17",
+      teamIds: ["team-product"],
+      teamNames: ["产品设计"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-11",
+      title: "需求看板空状态插画",
+      description: "为空状态补充插画与引导文案。",
+      updated: "2026-06-15T12:00:00Z",
+      deadline: "2026-06-12",
+      teamIds: ["team-product"],
+      teamNames: ["产品设计"],
+      creatorId: "user-pm",
+      creatorName: "陈 PM",
+      creatorRole: "pm"
+    },
+    {
+      id: "req-archived-12",
+      title: "Token 来源月度归档",
+      description: "Token 来源支持按月份归档，减少列表压力。",
+      updated: "2026-06-10T10:00:00Z",
+      deadline: "2026-06-08",
+      teamIds: ["team-platform"],
+      teamNames: ["平台研发"],
+      creatorId: "user-director",
+      creatorName: "李总监",
+      creatorRole: "director"
+    }
+  ];
+  return records.map((record) => ({
+    id: record.id,
+    title: record.title,
+    description: record.description,
+    acceptance_criteria: ["验收标准已闭环"],
+    creator_id: record.creatorId,
+    creator_name: record.creatorName,
+    creator_role: record.creatorRole,
+    status: "completed",
+    priority: "medium",
+    progress: 100,
+    deadline: record.deadline,
+    team_ids: record.teamIds,
+    team_names: record.teamNames,
+    token_source_ids: [],
+    created_at: "2026-05-25T08:00:00Z",
+    updated_at: record.updated
+  }));
+}
 
 let tasks: MockTask[] = [
   {
@@ -132,8 +366,7 @@ let tasks: MockTask[] = [
     due_date: "2026-06-29",
     dependencies: [],
     blocking: [],
-    session_count: 7,
-    token_total: 186400,
+    token_source_ids: ["ts-001", "ts-002"],
     created_at: "2026-06-13T08:30:00Z",
     updated_at: "2026-06-24T08:10:00Z"
   },
@@ -153,8 +386,7 @@ let tasks: MockTask[] = [
       { task_id: "task-report-api", task_title: "实现日报聚合接口", status: "in_progress" }
     ],
     blocking: [],
-    session_count: 4,
-    token_total: 94200,
+    token_source_ids: ["ts-003"],
     created_at: "2026-06-14T09:00:00Z",
     updated_at: "2026-06-24T07:50:00Z"
   },
@@ -172,8 +404,7 @@ let tasks: MockTask[] = [
     due_date: "2026-06-25",
     dependencies: [],
     blocking: [{ task_id: "task-session-tree", task_title: "任务树证据摘要", status: "todo" }],
-    session_count: 5,
-    token_total: 128700,
+    token_source_ids: ["ts-004"],
     created_at: "2026-06-19T08:00:00Z",
     updated_at: "2026-06-23T18:00:00Z"
   },
@@ -193,8 +424,7 @@ let tasks: MockTask[] = [
       { task_id: "task-session-link", task_title: "设计 Token 来源与任务关联模型", status: "done" }
     ],
     blocking: [],
-    session_count: 0,
-    token_total: 0,
+    token_source_ids: [],
     created_at: "2026-06-20T08:00:00Z",
     updated_at: "2026-06-20T08:00:00Z"
   },
@@ -212,8 +442,7 @@ let tasks: MockTask[] = [
     due_date: "2026-06-19",
     dependencies: [],
     blocking: [],
-    session_count: 8,
-    token_total: 212500,
+    token_source_ids: ["ts-005"],
     created_at: "2026-06-03T08:00:00Z",
     updated_at: "2026-06-19T17:00:00Z"
   }
@@ -227,16 +456,16 @@ function now() {
   return new Date().toISOString();
 }
 
-function progressFor(requirementId: string) {
-  const relatedTasks = tasks.filter((task) => task.requirement_id === requirementId);
-  if (!relatedTasks.length) return 0;
+function progressFor(requirement: MockRequirement) {
+  const relatedTasks = tasks.filter((task) => task.requirement_id === requirement.id);
+  if (!relatedTasks.length) return requirement.progress;
   return Math.round(
     relatedTasks.reduce((total, task) => total + task.progress, 0) / relatedTasks.length
   );
 }
 
 function hydrateRequirement(requirement: MockRequirement): MockRequirement {
-  return { ...requirement, progress: progressFor(requirement.id) };
+  return { ...requirement, progress: progressFor(requirement) };
 }
 
 function syncDependencies() {
@@ -248,6 +477,10 @@ function syncDependencies() {
       status: statusById.get(dependency.task_id) ?? dependency.status
     }))
   }));
+}
+
+function findTokenSource(id: string) {
+  return tokenSources.find((source) => source.id === id);
 }
 
 export const requirementsBoardMockApi = {
@@ -276,6 +509,7 @@ export const requirementsBoardMockApi = {
       status: "todo",
       progress: 0,
       team_names: selectedTeams.map((team) => team.name),
+      token_source_ids: [],
       created_at: timestamp,
       updated_at: timestamp
     };
@@ -314,6 +548,11 @@ export const requirementsBoardMockApi = {
     if (!requirement) throw new Error("所属需求不存在");
     const assignee = assignees.find((item) => item.id === input.assignee_id);
     const timestamp = now();
+    const dependencyIds = input.dependency_task_ids ?? [];
+    const dependencies = dependencyIds
+      .map((depId) => tasks.find((item) => item.id === depId))
+      .filter((item): item is MockTask => Boolean(item))
+      .map((item) => ({ task_id: item.id, task_title: item.title, status: item.status }));
     const task: MockTask = {
       ...input,
       id: `task-mock-${Date.now()}`,
@@ -321,10 +560,9 @@ export const requirementsBoardMockApi = {
       assignee_name: assignee?.name,
       status: "todo",
       progress: 0,
-      dependencies: [],
+      dependencies,
       blocking: [],
-      session_count: 0,
-      token_total: 0,
+      token_source_ids: [],
       created_at: timestamp,
       updated_at: timestamp
     };
@@ -364,5 +602,61 @@ export const requirementsBoardMockApi = {
   async listAssignees() {
     await wait(120);
     return [...assignees];
+  },
+
+  async listTokenSources() {
+    await wait(120);
+    return [...tokenSources];
+  },
+
+  async getTokenSourcesByIds(ids: string[]) {
+    await wait(80);
+    return ids.map(findTokenSource).filter((source): source is MockTokenSource => Boolean(source));
+  },
+
+  async linkRequirementTokenSources(requirementId: string, sourceIds: string[]) {
+    await wait();
+    const target = requirements.find((item) => item.id === requirementId);
+    if (!target) throw new Error("需求不存在或已被删除");
+    const next = Array.from(new Set([...target.token_source_ids, ...sourceIds]));
+    const updated: MockRequirement = { ...target, token_source_ids: next, updated_at: now() };
+    requirements = requirements.map((item) => (item.id === requirementId ? updated : item));
+    return hydrateRequirement(updated);
+  },
+
+  async unlinkRequirementTokenSource(requirementId: string, sourceId: string) {
+    await wait();
+    const target = requirements.find((item) => item.id === requirementId);
+    if (!target) throw new Error("需求不存在或已被删除");
+    const updated: MockRequirement = {
+      ...target,
+      token_source_ids: target.token_source_ids.filter((id) => id !== sourceId),
+      updated_at: now()
+    };
+    requirements = requirements.map((item) => (item.id === requirementId ? updated : item));
+    return hydrateRequirement(updated);
+  },
+
+  async linkTaskTokenSources(taskId: string, sourceIds: string[]) {
+    await wait();
+    const target = tasks.find((item) => item.id === taskId);
+    if (!target) throw new Error("任务不存在或已被删除");
+    const next = Array.from(new Set([...target.token_source_ids, ...sourceIds]));
+    const updated: MockTask = { ...target, token_source_ids: next, updated_at: now() };
+    tasks = tasks.map((item) => (item.id === taskId ? updated : item));
+    return updated;
+  },
+
+  async unlinkTaskTokenSource(taskId: string, sourceId: string) {
+    await wait();
+    const target = tasks.find((item) => item.id === taskId);
+    if (!target) throw new Error("任务不存在或已被删除");
+    const updated: MockTask = {
+      ...target,
+      token_source_ids: target.token_source_ids.filter((id) => id !== sourceId),
+      updated_at: now()
+    };
+    tasks = tasks.map((item) => (item.id === taskId ? updated : item));
+    return updated;
   }
 };

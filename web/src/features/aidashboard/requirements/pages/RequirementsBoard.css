@@ -267,6 +267,27 @@
   text-align: center;
 }
 
+.requirements-board__column-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  color: #2563eb;
+  font-size: 12px;
+  text-align: center;
+  background: transparent;
+  border: 1px dashed #cfdcef;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+.requirements-board__column-more:hover {
+  background: #f3f7ff;
+  border-color: #9bbcff;
+}
+
 .requirements-tree {
   min-width: 1100px;
 }
@@ -535,6 +556,42 @@
   justify-content: space-between;
   gap: 12px;
   color: #526173;
+}
+.requirements-drawer__token-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+}
+.requirements-drawer__token-row-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.requirements-drawer__token-row-main strong {
+  color: #253047;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.requirements-drawer__token-row-main span {
+  color: #8a95a6;
+  font-size: 11px;
+}
+.requirements-drawer__token-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #526173;
+  font-size: 12px;
+}
+.requirements-drawer__token-row-meta .ant-tag {
+  margin: 0;
 }
 .requirements-drawer__progress-editor {
   display: grid;

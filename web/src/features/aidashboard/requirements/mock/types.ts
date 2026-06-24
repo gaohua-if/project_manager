@@ -21,6 +21,15 @@ export interface MockTaskDependency {
   status: MockTaskStatus;
 }
 
+export interface MockTokenSource {
+  id: string;
+  recorded_at: string;
+  tool: string;
+  uploader: string;
+  token: number;
+  summary: string;
+}
+
 export interface MockRequirement {
   id: string;
   title: string;
@@ -36,6 +45,7 @@ export interface MockRequirement {
   deadline?: string;
   team_ids: string[];
   team_names: string[];
+  token_source_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -54,8 +64,7 @@ export interface MockTask {
   due_date?: string;
   dependencies: MockTaskDependency[];
   blocking: MockTaskDependency[];
-  session_count: number;
-  token_total: number;
+  token_source_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -77,4 +86,5 @@ export interface CreateMockTaskInput {
   assignee_id?: string;
   priority: MockTaskPriority;
   due_date?: string;
+  dependency_task_ids?: string[];
 }

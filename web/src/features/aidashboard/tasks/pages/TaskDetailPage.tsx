@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Col,
-  Collapse,
   Descriptions,
   InputNumber,
   Result,
@@ -15,7 +14,8 @@ import {
   Tag,
   Typography
 } from "antd";
-import { useState } from "react";
+import dayjs from "dayjs";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
@@ -24,7 +24,7 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
 import { requirementsBoardMockApi } from "../../requirements/mock/requirementsBoardMockApi";
-import type { MockTaskDependency, MockTaskStatus } from "../../requirements/mock/types";
+import type { MockTaskDependency, MockTaskStatus, MockTokenSource } from "../../requirements/mock/types";
 
 const { Text } = Typography;
 
@@ -49,6 +49,10 @@ function formatTokens(value: number) {
   return String(value);
 }
 
+function formatTokenSourceTime(value: string) {
+  return dayjs(value).format("MM-DD HH:mm");
+}
+
 export function TaskDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const location = useLocation();
@@ -63,6 +67,19 @@ export function TaskDetailPage() {
     enabled: Boolean(id)
   });
   const task = taskQuery.data;
+
+  const tokenSourcesQuery = useQuery({
+    queryKey: ["requirements-board", "token-sources"],
+    queryFn: () => requirementsBoardMockApi.listTokenSources(),
+    staleTime: 60_000
+  });
+  const tokenSourceMap = useMemo(
+    () =>
+      new Map(
+        (tokenSourcesQuery.data ?? []).map((source: MockTokenSource) => [source.id, source])
+      ),
+    [tokenSourcesQuery.data]
+  );
 
   const statusMutation = useMutation({
     mutationFn: (status: Exclude<MockTaskStatus, "blocked">) =>
@@ -135,6 +152,11 @@ export function TaskDetailPage() {
   const dependencyBlocked = task.dependencies.some((dependency) => dependency.status !== "done");
   const progress = progressOverride ?? task.progress;
 
+  const linkedSources = task.token_source_ids
+    .map((id) => tokenSourceMap.get(id))
+    .filter((source): source is MockTokenSource => Boolean(source));
+  const linkedTotal = linkedSources.reduce((total, source) => total + source.token, 0);
+
   return (
     <PagePanel
       title={task.title}
@@ -201,7 +223,9 @@ export function TaskDetailPage() {
                   </Space>
                 </Descriptions.Item>
                 <Descriptions.Item label="Token 来源">
-                  {task.token_total > 0 ? `已关联 ${formatTokens(task.token_total)} Token` : "人工更新"}
+                  {linkedTotal > 0
+                    ? `已关联 ${formatTokens(linkedTotal)} Token`
+                    : "暂无关联 Token 来源"}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
@@ -229,22 +253,29 @@ export function TaskDetailPage() {
         </Row>
 
         <Card size="small" title="Token 来源">
-          {task.token_total > 0 ? (
-            <Collapse
-              ghost
-              items={[{
-                key: "sources",
-                label: "Token 来源明细",
-                children: <p>AI 编码工作记录 · {formatTokens(task.token_total)} Token</p>
-              }]}
-            />
+          {linkedSources.length ? (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              {linkedSources.map((source) => (
+                <div key={source.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", background: "#f8fafc", border: "1px solid #e5eaf3", borderRadius: 10 }}>
+                  <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+                    <strong style={{ color: "#253047", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {source.summary || "（无摘要）"}
+                    </strong>
+                    <span style={{ color: "#8a95a6", fontSize: 11 }}>
+                      {formatTokenSourceTime(source.recorded_at)} · {source.tool} · {source.uploader}
+                    </span>
+                  </div>
+                  <span style={{ color: "#526173", fontSize: 12 }}>{formatTokens(source.token)} Token</span>
+                </div>
+              ))}
+            </Space>
           ) : (
-            <Text type="secondary">当前任务未关联 Token 来源，仍可人工更新进度。</Text>
+            <Text type="secondary">暂无关联 Token 来源。</Text>
           )}
         </Card>
 
         <Card title="任务进度" className="aidashboard-task-detail__progress-card">
-          <p>任务进度只在此处维护。拖动滑块或输入精确百分比后保存。</p>
+          <p>拖动滑块或输入百分比后保存。</p>
           <div className="aidashboard-task-detail__progress-editor">
             <Slider min={0} max={100} value={progress} onChange={setProgressOverride} />
             <InputNumber

@@ -74,7 +74,7 @@ assert_grep 'userApiBaseUrl: "/api/v1"' "$PUBLIC_CONFIG"
 assert_grep 'DEFAULT_USER_API_BASE_URL = "/api/v1"' "$AUTH_BLUEPRINT"
 assert_grep 'getApiUrl\(runtimeConfig\.userApiBaseUrl, "/auth/me"\)' "$AUTH_API"
 assert_grep '"/api/v1": \{' "$VITE_CONFIG"
-grep -qF 'target: "http://localhost:8080"' "$VITE_CONFIG" \
+grep -qF 'target: "http://127.0.0.1:18090"' "$VITE_CONFIG" \
   || fail "Vite local Aida API proxy target is missing"
 assert_grep 'location \^~ /api/v1/ \{' "$NGINX_CONFIG"
 grep -qF "proxy_pass http://api:8080;" "$NGINX_CONFIG" \
