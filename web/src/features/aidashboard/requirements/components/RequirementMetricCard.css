@@ -1,7 +1,7 @@
 .requirements-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .requirements-metric-card {
@@ -10,15 +10,13 @@
   --metric-glow: rgba(37, 99, 235, 0.07);
   position: relative;
   display: grid;
-  min-height: 132px;
+  min-height: 104px;
   overflow: hidden;
-  padding: 18px;
-  background:
-    radial-gradient(circle at 100% 0, var(--metric-glow), transparent 42%),
-    linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  padding: 14px 16px;
+  background: #fff;
   border: 1px solid #e5edf6;
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
 }
 
 .requirements-metric-card--tone-success {
@@ -72,15 +70,15 @@
 }
 
 .requirements-metric-card__value {
-  margin-top: 18px;
+  margin-top: 12px;
   color: #172033;
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .requirements-metric-card__description {
-  margin-top: 16px;
+  margin-top: 10px;
   color: #718096;
   font-size: 12px;
 }

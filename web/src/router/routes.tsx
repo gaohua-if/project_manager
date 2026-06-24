@@ -61,7 +61,7 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/requirements",
-    title: "需求看板",
+    title: "需求推进",
     icon: <ProjectOutlined />,
     menuGroup: "业务",
     menuOrder: 30,
