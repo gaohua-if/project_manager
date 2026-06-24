@@ -1,0 +1,146 @@
+.requirements-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.requirements-metric-card {
+  --metric-accent: #2563eb;
+  --metric-icon-background: #edf5ff;
+  --metric-glow: rgba(37, 99, 235, 0.07);
+  position: relative;
+  display: grid;
+  min-height: 132px;
+  overflow: hidden;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 100% 0, var(--metric-glow), transparent 42%),
+    linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  border: 1px solid #e5edf6;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.requirements-metric-card--tone-success {
+  --metric-accent: #059669;
+  --metric-icon-background: #ecfdf5;
+  --metric-glow: rgba(5, 150, 105, 0.08);
+}
+
+.requirements-metric-card--tone-warning {
+  --metric-accent: #d97706;
+  --metric-icon-background: #fffbeb;
+  --metric-glow: rgba(217, 119, 6, 0.08);
+}
+
+.requirements-metric-card--tone-danger {
+  --metric-accent: #e11d48;
+  --metric-icon-background: #fff1f2;
+  --metric-glow: rgba(225, 29, 72, 0.08);
+}
+
+.requirements-metric-card--tone-info {
+  --metric-accent: #7c3aed;
+  --metric-icon-background: #f1edff;
+  --metric-glow: rgba(124, 58, 237, 0.08);
+}
+
+.requirements-metric-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.requirements-metric-card__title {
+  color: #526173;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.requirements-metric-card__icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  color: var(--metric-accent);
+  font-size: 15px;
+  background: var(--metric-icon-background);
+  border-radius: 8px;
+}
+
+.requirements-metric-card__value {
+  margin-top: 18px;
+  color: #172033;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.requirements-metric-card__description {
+  margin-top: 16px;
+  color: #718096;
+  font-size: 12px;
+}
+
+.requirements-metric-card__skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #edf3fa;
+  border-radius: 999px;
+}
+
+.requirements-metric-card__skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  transform: translateX(-100%);
+  animation: requirements-metric-shimmer 1.5s ease-in-out infinite;
+}
+
+.requirements-metric-card__skeleton--title {
+  width: 96px;
+  height: 14px;
+}
+
+.requirements-metric-card__skeleton--icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+}
+
+.requirements-metric-card__skeleton--value {
+  width: 120px;
+  height: 34px;
+  margin-top: 18px;
+  border-radius: 12px;
+}
+
+.requirements-metric-card__skeleton--line {
+  width: 72%;
+  height: 12px;
+  margin-top: 16px;
+}
+
+@keyframes requirements-metric-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 1280px) {
+  .requirements-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .requirements-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

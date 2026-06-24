@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
+  Button,
   Checkbox,
   DatePicker,
   Form,
@@ -10,21 +11,19 @@ import {
   Spin,
   Typography
 } from "antd";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import dayjs from "dayjs";
 
-import "../../aidashboard-pattern.css";
-import { createTask, fetchRequirements, fetchUsers } from "../../api/client";
-import type { Requirement, TaskPriority } from "../../api/types";
-import type { User } from "@/shared/auth/types";
-import { useAuth } from "@/shared/auth/authContext";
 import { FormPageWrap } from "@/shared/components/FormPageWrap/FormPageWrap";
 import { FormSubmitButton } from "@/shared/components/FormSubmitButton/FormSubmitButton";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { useFormLeaveConfirm } from "@/shared/hooks/useFormLeaveConfirm";
-import { getApiErrorMessage, getApiFieldErrors } from "@/shared/request/apiError";
 import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
+
+import "../../aidashboard-pattern.css";
+import { requirementsBoardMockApi } from "../../requirements/mock/requirementsBoardMockApi";
+import type { MockTaskPriority } from "../../requirements/mock/types";
 
 const { Text } = Typography;
 
@@ -32,46 +31,49 @@ interface CreateTaskFormValues {
   title: string;
   requirement_id: string;
   assignee_id: string;
-  priority: TaskPriority;
+  priority: MockTaskPriority;
   due_date?: dayjs.Dayjs;
   acceptance_criteria_ids: number[];
 }
 
 export function TaskCreatePage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<CreateTaskFormValues>();
   const [formError, setFormError] = useState<string>();
-  const backTo = buildCreateSuccessUrl("/tasks", location.search);
+  const initialRequirementId =
+    new URLSearchParams(location.search).get("requirement_id") ?? undefined;
+  const backTo = buildCreateSuccessUrl(
+    initialRequirementId ? "/requirements" : "/tasks",
+    location.search
+  );
 
-  const requirementsQuery = useQuery<Requirement[]>({
-    queryKey: ["requirements"],
-    queryFn: () => fetchRequirements(),
+  const requirementsQuery = useQuery({
+    queryKey: ["requirements-board", "requirements"],
+    queryFn: () => requirementsBoardMockApi.listRequirements(),
     staleTime: 60_000
   });
-  const usersQuery = useQuery<User[]>({
-    queryKey: ["users"],
-    queryFn: () => fetchUsers(),
+  const assigneesQuery = useQuery({
+    queryKey: ["requirements-board", "assignees"],
+    queryFn: () => requirementsBoardMockApi.listAssignees(),
     staleTime: 5 * 60_000
   });
 
   const requirements = requirementsQuery.data ?? [];
-  const users = usersQuery.data ?? [];
-  const teamEmployees = users.filter((u) => u.role === "employee" && u.team_id === user?.team_id);
+  const assignees = assigneesQuery.data ?? [];
   const selectedRequirementId = Form.useWatch("requirement_id", form);
-  const selectedRequirement = requirements.find((r) => r.id === selectedRequirementId);
+  const selectedRequirement = requirements.find((item) => item.id === selectedRequirementId);
 
   const createMutation = useMutation({
     mutationFn: (values: CreateTaskFormValues) =>
-      createTask({
+      requirementsBoardMockApi.createTask({
         requirement_id: values.requirement_id,
         title: values.title.trim(),
         acceptance_criteria_ids: values.acceptance_criteria_ids ?? [],
         assignee_id: values.assignee_id,
         priority: values.priority,
-        due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined
+        due_date: values.due_date?.format("YYYY-MM-DD")
       })
   });
   const submitting = createMutation.isPending;
@@ -80,49 +82,61 @@ export function TaskCreatePage() {
   const handleCancel = () => handleNavigate(backTo);
 
   useEffect(() => {
-    form.setFieldsValue({ priority: "medium", acceptance_criteria_ids: [] });
+    form.setFieldsValue({
+      priority: "medium",
+      acceptance_criteria_ids: [],
+      requirement_id: initialRequirementId
+    });
     markClean();
-  }, [form, markClean]);
+  }, [form, initialRequirementId, markClean]);
 
   const handleSubmit = async (values: CreateTaskFormValues) => {
     setFormError(undefined);
     try {
-      await createMutation.mutateAsync(values);
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      const created = await createMutation.mutateAsync(values);
+      await queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
       markClean();
-      navigate(backTo, { replace: true });
+      navigate(`/tasks/${created.id}`, { replace: true });
     } catch (error) {
-      const fieldErrors = getApiFieldErrors(error);
-      if (fieldErrors.length > 0) {
-        form.setFields(
-          fieldErrors.map((item) => ({ name: item.field, errors: [item.message] })) as Parameters<
-            typeof form.setFields
-          >[0]
-        );
-        return;
-      }
-      setFormError(getApiErrorMessage(error, "创建任务失败，请稍后重试"));
+      setFormError(error instanceof Error ? error.message : "创建任务失败，请稍后重试");
     }
   };
 
   return (
     <PagePanel
       title="创建任务"
-      description="将需求拆解为可执行任务，并分配负责人和验收标准"
+      description="将需求拆解为可执行任务，并关联负责人和验收标准"
       className="aidashboard-form-page"
       backTo={backTo}
       onBack={handleCancel}
       onNavigate={handleNavigate}
-      breadcrumbs={[{ title: "任务", path: "/tasks" }, { title: "创建任务" }]}
+      breadcrumbs={[
+        { title: "业务" },
+        { title: "需求看板", path: "/requirements" },
+        { title: "创建任务" }
+      ]}
     >
       <FormPageWrap className="aidashboard-form-wrap" maxWidth="100%" density="cozy" card>
         <Spin spinning={submitting}>
           {formError ? (
+            <Alert className="aidashboard-form__error" type="error" showIcon message={formError} />
+          ) : null}
+          {requirementsQuery.isError || assigneesQuery.isError ? (
             <Alert
               className="aidashboard-form__error"
               type="error"
               showIcon
-              message={formError}
+              message="创建任务所需 Mock 数据加载失败"
+              action={
+                <Button
+                  onClick={() => {
+                    void requirementsQuery.refetch();
+                    void assigneesQuery.refetch();
+                  }}
+                >
+                  重试
+                </Button>
+              }
             />
           ) : null}
           <Form
@@ -137,16 +151,16 @@ export function TaskCreatePage() {
             <section className="aidashboard-form__section">
               <div className="aidashboard-form__section-head">
                 <h2>任务信息</h2>
-                <p>把需求拆解为可执行任务,并为每条任务关联负责人和验收标准。</p>
+                <p>任务进度创建后在任务详情中维护。</p>
               </div>
               <div className="aidashboard-form__grid">
                 <Form.Item
                   className="aidashboard-form__full-row"
                   label="任务标题"
                   name="title"
-                  rules={[{ required: true, message: "请输入标题" }]}
+                  rules={[{ required: true, whitespace: true, message: "请输入标题" }]}
                 >
-                  <Input className="form-item-box" placeholder="例如：实现 API 分页" />
+                  <Input placeholder="例如：实现日报聚合接口" />
                 </Form.Item>
                 <Form.Item
                   label="所属需求"
@@ -154,13 +168,14 @@ export function TaskCreatePage() {
                   rules={[{ required: true, message: "请选择需求" }]}
                 >
                   <Select
-                    className="form-item-box"
-                    placeholder={requirementsQuery.isError ? "需求加载失败" : "选择需求"}
+                    placeholder="选择需求"
                     loading={requirementsQuery.isLoading}
                     disabled={requirementsQuery.isLoading || requirementsQuery.isError}
                     showSearch
                     optionFilterProp="label"
-                    options={requirements.map((r) => ({ value: r.id, label: r.title }))}
+                    options={requirements
+                      .filter((item) => item.status !== "cancelled")
+                      .map((item) => ({ value: item.id, label: item.title }))}
                   />
                 </Form.Item>
                 <Form.Item
@@ -169,13 +184,12 @@ export function TaskCreatePage() {
                   rules={[{ required: true, message: "请选择负责人" }]}
                 >
                   <Select
-                    className="form-item-box"
-                    placeholder={usersQuery.isError ? "成员加载失败" : "选择工程师"}
-                    loading={usersQuery.isLoading}
-                    disabled={usersQuery.isLoading || usersQuery.isError}
-                    options={teamEmployees.map((u) => ({
-                      value: u.id,
-                      label: `${u.name} (${u.employee_id})`
+                    placeholder="选择负责人"
+                    loading={assigneesQuery.isLoading}
+                    disabled={assigneesQuery.isLoading || assigneesQuery.isError}
+                    options={assignees.map((item) => ({
+                      value: item.id,
+                      label: `${item.name} (${item.employee_id})`
                     }))}
                   />
                 </Form.Item>
@@ -185,7 +199,6 @@ export function TaskCreatePage() {
                   rules={[{ required: true, message: "请选择优先级" }]}
                 >
                   <Select
-                    className="form-item-box"
                     options={[
                       { value: "low", label: "低" },
                       { value: "medium", label: "中" },
@@ -194,26 +207,26 @@ export function TaskCreatePage() {
                   />
                 </Form.Item>
                 <Form.Item label="截止日期" name="due_date">
-                  <DatePicker className="form-item-box" />
+                  <DatePicker />
                 </Form.Item>
               </div>
             </section>
 
-            {selectedRequirement && selectedRequirement.acceptance_criteria.length > 0 ? (
+            {selectedRequirement?.acceptance_criteria.length ? (
               <section className="aidashboard-form__section">
                 <div className="aidashboard-form__section-head">
-                  <h2>关联 AC</h2>
-                  <p>选中的 AC 完成后,需求进度会自动累加。</p>
+                  <h2>关联验收标准</h2>
+                  <p>选择当前任务负责交付的验收标准。</p>
                 </div>
-                <Form.Item label="关联 AC" name="acceptance_criteria_ids">
-                  <Checkbox.Group style={{ width: "100%" }}>
-                    <Space direction="vertical" wrap>
-                      {selectedRequirement.acceptance_criteria.map((ac, i) => (
-                        <Checkbox key={i} value={i}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            AC{i + 1}
+                <Form.Item label="验收标准" name="acceptance_criteria_ids">
+                  <Checkbox.Group className="aidashboard-form__ac-options">
+                    <Space direction="vertical" wrap size={8}>
+                      {selectedRequirement.acceptance_criteria.map((criterion, index) => (
+                        <Checkbox key={criterion} value={index}>
+                          <Text type="secondary" className="aidashboard-form__ac-index">
+                            标准 {index + 1}
                           </Text>{" "}
-                          <Text style={{ fontSize: 12 }}>{ac}</Text>
+                          <Text className="aidashboard-form__ac-text">{criterion}</Text>
                         </Checkbox>
                       ))}
                     </Space>
@@ -223,13 +236,13 @@ export function TaskCreatePage() {
             ) : null}
 
             <FormSubmitButton
-              submitText="创建并分配"
+              submitText="创建任务"
               loading={submitting}
               disabled={
                 requirementsQuery.isLoading ||
-                usersQuery.isLoading ||
+                assigneesQuery.isLoading ||
                 requirementsQuery.isError ||
-                usersQuery.isError
+                assigneesQuery.isError
               }
               onCancel={handleCancel}
               sticky

@@ -1,144 +1,117 @@
-import { RobotOutlined } from "@ant-design/icons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Card, Empty, Popconfirm, Result, Space, Tag, Typography } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Button, Card, Empty, Result, Space, Tag, Typography } from "antd";
 import type { TableProps } from "antd";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
-import "../../aidashboard-pattern.css";
-import { fetchACStatus, fetchRequirement, fetchTasks, regenerateAC } from "../../api/client";
-import type { ACStatus, Requirement, Task } from "../../api/types";
-import {
-  ProgressBar,
-  RequirementPriorityTag,
-  RequirementStatusTag,
-  TaskStatusTag
-} from "../../dashboard/shared";
-import { useAuth } from "@/shared/auth/authContext";
-import { ROLE_LABELS, type UserRole } from "@/shared/auth/types";
 import { KeyValueInfoList } from "@/shared/components/DetailPatterns/KeyValueInfoList";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { PageSkeleton } from "@/shared/components/PageSkeleton/PageSkeleton";
 import { ResourceActions, ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
-import { HttpError } from "@/shared/request/types";
 import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 
+import "../../aidashboard-pattern.css";
+import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
+import { requirementsBoardMockApi } from "../mock/requirementsBoardMockApi";
+import type { MockTask, RequirementPriority, RequirementStage } from "../mock/types";
+
 const { Text } = Typography;
+
+const stageMeta: Record<RequirementStage, { label: string; color: string }> = {
+  todo: { label: "待开始", color: "default" },
+  review: { label: "评审", color: "purple" },
+  active: { label: "进行中", color: "processing" },
+  completed: { label: "完成", color: "success" },
+  cancelled: { label: "已取消", color: "default" }
+};
+
+const priorityMeta: Record<RequirementPriority, { label: string; color: string }> = {
+  low: { label: "低", color: "default" },
+  medium: { label: "中", color: "gold" },
+  high: { label: "高", color: "orange" },
+  urgent: { label: "紧急", color: "red" }
+};
 
 export function RequirementDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const { user } = useAuth();
   const backTo = buildListReturnUrl("/requirements", location.search);
 
-  const requirementQuery = useQuery<Requirement>({
-    queryKey: ["requirement", id],
-    queryFn: () => fetchRequirement(id),
-    enabled: Boolean(id),
-    staleTime: 30_000
+  const requirementQuery = useQuery({
+    queryKey: ["requirements-board", "requirement", id],
+    queryFn: () => requirementsBoardMockApi.getRequirement(id),
+    enabled: Boolean(id)
   });
-  const acStatusesQuery = useQuery<ACStatus[]>({
-    queryKey: ["requirement", id, "ac"],
-    queryFn: () => fetchACStatus(id),
-    enabled: Boolean(id),
-    staleTime: 30_000
-  });
-  const tasksQuery = useQuery<Task[]>({
-    queryKey: ["tasks", { requirement_id: id }],
-    queryFn: () => fetchTasks({ requirement_id: id }),
-    enabled: Boolean(id),
-    staleTime: 30_000
-  });
-
-  const req = requirementQuery.data;
-  const acStatuses = acStatusesQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
-
-  const canRegenerate =
-    user &&
-    (user.role === "director" ||
-      user.role === "pm" ||
-      user.role === "team_leader" ||
-      user.role === "admin");
-
-  const regenMutation = useMutation({
-    mutationFn: () => regenerateAC(id),
-    onSuccess: () => {
-      message.success("AC 已重新生成");
-      void queryClient.invalidateQueries({ queryKey: ["requirement", id] });
-      void queryClient.invalidateQueries({ queryKey: ["requirement", id, "ac"] });
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "重新生成失败")
+  const tasksQuery = useQuery({
+    queryKey: ["requirements-board", "tasks", id],
+    queryFn: () => requirementsBoardMockApi.listTasks(id),
+    enabled: Boolean(id)
   });
 
   if (!id) return <Result status="404" title="需求不存在" subTitle="缺少有效的需求 ID。" />;
   if (requirementQuery.isLoading) return <PageSkeleton rows={8} />;
-
-  if (requirementQuery.isError) {
-    const error = requirementQuery.error;
-    if (error instanceof HttpError && error.status === 404) {
-      return (
-        <Result
-          status="404"
-          title="需求不存在"
-          subTitle="该需求可能已被删除，或你没有访问权限。"
-          extra={<Button onClick={() => navigate(backTo)}>返回需求列表</Button>}
-        />
-      );
-    }
-    return (
-      <Result
-        status="error"
-        title="需求加载失败"
-        subTitle={error instanceof Error ? error.message : "请稍后重试"}
-        extra={<Button onClick={() => void requirementQuery.refetch()}>重试</Button>}
-      />
-    );
-  }
-
-  if (!req) {
+  if (requirementQuery.isError || !requirementQuery.data) {
     return (
       <Result
         status="404"
         title="需求不存在"
-        subTitle="服务返回了空的需求数据。"
-        extra={<Button onClick={() => navigate(backTo)}>返回需求列表</Button>}
+        subTitle={
+          requirementQuery.error instanceof Error
+            ? requirementQuery.error.message
+            : "Mock 数据中没有该需求。"
+        }
+        extra={<Button onClick={() => navigate(backTo)}>返回需求看板</Button>}
       />
     );
   }
 
-  const completedACs = acStatuses.filter((a) => a.completed).length;
-  const taskColumns: TableProps<Task>["columns"] = [
+  const requirement = requirementQuery.data;
+  const tasks = tasksQuery.data ?? [];
+  const taskColumns: TableProps<MockTask>["columns"] = [
     {
       title: "任务",
       dataIndex: "title",
-      render: (title: string, t) => <Link to={`/tasks/${t.id}`}>{title}</Link>
+      render: (title: string, task) => <Link to={`/tasks/${task.id}`}>{title}</Link>
     },
-    { title: "负责人", dataIndex: "assignee_name", render: (v?: string) => v || "-", width: 120 },
     {
-      title: "AC",
-      dataIndex: "acceptance_criteria_ids",
-      render: (ids: number[]) => ids?.map((i) => `AC${i + 1}`).join(", ") || "-",
+      title: "负责人",
+      dataIndex: "assignee_name",
+      render: (value?: string) => value || "-",
       width: 120
     },
     {
       title: "状态",
       dataIndex: "status",
-      render: (s: Task["status"]) => <TaskStatusTag status={s} />,
+      render: (status: MockTask["status"]) => <TaskStatusTag status={status} />,
       width: 110
     },
-    { title: "截止", dataIndex: "due_date", render: (v?: string) => v || "-", width: 120 },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      render: (priority: MockTask["priority"]) => <TaskPriorityTag priority={priority} />,
+      width: 100
+    },
+    { title: "进度", dataIndex: "progress", render: (value: number) => `${value}%`, width: 90 },
+    {
+      title: "依赖",
+      dataIndex: "dependencies",
+      render: (dependencies: MockTask["dependencies"]) => dependencies.length || "-",
+      width: 80
+    },
+    {
+      title: "Token 来源",
+      render: (_, task) =>
+        task.token_total > 0 ? `${task.token_total.toLocaleString()} Token` : "人工更新",
+      width: 210
+    },
     {
       title: "操作",
       key: "actions",
-      width: 120,
-      render: (_, record) => (
+      width: 90,
+      render: (_, task) => (
         <ResourceActions
-          actions={[
-            { key: "detail", label: "详情", onClick: () => navigate(`/tasks/${record.id}`) }
-          ]}
+          actions={[{ key: "detail", label: "详情", onClick: () => navigate(`/tasks/${task.id}`) }]}
         />
       )
     }
@@ -147,55 +120,56 @@ export function RequirementDetailPage() {
   return (
     <PagePanel
       title="需求详情"
-      description={req.title}
+      description={requirement.title}
       backTo={backTo}
       breadcrumbs={[
-        { title: "需求", path: "/requirements" },
-        { title: "需求详情" },
-        { title: req.title }
+        { title: "业务" },
+        { title: "需求看板", path: "/requirements" },
+        { title: requirement.title }
       ]}
       actions={
-        <Space>
-          <Button onClick={() => void requirementQuery.refetch()}>刷新</Button>
-          <Button type="primary" onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}>
-            添加任务
-          </Button>
-        </Space>
+        <Button type="primary" onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}>
+          添加任务
+        </Button>
       }
     >
       <div className="aidashboard-detail">
         <section className="aidashboard-detail__hero">
           <div>
-            <h1>{req.title}</h1>
-            <p>{req.description}</p>
+            <h1>{requirement.title}</h1>
+            <p>{requirement.description}</p>
           </div>
-          <div className="aidashboard-detail__hero-side">
-            <Space size={8} wrap>
-              <RequirementStatusTag status={req.status} />
-              <RequirementPriorityTag priority={req.priority} />
-            </Space>
-            <div style={{ minWidth: 180 }}>
-              <ProgressBar value={req.progress} />
-            </div>
-          </div>
+          <Space wrap>
+            <Tag color={stageMeta[requirement.status].color}>
+              {stageMeta[requirement.status].label}
+            </Tag>
+            <Tag color={priorityMeta[requirement.priority].color}>
+              {priorityMeta[requirement.priority].label}
+            </Tag>
+            {tasks.length ? (
+              <Tag color="blue">聚合进度 {requirement.progress}%</Tag>
+            ) : (
+              <Tag>未拆分任务</Tag>
+            )}
+          </Space>
         </section>
 
         <Card title="基础信息">
           <KeyValueInfoList
             tagColor="geekblue"
             items={[
+              { key: "creator", label: "创建者", description: requirement.creator_name },
               {
-                key: "creator",
-                label: "创建者",
-                description: `${req.creator_name} (${ROLE_LABELS[req.creator_role as UserRole] ?? req.creator_role})`
+                key: "teams",
+                label: "参与团队",
+                description: requirement.team_names.join("、") || "-"
               },
-              { key: "teams", label: "参与团队", description: req.team_names.join(", ") || "-" },
-              { key: "deadline", label: "截止日期", description: req.deadline || "未设定" },
+              { key: "deadline", label: "截止日期", description: requirement.deadline || "未设定" },
               {
                 key: "doc",
                 label: "飞书文档",
-                description: req.feishu_doc_url ? (
-                  <a href={req.feishu_doc_url} target="_blank" rel="noreferrer">
+                description: requirement.feishu_doc_url ? (
+                  <a href={requirement.feishu_doc_url} target="_blank" rel="noreferrer">
                     打开文档 ↗
                   </a>
                 ) : (
@@ -206,73 +180,44 @@ export function RequirementDetailPage() {
           />
         </Card>
 
-        <Card
-          title={`验收标准 (${completedACs}/${acStatuses.length})`}
-          loading={acStatusesQuery.isLoading}
-          extra={
-            canRegenerate ? (
-              <Popconfirm
-                title="重新生成验收标准？"
-                description="这会覆盖当前的 AC，可能影响已关联的任务。"
-                okText="确认生成"
-                cancelText="取消"
-                onConfirm={() => regenMutation.mutate()}
-              >
-                <Button icon={<RobotOutlined />} loading={regenMutation.isPending}>
-                  重新生成 AC
-                </Button>
-              </Popconfirm>
-            ) : null
-          }
-        >
-          {acStatusesQuery.isError ? (
-            <Alert
-              type="error"
-              showIcon
-              message="验收标准加载失败"
-              description={
-                acStatusesQuery.error instanceof Error
-                  ? acStatusesQuery.error.message
-                  : "请稍后重试"
-              }
-              action={<Button onClick={() => void acStatusesQuery.refetch()}>重试</Button>}
-            />
-          ) : acStatuses.length === 0 ? (
-            <Empty description="暂无验收标准" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ) : (
+        <Card title={`验收标准 (${requirement.acceptance_criteria.length})`}>
+          {requirement.acceptance_criteria.length ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              {acStatuses.map((ac) => (
-                <Space key={ac.index} align="start">
-                  <Tag color={ac.completed ? "success" : "default"} style={{ marginTop: 2 }}>
-                    {ac.completed ? "✓" : "○"}
-                  </Tag>
-                  <Space direction="vertical" size={0}>
-                    <Text delete={ac.completed}>{ac.text}</Text>
-                    {ac.linked_tasks?.length ? (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        任务：{ac.linked_tasks.join(", ")}
-                      </Text>
-                    ) : null}
-                  </Space>
+              {requirement.acceptance_criteria.map((criterion, index) => (
+                <Space key={criterion} align="start">
+                  <Tag color="blue">标准 {index + 1}</Tag>
+                  <Text>{criterion}</Text>
                 </Space>
               ))}
             </Space>
+          ) : (
+            <Empty description="暂无验收标准" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           )}
         </Card>
 
-        <Card title={`任务 (${tasks.length})`}>
+        <Card title={`执行拆解 (${tasks.length})`}>
           {tasksQuery.isError ? (
             <Alert
               type="error"
               showIcon
               message="任务加载失败"
-              description={
-                tasksQuery.error instanceof Error ? tasksQuery.error.message : "请稍后重试"
-              }
               action={<Button onClick={() => void tasksQuery.refetch()}>重试</Button>}
             />
+          ) : !tasks.length && !tasksQuery.isLoading ? (
+            <Empty
+              description="该需求尚未拆分任务，拆分任务后可聚合进度、依赖阻塞和 Token。"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}
+              >
+                添加第一个任务
+              </Button>
+            </Empty>
           ) : (
-            <ResourceTable<Task>
+            <ResourceTable<MockTask>
               rowKey="id"
               columns={taskColumns}
               dataSource={tasks}

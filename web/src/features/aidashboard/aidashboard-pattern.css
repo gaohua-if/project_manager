@@ -196,6 +196,33 @@
   border-radius: 9px;
 }
 
+.aidashboard-form-wrap .aidashboard-form__ac-options {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+}
+
+.aidashboard-form__ac-index,
+.aidashboard-form__ac-text {
+  font-size: 12px;
+}
+
+.aidashboard-form__criteria-list {
+  display: grid;
+  gap: 10px;
+}
+
+.aidashboard-form__criteria-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: start;
+  gap: 8px;
+}
+
+.aidashboard-form__criteria-row .ant-form-item {
+  margin-bottom: 0;
+}
+
 .aidashboard-form-wrap .ant-checkbox-wrapper + .ant-checkbox-wrapper {
   margin-inline-start: 0;
 }
@@ -245,6 +272,41 @@
   flex: 0 0 auto;
   justify-items: end;
   gap: 14px;
+}
+
+.aidashboard-task-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.aidashboard-task-detail__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--aihub-color-border);
+  border-radius: 12px;
+}
+
+.aidashboard-task-detail__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.aidashboard-task-detail__progress-card p {
+  margin: 0 0 18px;
+  color: var(--aihub-color-text-secondary);
+  font-size: 13px;
+}
+
+.aidashboard-task-detail__progress-editor {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 132px auto;
+  align-items: center;
+  gap: 16px;
 }
 
 @container aidashboard-form (max-width: 980px) {
