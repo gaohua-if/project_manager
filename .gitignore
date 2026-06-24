@@ -17,6 +17,7 @@ web/out/
 .vscode/
 *.swp
 *.swo
+.codegraph/
 
 # OS
 .DS_Store
