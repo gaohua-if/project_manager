@@ -1082,7 +1082,7 @@ function RequirementTree({
         const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
         return (
           <Space size={2} className="requirements-tree__actions">
-            {!requirementTasks.length ? (
+            {!requirementTasks.length && requirement.can_create_task ? (
               <Button
                 size="small"
                 type="link"
