@@ -57,6 +57,8 @@ import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { appendSearch } from "@/shared/utils/urlQuery";
 
 import { TaskStatusTag } from "../../dashboard/shared";
+import { AcceptanceCriteriaEditor } from "../components/AcceptanceCriteriaEditor";
+import { normalizeAcceptanceCriteria } from "../components/acceptanceCriteriaUtils";
 import {
   RequirementMetricCard,
   RequirementMetricGrid,
@@ -1828,7 +1830,7 @@ function RequirementEditModal({
     priority: RequirementPriority;
     deadline?: dayjs.Dayjs;
     feishu_doc_url?: string;
-    acceptance_criteria: string;
+    acceptance_criteria: string[];
   }>();
 
   const initialValues = useMemo(
@@ -1838,7 +1840,9 @@ function RequirementEditModal({
       priority: requirement.priority,
       deadline: requirement.deadline ? dayjs(requirement.deadline) : undefined,
       feishu_doc_url: requirement.feishu_doc_url ?? "",
-      acceptance_criteria: requirement.acceptance_criteria.join("\n")
+      acceptance_criteria: requirement.acceptance_criteria.length
+        ? requirement.acceptance_criteria
+        : [""]
     }),
     [requirement]
   );
@@ -1850,7 +1854,7 @@ function RequirementEditModal({
       priority: RequirementPriority;
       deadline?: dayjs.Dayjs;
       feishu_doc_url?: string;
-      acceptance_criteria: string;
+      acceptance_criteria: string[];
     }) =>
       requirementsBoardApi.updateRequirement(requirement.id, {
         title: values.title.trim(),
@@ -1858,10 +1862,7 @@ function RequirementEditModal({
         priority: values.priority,
         deadline: values.deadline ? values.deadline.format("YYYY-MM-DD") : undefined,
         feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
-        acceptance_criteria: values.acceptance_criteria
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
       }),
     onSuccess: () => {
       message.success("需求已更新");
@@ -1927,11 +1928,11 @@ function RequirementEditModal({
           <Input placeholder="https://..." />
         </Form.Item>
         <Form.Item
-          label="需求验收标准（可选，每行一项）"
+          label="标准列表"
           name="acceptance_criteria"
           extra="留空可清空需求验收标准"
         >
-          <Input.TextArea rows={4} placeholder="AC1...\nAC2..." />
+          <AcceptanceCriteriaEditor placeholder="输入一条可验证的需求验收标准" />
         </Form.Item>
       </Form>
     </Modal>
@@ -1961,7 +1962,7 @@ function TaskCreateModal({
     priority: MockTaskPriority;
     due_date?: dayjs.Dayjs;
     dependency_task_ids?: string[];
-    acceptance_criteria?: string;
+    acceptance_criteria?: string[];
   }>();
 
   const assigneesQuery = useQuery({
@@ -1982,15 +1983,12 @@ function TaskCreateModal({
       priority: MockTaskPriority;
       due_date?: dayjs.Dayjs;
       dependency_task_ids?: string[];
-      acceptance_criteria?: string;
+      acceptance_criteria?: string[];
     }) =>
       requirementsBoardApi.createTask({
         requirement_id: requirementId,
         title: values.title.trim(),
-        acceptance_criteria: values.acceptance_criteria
-          ?.split("\n")
-          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
-          .filter(Boolean) ?? [],
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -2098,8 +2096,8 @@ function TaskCreateModal({
         </section>
         <section className="requirements-task-modal__section">
           <h4>验收标准</h4>
-          <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
-            <Input.TextArea rows={4} placeholder={"1. 完成接口联调\n2. 页面状态展示正确"} />
+          <Form.Item label="标准列表" name="acceptance_criteria">
+            <AcceptanceCriteriaEditor placeholder="输入一条可验证的任务验收标准" />
           </Form.Item>
         </section>
       </Form>
@@ -2654,7 +2652,7 @@ function TaskEditModal({
     assignee_id?: string;
     priority: MockTaskPriority;
     due_date?: dayjs.Dayjs;
-    acceptance_criteria?: string;
+    acceptance_criteria?: string[];
   }>();
 
   const assigneesQuery = useQuery({
@@ -2669,7 +2667,7 @@ function TaskEditModal({
       assignee_id: task.assignee_id,
       priority: task.priority,
       due_date: task.due_date ? dayjs(task.due_date) : undefined,
-      acceptance_criteria: task.acceptance_criteria.join("\n")
+      acceptance_criteria: task.acceptance_criteria.length ? task.acceptance_criteria : [""]
     }),
     [task]
   );
@@ -2680,17 +2678,14 @@ function TaskEditModal({
       assignee_id?: string;
       priority: MockTaskPriority;
       due_date?: dayjs.Dayjs;
-      acceptance_criteria?: string;
+      acceptance_criteria?: string[];
     }) =>
       requirementsBoardApi.updateTask(task.id, {
         title: values.title.trim(),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined,
-        acceptance_criteria: values.acceptance_criteria
-          ?.split("\n")
-          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
-          .filter(Boolean) ?? []
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
       }),
     onSuccess: (updated) => {
       message.success("任务已更新");
@@ -2760,8 +2755,8 @@ function TaskEditModal({
         <Form.Item label="截止日期" name="due_date">
           <DatePicker style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
-          <Input.TextArea rows={4} placeholder={"1. 完成交互联调\n2. 异常状态展示正确"} />
+        <Form.Item label="标准列表" name="acceptance_criteria">
+          <AcceptanceCriteriaEditor placeholder="输入一条可验证的任务验收标准" />
         </Form.Item>
       </Form>
     </Modal>

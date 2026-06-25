@@ -1,0 +1,92 @@
+.acceptance-criteria-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.acceptance-criteria-editor__list {
+  display: grid;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+}
+
+.acceptance-criteria-editor__row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.acceptance-criteria-editor__row:last-child {
+  border-bottom: 0;
+}
+
+.acceptance-criteria-editor__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  background: #eef5ff;
+  border-radius: 7px;
+}
+
+.acceptance-criteria-editor__row .ant-input {
+  height: 34px;
+  padding-inline: 0;
+  color: #253047;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.acceptance-criteria-editor__row .ant-input:hover,
+.acceptance-criteria-editor__row .ant-input:focus {
+  background: #f8fbff;
+  border-color: #c7d7ef;
+  box-shadow: none;
+}
+
+.acceptance-criteria-editor__delete.ant-btn {
+  width: 32px;
+  height: 32px;
+  color: #94a3b8;
+  border-radius: 8px;
+}
+
+.acceptance-criteria-editor__delete.ant-btn:not(:disabled):hover {
+  color: #b42318;
+  background: #fff1f2;
+}
+
+.acceptance-criteria-editor__add.ant-btn {
+  justify-self: start;
+  height: 32px;
+  padding-inline: 12px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f8fbff;
+  border-color: #c7d7ef;
+  border-radius: 8px;
+}
+
+.acceptance-criteria-editor__add.ant-btn:hover {
+  color: #1d4ed8;
+  background: #eef5ff;
+  border-color: #9fb9e2;
+}
+
+@media (max-width: 720px) {
+  .acceptance-criteria-editor__row {
+    grid-template-columns: 48px minmax(0, 1fr) 32px;
+    gap: 6px;
+  }
+}
