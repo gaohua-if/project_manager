@@ -10,6 +10,9 @@ import type {
   DashboardRiskItemDTO,
   DailyReport,
   Document,
+  GenerateReportDraftPayload,
+  GenerateReportDraftResponse,
+  PaginatedSessions,
   Requirement,
   RequirementFollowStateDTO,
   Session,
@@ -66,6 +69,12 @@ export const createRequirement = (data: {
 }) => unwrap(api.post<Requirement>("/requirements", data));
 export const updateRequirement = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Requirement>(`/requirements/${id}`, data));
+export const deleteRequirement = (id: string) =>
+  unwrap(api.delete<{ status: string }>(`/requirements/${id}`));
+export const cancelRequirement = (id: string) =>
+  unwrap(api.put<Requirement>(`/requirements/${id}`, { status: "cancelled" }));
+export const restoreRequirement = (id: string) =>
+  unwrap(api.put<Requirement>(`/requirements/${id}/restore`, {}));
 export const fetchACStatus = (id: string) => unwrap(api.get<ACStatus[]>(`/requirements/${id}/ac`));
 export const regenerateAC = (id: string) =>
   unwrap(api.post<{ acceptance_criteria: string[] }>(`/requirements/${id}/regenerate-ac`));
@@ -78,7 +87,7 @@ export const fetchTask = (id: string) => unwrap(api.get<Task>(`/tasks/${id}`));
 export const createTask = (data: {
   requirement_id: string;
   title: string;
-  acceptance_criteria_ids: number[];
+  acceptance_criteria?: string[];
   assignee_id?: string;
   priority: string;
   due_date?: string;
@@ -86,6 +95,8 @@ export const createTask = (data: {
 }) => unwrap(api.post<{ id: string; status: string }>("/tasks", data));
 export const updateTask = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Task>(`/tasks/${id}`, data));
+export const deleteTask = (id: string) =>
+  unwrap(api.delete<{ status: string }>(`/tasks/${id}`));
 export const updateTaskStatus = (id: string, status: string) =>
   unwrap(api.put<Task>(`/tasks/${id}/status`, { status }));
 export const updateTaskProgress = (id: string, progress: number) =>
@@ -119,7 +130,7 @@ export const fetchDashboardRisks = () =>
 // ───────────────────────── Sessions ─────────────────────────
 
 export const fetchSessions = (params?: Record<string, string>) =>
-  unwrap(api.get<Session[]>("/sessions", params));
+  unwrap(api.get<PaginatedSessions>("/sessions", params));
 export const updateSessionTask = (sessionId: string, taskId: string | null) =>
   unwrap(api.put<Session>(`/sessions/${sessionId}/task`, { task_id: taskId }));
 export const updateSessionRequirement = (sessionId: string, requirementId: string | null) =>
@@ -170,9 +181,14 @@ export const deleteDocument = (id: string) =>
 export const fetchReports = (params?: Record<string, string>) =>
   unwrap(api.get<DailyReport[]>("/reports", params));
 export const fetchTodayReport = () => unwrap(api.get<DailyReport>("/reports/today"));
+export const generateTodayReportDraft = (payload: GenerateReportDraftPayload) =>
+  unwrap(api.post<GenerateReportDraftResponse>("/reports/today/draft", payload));
 export const generateTodayReport = () => unwrap(api.post<DailyReport>("/reports/today/generate"));
 export const fetchReport = (id: string) => unwrap(api.get<DailyReport>(`/reports/${id}`));
-export const updateReport = (id: string, data: { content?: string; feishu_doc_url?: string }) =>
+export const updateReport = (
+  id: string,
+  data: { content?: string; feishu_doc_url?: string; session_ids?: string[] }
+) =>
   unwrap(api.put<DailyReport>(`/reports/${id}`, data));
 
 export const fetchTeamMemberReports = (date: string) =>

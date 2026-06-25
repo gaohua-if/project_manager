@@ -19,7 +19,7 @@ import type {
   MockTokenSource,
   RequirementPriority,
   RequirementStage
-} from "../mock/types";
+} from "../types";
 
 const { Text } = Typography;
 
@@ -203,7 +203,7 @@ export function RequirementDetailPage() {
           />
         </Card>
 
-        <Card title={`验收标准 (${requirement.acceptance_criteria.length})`}>
+        <Card title={`需求验收标准 (${requirement.acceptance_criteria.length})`}>
           {requirement.acceptance_criteria.length ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
               {requirement.acceptance_criteria.map((criterion, index) => (
@@ -214,7 +214,7 @@ export function RequirementDetailPage() {
               ))}
             </Space>
           ) : (
-            <Empty description="暂无验收标准" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty description="暂无需求验收标准" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           )}
         </Card>
 

@@ -25,7 +25,7 @@ import {
   updateSessionTask,
   withdrawSession
 } from "../../api/client";
-import type { Session, Task } from "../../api/types";
+import type { PaginatedSessions, Session, Task } from "../../api/types";
 import { useAuth } from "@/shared/auth/authContext";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
@@ -56,14 +56,21 @@ export function SessionsPage() {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [date, setDate] = useState<dayjs.Dayjs | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [pendingSessionTaskId, setPendingSessionTaskId] = useState<string | null>(null);
   const [pendingWithdrawId, setPendingWithdrawId] = useState<string | null>(null);
 
   const dateStr = date?.format("YYYY-MM-DD") || "";
 
-  const sessionsQuery = useQuery<Session[]>({
-    queryKey: ["sessions", { date: dateStr }],
-    queryFn: () => fetchSessions(dateStr ? { date: dateStr } : undefined),
+  const sessionsQuery = useQuery<PaginatedSessions>({
+    queryKey: ["sessions", { date: dateStr, page, pageSize }],
+    queryFn: () =>
+      fetchSessions({
+        ...(dateStr ? { date: dateStr } : {}),
+        page: String(page),
+        page_size: String(pageSize)
+      }),
     staleTime: 30_000
   });
   const tasksQuery = useQuery<Task[]>({
@@ -72,7 +79,8 @@ export function SessionsPage() {
     staleTime: 60_000
   });
 
-  const sessions = sessionsQuery.data ?? [];
+  const sessions = sessionsQuery.data?.items ?? [];
+  const total = sessionsQuery.data?.total ?? 0;
   const tasks = tasksQuery.data ?? [];
 
   const overrideMutation = useMutation({
@@ -136,13 +144,16 @@ export function SessionsPage() {
         <Space>
           <DatePicker
             value={date}
-            onChange={(v) => setDate(v)}
+            onChange={(v) => {
+              setDate(v);
+              setPage(1);
+            }}
             allowClear
             placeholder="按日期筛选"
           />
           {user?.role !== "employee" ? (
             <Text type="secondary" style={{ fontSize: 12 }}>
-              共 {sessions.length} 条（含团队成员）
+              共 {total} 条（含团队成员）
             </Text>
           ) : null}
         </Space>
@@ -173,7 +184,19 @@ export function SessionsPage() {
           rowKey="id"
           dataSource={sessions}
           loading={sessionsQuery.isLoading}
-          pagination={{ pageSize: 20, showSizeChanger: false }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+            onChange: (next, size) => {
+              setPage(next);
+              if (size && size !== pageSize) {
+                setPageSize(size);
+              }
+            }
+          }}
           columns={[
             {
               title: "Session",

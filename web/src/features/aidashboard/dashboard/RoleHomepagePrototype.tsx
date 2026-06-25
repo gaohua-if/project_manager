@@ -520,11 +520,11 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
     primaryIcon: <FlagOutlined />,
     primary: [
       {
-        title: "REQ-051 智能工单归因缺验收标准",
-        desc: "总监关注，但验收标准缺失，暂不适合进入拆任务阶段。",
+        title: "REQ-051 智能工单归因待补需求验收标准",
+        desc: "总监关注，需求验收标准待补充，但不作为风险判断。",
         meta: "重点关注需求",
-        tag: "缺验收标准",
-        tone: "red",
+        tag: "待补充",
+        tone: "blue",
         to: "/requirements",
         action: "看需求"
       },
@@ -553,7 +553,7 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
       {
         key: "REQ-051",
         name: "智能工单归因",
-        status: "缺验收标准",
+        status: "待补需求验收标准",
         owner: "PM 陈",
         progress: 0,
         note: "今日补齐验收标准"
@@ -598,7 +598,7 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
     ],
     metrics: [
       { label: "重点需求", value: "5", note: "2 个高关注", tone: "blue" },
-      { label: "缺验收标准", value: "2", note: "影响拆解", tone: "red" },
+      { label: "需求验收待补", value: "2", note: "信息待完善", tone: "blue" },
       { label: "跨团队阻塞", value: "1", note: "超过 1 天", tone: "orange" },
       { label: "推进异常", value: "2", note: "待 PM 判断", tone: "purple" }
     ],
@@ -814,7 +814,7 @@ const pmActionItems: PMActionItem[] = [
     key: "REQ-001",
     priority: "高",
     requirement: "统一权限模型",
-    triggerReason: "总监关注 · 缺验收标准",
+    triggerReason: "总监关注 · 需求验收标准待补",
     status: "AC 5/7",
     owner: "PM 陈",
     nextAction: "补齐验收标准",
@@ -855,7 +855,7 @@ const pmActiveRequirements: PMActiveRequirement[] = [
     focusSource: "总监关注",
     ac: "5/7",
     taskProgress: 71,
-    blockStatus: "缺验收标准",
+    blockStatus: "待补需求验收",
     weekSessions: 18,
     weekToken: "42K",
     deadline: "07-12",
@@ -924,7 +924,7 @@ const pmFollowTasks: PMFollowTask[] = [
     status: "待处理",
     owner: "PM 陈",
     deadline: "07-12",
-    note: "总监反馈缺少验收标准，需明确角色边界",
+    note: "总监反馈需求验收标准待补，需明确角色边界",
     to: "/tasks"
   },
   {
@@ -1573,7 +1573,7 @@ function TLHomepagePrototype() {
 
 function PMHomepagePrototype() {
   const pmStatusColor = (value: string) => {
-    if (value.includes("缺验收标准")) return "red";
+    if (value.includes("待补需求验收")) return "blue";
     if (value === "需处理" || value.includes("风险") || value.includes("阻塞")) return "orange";
     if (value === "已介入") return "blue";
     if (value === "等待反馈") return "gold";

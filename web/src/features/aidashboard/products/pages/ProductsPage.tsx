@@ -27,7 +27,7 @@ import {
   updateSessionTask,
   withdrawSession
 } from "../../api/client";
-import type { Document, Session, Task } from "../../api/types";
+import type { Document, PaginatedSessions, Session, Task } from "../../api/types";
 import { useAuth } from "@/shared/auth/authContext";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
@@ -84,9 +84,14 @@ export function ProductsPage() {
 
   const dateStr = date?.format("YYYY-MM-DD") || "";
 
-  const sessionsQuery = useQuery<Session[]>({
-    queryKey: ["sessions", { date: dateStr }],
-    queryFn: () => fetchSessions(dateStr ? { date: dateStr } : undefined),
+  const sessionsQuery = useQuery<PaginatedSessions>({
+    queryKey: ["sessions", { date: dateStr, page: 1, pageSize: 100 }],
+    queryFn: () =>
+      fetchSessions({
+        ...(dateStr ? { date: dateStr } : {}),
+        page: "1",
+        page_size: "100"
+      }),
     staleTime: 30_000
   });
   const documentsQuery = useQuery<Document[]>({
@@ -100,7 +105,7 @@ export function ProductsPage() {
     staleTime: 60_000
   });
 
-  const sessions = sessionsQuery.data ?? [];
+  const sessions = sessionsQuery.data?.items ?? [];
   const documents = documentsQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
 

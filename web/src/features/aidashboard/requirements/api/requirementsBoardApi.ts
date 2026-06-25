@@ -1,7 +1,10 @@
 import {
   addTaskDependency,
+  cancelRequirement,
   createRequirement,
   createTask,
+  deleteRequirement,
+  deleteTask,
   fetchFollows,
   fetchRequirement,
   fetchRequirements,
@@ -12,10 +15,12 @@ import {
   fetchUsers,
   followTarget,
   removeTaskDependency,
+  restoreRequirement,
   unfollowTarget,
   updateRequirement,
   updateSessionRequirement,
   updateSessionTask,
+  updateTask,
   updateTaskProgress,
   updateTaskStatus
 } from "../../api/client";
@@ -29,8 +34,10 @@ import type {
   MockTask,
   MockTaskStatus,
   MockTokenSource,
-  RequirementStage
-} from "../mock/types";
+  RequirementStage,
+  UpdateBoardRequirementInput,
+  UpdateBoardTaskInput
+} from "../types";
 
 function normalizeRequirement(requirement: Requirement): MockRequirement {
   return {
@@ -49,7 +56,8 @@ function normalizeRequirement(requirement: Requirement): MockRequirement {
     team_ids: requirement.team_ids ?? [],
     team_names: requirement.team_names ?? [],
     token_source_ids: requirement.token_source_ids ?? [],
-    risk_summary: requirement.risk_summary ?? { blocked: 0, overdue: 0, due_soon: 0 },
+    risk_summary: requirement.risk_summary ?? { blocked: 0, overdue: 0 },
+    can_delete: requirement.can_delete,
     created_at: requirement.created_at,
     updated_at: requirement.updated_at
   };
@@ -61,7 +69,7 @@ function normalizeTask(task: Task): MockTask {
     requirement_id: task.requirement_id,
     requirement_title: task.requirement_title ?? "",
     title: task.title,
-    acceptance_criteria_ids: task.acceptance_criteria_ids ?? [],
+    acceptance_criteria: task.acceptance_criteria ?? [],
     assignee_id: task.assignee_id,
     assignee_name: task.assignee_name,
     status: (task.display_status || task.status) as MockTaskStatus,
@@ -100,8 +108,24 @@ export const requirementsBoardApi = {
     return normalizeRequirement(await createRequirement(input));
   },
 
+  async updateRequirement(id: string, input: UpdateBoardRequirementInput) {
+    return normalizeRequirement(await updateRequirement(id, input as Record<string, unknown>));
+  },
+
   async updateRequirementStage(id: string, status: RequirementStage) {
     return normalizeRequirement(await updateRequirement(id, { status }));
+  },
+
+  async cancelRequirement(id: string) {
+    return normalizeRequirement(await cancelRequirement(id));
+  },
+
+  async restoreRequirement(id: string) {
+    return normalizeRequirement(await restoreRequirement(id));
+  },
+
+  async deleteRequirement(id: string) {
+    return deleteRequirement(id);
   },
 
   async listTasks(requirementId?: string) {
@@ -121,13 +145,21 @@ export const requirementsBoardApi = {
     const created = await createTask({
       requirement_id: input.requirement_id,
       title: input.title,
-      acceptance_criteria_ids: input.acceptance_criteria_ids,
+      acceptance_criteria: input.acceptance_criteria ?? [],
       assignee_id: input.assignee_id,
       priority: input.priority,
       due_date: input.due_date,
       depends_on_ids: input.dependency_task_ids
     });
     return getNormalizedTask(created.id);
+  },
+
+  async updateTask(id: string, input: UpdateBoardTaskInput) {
+    return normalizeTask(await updateTask(id, input as Record<string, unknown>));
+  },
+
+  async deleteTask(id: string) {
+    return deleteTask(id);
   },
 
   async updateTaskProgress(taskId: string, progress: number) {

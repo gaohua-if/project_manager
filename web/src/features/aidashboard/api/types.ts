@@ -20,7 +20,6 @@ export interface RequirementTaskSummaryDTO {
 export interface RequirementRiskSummaryDTO {
   blocked: number;
   overdue: number;
-  due_soon: number;
 }
 
 export interface Requirement {
@@ -42,6 +41,7 @@ export interface Requirement {
   task_summary: RequirementTaskSummaryDTO;
   risk_summary: RequirementRiskSummaryDTO;
   is_followed: boolean;
+  can_delete?: boolean;
   completed_at?: string;
   created_at: string;
   updated_at: string;
@@ -65,7 +65,7 @@ export interface Task {
   requirement_id: string;
   requirement_title?: string;
   title: string;
-  acceptance_criteria_ids: number[];
+  acceptance_criteria: string[];
   assignee_id?: string;
   assignee_name?: string;
   creator_tl_id: string;
@@ -76,7 +76,7 @@ export interface Task {
   due_date?: string;
   dependencies?: TaskDep[];
   blocking?: TaskDep[];
-  risk_types: Array<"blocked" | "overdue" | "due_soon">;
+  risk_types: Array<"blocked" | "overdue">;
   token_source_ids: string[];
   is_followed: boolean;
   completed_at?: string;
@@ -160,6 +160,13 @@ export interface Session {
   uploaded_at: string;
 }
 
+export interface PaginatedSessions {
+  items: Session[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface DailyReport {
   id: string;
   user_id: string;
@@ -171,6 +178,33 @@ export interface DailyReport {
   session_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface GenerateReportDraftPayload {
+  report_date: string;
+  session_ids: string[];
+  skill_id: "default_daily";
+  skill_content?: string;
+  include_task_progress: boolean;
+}
+
+export interface TaskProgressSuggestion {
+  task_id: string;
+  task_title: string;
+  requirement_id?: string;
+  requirement_title?: string;
+  suggested_status: "todo" | "in_progress" | "done";
+  suggested_progress: number;
+  evidence_session_ids: string[];
+  evidence_session_titles: string[];
+  reason: string;
+}
+
+export interface GenerateReportDraftResponse {
+  report_markdown: string;
+  selected_session_ids: string[];
+  skill_name: string;
+  task_progress_suggestions: TaskProgressSuggestion[];
 }
 
 export interface TeamReport {
@@ -225,6 +259,8 @@ export interface TokenAggregation {
   total: number;
   input_sum: number;
   output_sum: number;
+  cache_creation_sum?: number;
+  cache_read_sum?: number;
   groups: TokenGroup[];
   series: TokenPoint[];
   period: string;

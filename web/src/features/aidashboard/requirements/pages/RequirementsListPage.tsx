@@ -68,11 +68,11 @@ import type {
   MockTokenSource,
   RequirementPriority,
   RequirementStage
-} from "../mock/types";
+} from "../types";
 import "./RequirementsBoard.css";
 
 type BoardView = "board" | "tree";
-type RiskFilter = "blocked" | "deadline";
+type RiskFilter = "blocked";
 
 const STATUS_COLUMNS: Array<{
   value: RequirementStage;
@@ -135,8 +135,7 @@ const PRIORITY_OPTIONS: Array<{ value: RequirementPriority; label: string }> = [
 ];
 
 const RISK_OPTIONS: Array<{ value: RiskFilter; label: string }> = [
-  { value: "blocked", label: "上游阻塞" },
-  { value: "deadline", label: "截止风险" }
+  { value: "blocked", label: "上游阻塞" }
 ];
 
 const EMPTY_REQUIREMENTS: MockRequirement[] = [];
@@ -205,13 +204,6 @@ function PriorityPill({ priority }: { priority: RequirementPriority | MockTaskPr
 function RequirementPriorityTag({ priority }: { priority: RequirementPriority }) {
   const meta = PRIORITY_META[priority];
   return <Tag color={meta.color}>{meta.label}</Tag>;
-}
-
-function isDeadlineRisk(requirement: MockRequirement) {
-  return Boolean(
-    requirement.risk_summary &&
-      (requirement.risk_summary.overdue > 0 || requirement.risk_summary.due_soon > 0)
-  );
 }
 
 function formatDateTime(value?: string) {
@@ -289,7 +281,8 @@ export function RequirementsListPage() {
   const keyword = searchParams.get("keyword") ?? "";
   const priority = (searchParams.get("priority") as RequirementPriority | null) ?? undefined;
   const status = (searchParams.get("status") as RequirementStage | null) ?? undefined;
-  const risk = (searchParams.get("risk") as RiskFilter | null) ?? undefined;
+  const riskParam = searchParams.get("risk");
+  const risk: RiskFilter | undefined = riskParam === "blocked" ? "blocked" : undefined;
   const onlyFavorite = searchParams.get("favorite") === "1";
 
   const updateParam = (key: string, value?: string) => {
@@ -439,10 +432,7 @@ export function RequirementsListPage() {
         .join(" ")
         .toLowerCase();
       const blocked = requirementTasks.some((task) => task.status === "blocked");
-      const riskMatched =
-        !risk ||
-        (risk === "blocked" && blocked) ||
-        (risk === "deadline" && isDeadlineRisk(requirement));
+      const riskMatched = !risk || (risk === "blocked" && blocked);
       const statusMatched = status
         ? requirement.status === status
         : requirement.status !== "cancelled";
@@ -819,6 +809,9 @@ export function RequirementsListPage() {
         tokenSourceMap={tokenSourceMap}
         creatorOpen={creatorOpen}
         isFavorite={activeRequirement ? favoriteRequirementIds.has(activeRequirement.id) : false}
+        canManage={Boolean(
+          user && (user.role === "admin" || user.role === "director" || user.role === "pm")
+        )}
         onToggleFavorite={
           activeRequirement ? () => toggleRequirementFavorite(activeRequirement.id) : undefined
         }
@@ -838,12 +831,23 @@ export function RequirementsListPage() {
         tokenSources={tokenSources}
         tokenSourceMap={tokenSourceMap}
         isFavorite={activeTask ? favoriteTaskIds.has(activeTask.id) : false}
+        canManage={Boolean(
+          user &&
+            (user.role === "admin" ||
+              user.role === "director" ||
+              user.role === "pm" ||
+              user.role === "team_leader")
+        )}
         onToggleFavorite={activeTask ? () => toggleTaskFavorite(activeTask.id) : undefined}
         onClose={() => {
           setSelectedTask(undefined);
           clearNavigationTarget();
         }}
         onSaved={(updated) => setSelectedTask(updated)}
+        onDeleted={() => {
+          setSelectedTask(undefined);
+          clearNavigationTarget();
+        }}
       />
     </PagePanel>
   );
@@ -873,8 +877,6 @@ function RequirementCard({
   const blockedTasks = tasks.filter((task) => task.status === "blocked").length;
   const completedTasks = tasks.filter((task) => task.status === "done").length;
   const tokenTotal = aggregateRequirementTokens(requirement, tasks, tokenSourceMap);
-  const missingAC = requirement.acceptance_criteria.length === 0;
-  const deadlineRisk = isDeadlineRisk(requirement);
   const ownerLine =
     requirement.team_names.length > 0
       ? requirement.team_names.join("、")
@@ -883,17 +885,11 @@ function RequirementCard({
     ? `${completedTasks}/${tasks.length} 个任务完成`
     : "待拆解";
   const evidenceLabel = tokenTotal > 0 ? `${formatTokens(tokenTotal)} Token` : "无关联 session";
-  const showRiskRow = !isCompletedColumn && (missingAC || blockedTasks > 0 || deadlineRisk);
+  const showRiskRow = !isCompletedColumn && blockedTasks > 0;
   const dateLabel = isCompletedColumn
     ? `完成 ${formatDate(requirement.updated_at)}`
     : formatDate(requirement.deadline);
-  const primaryRisk = blockedTasks
-    ? `${blockedTasks} 个任务被上游阻塞`
-    : missingAC
-      ? "缺少验收标准"
-      : deadlineRisk
-        ? "存在截止风险"
-        : undefined;
+  const primaryRisk = blockedTasks ? `${blockedTasks} 个任务被上游阻塞` : undefined;
 
   return (
     <Draggable draggableId={requirement.id} index={index} isDragDisabled={!draggable}>
@@ -937,12 +933,6 @@ function RequirementCard({
               {primaryRisk ? <strong>{primaryRisk}</strong> : null}
               {blockedTasks && primaryRisk !== `${blockedTasks} 个任务被上游阻塞` ? (
                 <Tag color="error">{blockedTasks} 个上游阻塞</Tag>
-              ) : null}
-              {missingAC && primaryRisk !== "缺少验收标准" ? (
-                <Tag color="warning">缺验收标准</Tag>
-              ) : null}
-              {deadlineRisk && primaryRisk !== "存在截止风险" ? (
-                <Tag color="warning">截止风险</Tag>
               ) : null}
             </div>
           ) : null}
@@ -1019,13 +1009,7 @@ function RequirementTree({
           const taskSummary = requirementTasks.length
             ? `${doneTasks}/${requirementTasks.length} 已完成`
             : "待拆解";
-          const riskSummary = blockedTasks
-            ? `${blockedTasks} 个上游阻塞`
-            : isDeadlineRisk(requirement)
-              ? "截止风险"
-              : requirement.acceptance_criteria.length
-                ? "无明显风险"
-                : "缺验收标准";
+          const riskSummary = blockedTasks ? `${blockedTasks} 个上游阻塞` : "无明显风险";
           return (
             <div key={requirement.id}>
               <div
@@ -1066,9 +1050,7 @@ function RequirementTree({
                   <strong>{taskSummary}</strong>
                 </div>
                 <span
-                  className={`requirements-tree__risk ${
-                    blockedTasks || isDeadlineRisk(requirement) ? "is-danger" : ""
-                  }`}
+                  className={`requirements-tree__risk ${blockedTasks ? "is-danger" : ""}`}
                   title={riskSummary}
                 >
                   {riskSummary}
@@ -1279,6 +1261,7 @@ function RequirementDrawer({
   tokenSourceMap,
   creatorOpen,
   isFavorite,
+  canManage,
   onToggleFavorite,
   onCreatorOpenChange,
   onClose,
@@ -1290,14 +1273,93 @@ function RequirementDrawer({
   tokenSourceMap: Map<string, MockTokenSource>;
   creatorOpen: boolean;
   isFavorite: boolean;
+  canManage: boolean;
   onToggleFavorite?: () => void;
   onCreatorOpenChange: (open: boolean) => void;
   onClose: () => void;
   onOpenTask: (task: MockTask) => void;
 }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+
+  const invalidateBoard = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
+    ]);
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => requirementsBoardApi.cancelRequirement(id),
+    onSuccess: () => {
+      message.success("需求已取消");
+      void invalidateBoard();
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "取消需求失败")
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => requirementsBoardApi.restoreRequirement(id),
+    onSuccess: () => {
+      message.success("需求已恢复");
+      void invalidateBoard();
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "恢复需求失败")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => requirementsBoardApi.deleteRequirement(id),
+    onSuccess: () => {
+      message.success("需求已删除");
+      void invalidateBoard();
+      onClose();
+    },
+    onError: (error) => {
+      const text = error instanceof Error ? error.message : "删除需求失败";
+      if (/409|has_associations|associated/i.test(text)) {
+        message.warning("该需求已有历史数据，无法删除，可选择取消需求");
+      } else {
+        message.error(text);
+      }
+    }
+  });
+
+  const handleCancel = () => {
+    if (!requirement) return;
+    modal.confirm({
+      title: "确认取消需求？",
+      content: "取消后，该需求不会出现在主看板和 Dashboard 风险/关注中，但历史数据会保留，可后续恢复。",
+      okText: "取消需求",
+      okButtonProps: { danger: true },
+      cancelText: "返回",
+      onOk: () => cancelMutation.mutateAsync(requirement.id)
+    });
+  };
+
+  const handleRestore = () => {
+    if (!requirement) return;
+    modal.confirm({
+      title: "确认恢复需求？",
+      content: "恢复后，该需求将回到待开始状态，并重新进入需求看板。",
+      okText: "恢复需求",
+      cancelText: "返回",
+      onOk: () => restoreMutation.mutateAsync(requirement.id)
+    });
+  };
+
+  const handleDelete = () => {
+    if (!requirement) return;
+    modal.confirm({
+      title: "确认彻底删除？",
+      content: "删除后不可恢复。仅适用于误创建且无历史数据的需求。",
+      okText: "彻底删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: () => deleteMutation.mutateAsync(requirement.id)
+    });
+  };
 
   const requirementTokens = requirement
     ? sumTokensFromSources(requirement.token_source_ids, tokenSourceMap)
@@ -1368,6 +1430,55 @@ function RequirementDrawer({
               <RequirementPriorityTag priority={requirement.priority} />
               {blockedCount ? <Tag color="error">{blockedCount} 个上游阻塞</Tag> : null}
             </div>
+            {canManage ? (
+              <Space size={8} wrap style={{ marginBottom: 8 }}>
+                {requirement.status === "cancelled" ? (
+                  <>
+                    <Button
+                      size="small"
+                      type="primary"
+                      loading={restoreMutation.isPending}
+                      onClick={handleRestore}
+                    >
+                      恢复需求
+                    </Button>
+                    {requirement.can_delete ? (
+                      <Button
+                        size="small"
+                        danger
+                        loading={deleteMutation.isPending}
+                        onClick={handleDelete}
+                      >
+                        删除需求
+                      </Button>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <Button size="small" onClick={() => setEditOpen(true)}>
+                      编辑需求
+                    </Button>
+                    <Button
+                      size="small"
+                      loading={cancelMutation.isPending}
+                      onClick={handleCancel}
+                    >
+                      取消需求
+                    </Button>
+                    {requirement.can_delete ? (
+                      <Button
+                        size="small"
+                        danger
+                        loading={deleteMutation.isPending}
+                        onClick={handleDelete}
+                      >
+                        删除需求
+                      </Button>
+                    ) : null}
+                  </>
+                )}
+              </Space>
+            ) : null}
             <p>{requirement.description || "暂无需求描述"}</p>
             <div className="requirements-drawer__summary-grid">
               <div>
@@ -1502,11 +1613,11 @@ function RequirementDrawer({
               },
               {
                 key: "acceptance",
-                label: `验收 ${requirement.acceptance_criteria.length}`,
+                label: `需求验收 ${requirement.acceptance_criteria.length}`,
                 children: (
                   <section className="requirements-drawer__section">
                     <div className="requirements-drawer__section-head">
-                      <h3>验收标准</h3>
+                      <h3>需求验收标准</h3>
                       <Tag>{requirement.acceptance_criteria.length} 项</Tag>
                     </div>
                     {requirement.acceptance_criteria.length ? (
@@ -1519,7 +1630,7 @@ function RequirementDrawer({
                         ))}
                       </ol>
                     ) : (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="缺验收标准" />
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无需求验收标准" />
                     )}
                   </section>
                 )
@@ -1584,9 +1695,145 @@ function RequirementDrawer({
               await linkMutation.mutateAsync(ids);
             }}
           />
+
+          <RequirementEditModal
+            open={editOpen}
+            requirement={requirement}
+            onCancel={() => setEditOpen(false)}
+            onSaved={() => setEditOpen(false)}
+          />
         </Space>
       ) : null}
     </Drawer>
+  );
+}
+
+function RequirementEditModal({
+  open,
+  requirement,
+  onCancel,
+  onSaved
+}: {
+  open: boolean;
+  requirement: MockRequirement;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm<{
+    title: string;
+    description: string;
+    priority: RequirementPriority;
+    deadline?: dayjs.Dayjs;
+    feishu_doc_url?: string;
+    acceptance_criteria: string;
+  }>();
+
+  const initialValues = useMemo(
+    () => ({
+      title: requirement.title,
+      description: requirement.description,
+      priority: requirement.priority,
+      deadline: requirement.deadline ? dayjs(requirement.deadline) : undefined,
+      feishu_doc_url: requirement.feishu_doc_url ?? "",
+      acceptance_criteria: requirement.acceptance_criteria.join("\n")
+    }),
+    [requirement]
+  );
+
+  const updateMutation = useMutation({
+    mutationFn: (values: {
+      title: string;
+      description: string;
+      priority: RequirementPriority;
+      deadline?: dayjs.Dayjs;
+      feishu_doc_url?: string;
+      acceptance_criteria: string;
+    }) =>
+      requirementsBoardApi.updateRequirement(requirement.id, {
+        title: values.title.trim(),
+        description: values.description,
+        priority: values.priority,
+        deadline: values.deadline ? values.deadline.format("YYYY-MM-DD") : undefined,
+        feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
+        acceptance_criteria: values.acceptance_criteria
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+      }),
+    onSuccess: () => {
+      message.success("需求已更新");
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
+      ]);
+      onSaved();
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "需求更新失败")
+  });
+
+  return (
+    <Modal
+      title={`编辑需求 · ${requirement.title}`}
+      open={open}
+      width={600}
+      destroyOnHidden
+      onCancel={() => {
+        if (updateMutation.isPending) return;
+        onCancel();
+      }}
+      onOk={() => form.submit()}
+      okText="保存"
+      cancelText="取消"
+      confirmLoading={updateMutation.isPending}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        onFinish={(values) => updateMutation.mutate(values)}
+      >
+        <Form.Item
+          label="需求标题"
+          name="title"
+          rules={[{ required: true, whitespace: true, message: "请输入需求标题" }]}
+        >
+          <Input placeholder="需求标题" />
+        </Form.Item>
+        <Form.Item label="需求描述" name="description">
+          <Input.TextArea rows={3} placeholder="补充背景与目标" />
+        </Form.Item>
+        <Form.Item
+          label="优先级"
+          name="priority"
+          rules={[{ required: true, message: "请选择优先级" }]}
+        >
+          <Select
+            options={[
+              { value: "low", label: "低" },
+              { value: "medium", label: "中" },
+              { value: "high", label: "高" },
+              { value: "urgent", label: "紧急" }
+            ]}
+          />
+        </Form.Item>
+        <Form.Item label="截止日期" name="deadline">
+          <DatePicker style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item label="飞书文档链接" name="feishu_doc_url">
+          <Input placeholder="https://..." />
+        </Form.Item>
+        <Form.Item
+          label="需求验收标准（可选，每行一项）"
+          name="acceptance_criteria"
+          extra="留空可清空需求验收标准"
+        >
+          <Input.TextArea rows={4} placeholder="AC1...\nAC2..." />
+        </Form.Item>
+      </Form>
+    </Modal>
   );
 }
 
@@ -1613,6 +1860,7 @@ function TaskCreateModal({
     priority: MockTaskPriority;
     due_date?: dayjs.Dayjs;
     dependency_task_ids?: string[];
+    acceptance_criteria?: string;
   }>();
 
   const assigneesQuery = useQuery({
@@ -1633,11 +1881,15 @@ function TaskCreateModal({
       priority: MockTaskPriority;
       due_date?: dayjs.Dayjs;
       dependency_task_ids?: string[];
+      acceptance_criteria?: string;
     }) =>
       requirementsBoardApi.createTask({
         requirement_id: requirementId,
         title: values.title.trim(),
-        acceptance_criteria_ids: [],
+        acceptance_criteria: values.acceptance_criteria
+          ?.split("\n")
+          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
+          .filter(Boolean) ?? [],
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -1724,6 +1976,9 @@ function TaskCreateModal({
             options={dependencyOptions}
             allowClear
           />
+        </Form.Item>
+        <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
+          <Input.TextArea rows={4} placeholder={"1. 完成接口联调\n2. 页面状态展示正确"} />
         </Form.Item>
       </Form>
     </Modal>
@@ -1816,18 +2071,22 @@ function TaskDrawer({
   tokenSources,
   tokenSourceMap,
   isFavorite,
+  canManage,
   onToggleFavorite,
   onClose,
-  onSaved
+  onSaved,
+  onDeleted
 }: {
   task?: MockTask;
   requirementTasks: MockTask[];
   tokenSources: MockTokenSource[];
   tokenSourceMap: Map<string, MockTokenSource>;
   isFavorite: boolean;
+  canManage: boolean;
   onToggleFavorite?: () => void;
   onClose: () => void;
   onSaved: (task: MockTask) => void;
+  onDeleted: () => void;
 }) {
   return (
     <Drawer
@@ -1862,7 +2121,9 @@ function TaskDrawer({
           requirementTasks={requirementTasks}
           tokenSources={tokenSources}
           tokenSourceMap={tokenSourceMap}
+          canManage={canManage}
           onSaved={onSaved}
+          onDeleted={onDeleted}
         />
       ) : null}
     </Drawer>
@@ -1874,20 +2135,46 @@ function TaskDrawerContent({
   requirementTasks,
   tokenSources,
   tokenSourceMap,
-  onSaved
+  canManage,
+  onSaved,
+  onDeleted
 }: {
   task: MockTask;
   requirementTasks: MockTask[];
   tokenSources: MockTokenSource[];
   tokenSourceMap: Map<string, MockTokenSource>;
+  canManage: boolean;
   onSaved: (task: MockTask) => void;
+  onDeleted: () => void;
 }) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState(task.progress);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState<string>();
   const dependencyBlocked = task.status === "blocked";
+  const deleteMutation = useMutation({
+    mutationFn: () => requirementsBoardApi.deleteTask(task.id),
+    onSuccess: () => {
+      message.success("任务已删除");
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      onDeleted();
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "任务删除失败")
+  });
+  const handleDelete = () => {
+    modal.confirm({
+      title: "确认删除任务？",
+      content: "删除后会自动解绑相关 Session/Token/文档，并重算需求进度，操作不可恢复。",
+      okText: "删除任务",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: () => deleteMutation.mutateAsync()
+    });
+  };
   const progressMutation = useMutation({
     mutationFn: () => requirementsBoardApi.updateTaskProgress(task.id, progress),
     onSuccess: (updated) => {
@@ -2037,6 +2324,21 @@ function TaskDrawerContent({
               开始任务
             </Button>
           ) : null}
+          {canManage ? (
+            <>
+              <Button size="small" onClick={() => setEditOpen(true)}>
+                编辑任务
+              </Button>
+              <Button
+                size="small"
+                danger
+                loading={deleteMutation.isPending}
+                onClick={handleDelete}
+              >
+                删除任务
+              </Button>
+            </>
+          ) : null}
         </Space>
       </section>
 
@@ -2048,6 +2350,18 @@ function TaskDrawerContent({
           <Descriptions.Item label="截止日期">{formatDate(task.due_date)}</Descriptions.Item>
           <Descriptions.Item label="最近更新">{formatDateTime(task.updated_at)}</Descriptions.Item>
         </Descriptions>
+        {task.acceptance_criteria.length ? (
+          <ol className="requirements-drawer__ac-list">
+            {task.acceptance_criteria.map((item, index) => (
+              <li key={`${index}-${item}`}>
+                <span>AC {index + 1}</span>
+                {item}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p style={{ margin: "12px 0 0", color: "#7a879a" }}>暂无任务验收标准</p>
+        )}
       </section>
 
       <section className="requirements-drawer__section">
@@ -2150,6 +2464,148 @@ function TaskDrawerContent({
           await linkMutation.mutateAsync(ids);
         }}
       />
+
+      <TaskEditModal
+        open={editOpen}
+        task={task}
+        onCancel={() => setEditOpen(false)}
+        onSaved={(updated) => {
+          setEditOpen(false);
+          onSaved(updated);
+        }}
+      />
     </Space>
+  );
+}
+
+function TaskEditModal({
+  open,
+  task,
+  onCancel,
+  onSaved
+}: {
+  open: boolean;
+  task: MockTask;
+  onCancel: () => void;
+  onSaved: (task: MockTask) => void;
+}) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm<{
+    title: string;
+    assignee_id?: string;
+    priority: MockTaskPriority;
+    due_date?: dayjs.Dayjs;
+    acceptance_criteria?: string;
+  }>();
+
+  const assigneesQuery = useQuery({
+    queryKey: ["requirements-board", "assignees"],
+    queryFn: () => requirementsBoardApi.listAssignees(),
+    staleTime: 5 * 60_000
+  });
+
+  const initialValues = useMemo(
+    () => ({
+      title: task.title,
+      assignee_id: task.assignee_id,
+      priority: task.priority,
+      due_date: task.due_date ? dayjs(task.due_date) : undefined,
+      acceptance_criteria: task.acceptance_criteria.join("\n")
+    }),
+    [task]
+  );
+
+  const updateMutation = useMutation({
+    mutationFn: (values: {
+      title: string;
+      assignee_id?: string;
+      priority: MockTaskPriority;
+      due_date?: dayjs.Dayjs;
+      acceptance_criteria?: string;
+    }) =>
+      requirementsBoardApi.updateTask(task.id, {
+        title: values.title.trim(),
+        assignee_id: values.assignee_id,
+        priority: values.priority,
+        due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined,
+        acceptance_criteria: values.acceptance_criteria
+          ?.split("\n")
+          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
+          .filter(Boolean) ?? []
+      }),
+    onSuccess: (updated) => {
+      message.success("任务已更新");
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
+      ]);
+      onSaved(updated);
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : "任务更新失败")
+  });
+
+  return (
+    <Modal
+      title={`编辑任务 · ${task.title}`}
+      open={open}
+      width={520}
+      destroyOnHidden
+      onCancel={() => {
+        if (updateMutation.isPending) return;
+        onCancel();
+      }}
+      onOk={() => form.submit()}
+      okText="保存"
+      cancelText="取消"
+      confirmLoading={updateMutation.isPending}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        onFinish={(values) => updateMutation.mutate(values)}
+      >
+        <Form.Item
+          label="任务标题"
+          name="title"
+          rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
+        >
+          <Input placeholder="任务标题" />
+        </Form.Item>
+        <Form.Item label="负责人" name="assignee_id">
+          <Select
+            allowClear
+            placeholder="选择负责人"
+            loading={assigneesQuery.isLoading}
+            disabled={assigneesQuery.isLoading || assigneesQuery.isError}
+            options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
+              value: item.id,
+              label: `${item.name} (${item.employee_id})`
+            }))}
+          />
+        </Form.Item>
+        <Form.Item
+          label="优先级"
+          name="priority"
+          rules={[{ required: true, message: "请选择优先级" }]}
+        >
+          <Select
+            options={[
+              { value: "low", label: "低" },
+              { value: "medium", label: "中" },
+              { value: "high", label: "高" }
+            ]}
+          />
+        </Form.Item>
+        <Form.Item label="截止日期" name="due_date">
+          <DatePicker style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
+          <Input.TextArea rows={4} placeholder={"1. 完成交互联调\n2. 异常状态展示正确"} />
+        </Form.Item>
+      </Form>
+    </Modal>
   );
 }

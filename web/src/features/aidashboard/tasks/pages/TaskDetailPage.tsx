@@ -24,7 +24,7 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
 import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
-import type { MockTaskDependency, MockTaskStatus, MockTokenSource } from "../../requirements/mock/types";
+import type { MockTaskDependency, MockTaskStatus, MockTokenSource } from "../../requirements/types";
 
 const { Text } = Typography;
 
@@ -215,16 +215,19 @@ export function TaskDetailPage() {
                   <TaskPriorityTag priority={task.priority} />
                 </Descriptions.Item>
                 <Descriptions.Item label="截止日期">{task.due_date || "-"}</Descriptions.Item>
-                <Descriptions.Item label="关联验收标准">
-                  <Space size={4} wrap>
-                    {task.acceptance_criteria_ids.length ? (
-                      task.acceptance_criteria_ids.map((index) => (
-                        <Tag key={index}>标准 {index + 1}</Tag>
-                      ))
-                    ) : (
-                      <Text type="secondary">-</Text>
-                    )}
-                  </Space>
+                <Descriptions.Item label="任务验收标准">
+                  {task.acceptance_criteria.length ? (
+                    <Space direction="vertical" size={4}>
+                      {task.acceptance_criteria.map((criterion, index) => (
+                        <Space key={`${index}-${criterion}`} align="start">
+                          <Tag>标准 {index + 1}</Tag>
+                          <Text>{criterion}</Text>
+                        </Space>
+                      ))}
+                    </Space>
+                  ) : (
+                    <Text type="secondary">暂无任务验收标准</Text>
+                  )}
                 </Descriptions.Item>
                 <Descriptions.Item label="Token 来源">
                   {linkedTotal > 0

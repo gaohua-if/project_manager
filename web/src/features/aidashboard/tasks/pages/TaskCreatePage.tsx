@@ -2,15 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   Button,
-  Checkbox,
-  Collapse,
   DatePicker,
   Form,
   Input,
   Select,
-  Space,
-  Spin,
-  Typography
+  Spin
 } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
@@ -24,9 +20,7 @@ import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
-import type { MockTaskPriority } from "../../requirements/mock/types";
-
-const { Text } = Typography;
+import type { MockTaskPriority } from "../../requirements/types";
 
 interface CreateTaskFormValues {
   title: string;
@@ -35,7 +29,7 @@ interface CreateTaskFormValues {
   priority: MockTaskPriority;
   due_date?: dayjs.Dayjs;
   dependency_task_ids?: string[];
-  acceptance_criteria_ids?: number[];
+  acceptance_criteria?: string;
 }
 
 export function TaskCreatePage() {
@@ -71,7 +65,6 @@ export function TaskCreatePage() {
   const assignees = assigneesQuery.data ?? [];
   const allTasks = tasksQuery.data ?? [];
   const selectedRequirementId = Form.useWatch("requirement_id", form);
-  const selectedRequirement = requirements.find((item) => item.id === selectedRequirementId);
   const dependencyOptions = allTasks
     .filter((task) => task.requirement_id === selectedRequirementId)
     .map((task) => ({ value: task.id, label: task.title }));
@@ -81,7 +74,10 @@ export function TaskCreatePage() {
       requirementsBoardApi.createTask({
         requirement_id: values.requirement_id,
         title: values.title.trim(),
-        acceptance_criteria_ids: values.acceptance_criteria_ids ?? [],
+        acceptance_criteria: values.acceptance_criteria
+          ?.split("\n")
+          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
+          .filter(Boolean) ?? [],
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -96,7 +92,6 @@ export function TaskCreatePage() {
   useEffect(() => {
     form.setFieldsValue({
       priority: "medium",
-      acceptance_criteria_ids: [],
       dependency_task_ids: [],
       requirement_id: initialRequirementId
     });
@@ -242,44 +237,18 @@ export function TaskCreatePage() {
                     allowClear
                   />
                 </Form.Item>
+                <Form.Item
+                  className="aidashboard-form__full-row"
+                  label="任务验收标准（可选）"
+                  name="acceptance_criteria"
+                >
+                  <Input.TextArea
+                    rows={5}
+                    placeholder={"1. 接口返回字段符合前端展示需要\n2. 异常情况下返回明确错误信息"}
+                  />
+                </Form.Item>
               </div>
             </section>
-
-            {selectedRequirement?.acceptance_criteria.length ? (
-              <Collapse
-                className="aidashboard-form__collapse"
-                ghost
-                items={[
-                  {
-                    key: "ac",
-                    label: (
-                      <span>
-                        关联验收标准（可选）
-                        <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                          {selectedRequirement.acceptance_criteria.length} 项
-                        </Text>
-                      </span>
-                    ),
-                    children: (
-                      <Form.Item label="验收标准" name="acceptance_criteria_ids">
-                        <Checkbox.Group className="aidashboard-form__ac-options">
-                          <Space direction="vertical" wrap size={8}>
-                            {selectedRequirement.acceptance_criteria.map((criterion, index) => (
-                              <Checkbox key={criterion} value={index}>
-                                <Text type="secondary" className="aidashboard-form__ac-index">
-                                  标准 {index + 1}
-                                </Text>{" "}
-                                <Text className="aidashboard-form__ac-text">{criterion}</Text>
-                              </Checkbox>
-                            ))}
-                          </Space>
-                        </Checkbox.Group>
-                      </Form.Item>
-                    )
-                  }
-                ]}
-              />
-            ) : null}
 
             <FormSubmitButton
               submitText="创建任务"

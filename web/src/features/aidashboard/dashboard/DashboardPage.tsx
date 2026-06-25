@@ -11,21 +11,44 @@ import {
   SendOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Checkbox, Col, Input, Modal, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
-import { useQuery } from "@tanstack/react-query";
+import { Alert, App, Badge, Button, Checkbox, Col, Empty, Input, Modal, Popconfirm, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { useAuth } from "@/shared/auth/authContext";
+import type { UserRole } from "@/shared/auth/types";
+import { formatDateTime } from "@/shared/utils/dateTime";
 
-import { fetchDashboardFollows, fetchDashboardRisks } from "../api/client";
+import {
+	fetchDashboardFollows,
+	fetchDashboardRisks,
+  fetchReports,
+	fetchSessions,
+  fetchSessionTokens,
+	fetchTodayReport,
+  fetchTokens,
+	generateTodayReportDraft,
+	updateReport as updateDailyReport,
+	updateTaskProgress,
+	updateTaskStatus
+} from "../api/client";
+import type { DailyReport, GenerateReportDraftPayload, Session, TaskProgressSuggestion as DraftTaskProgressSuggestion } from "../api/types";
+import {
+  aggregateDashboardTokenReport,
+  getDashboardTokenDateRange,
+  type DashboardTokenRange,
+  type DashboardTokenReport
+} from "./dashboardTokenStats";
 
 import "./console-dashboard.css";
 
-type PreviewRole = "employee" | "team_leader" | "director" | "pm";
+type DashboardRole = "employee" | "team_leader" | "director" | "pm";
 type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已发送" | "发送失败" | "生成失败";
 type ReportGenerateMode = "系统自动生成" | "手动生成";
 type ReportModalStep = "sessions" | "source" | "editor";
@@ -41,9 +64,17 @@ type RiskTone = "red" | "orange" | "gold" | "blue";
 type FollowType = "需求" | "任务";
 type RiskType = "deadline" | "dependency_blocker";
 type RiskRelatedObjectType = "requirement" | "task";
-type TokenRange = "yesterday" | "last3days" | "last7days";
-type SessionUploadStatus = "上报完整" | "有上报记录" | "暂无记录" | "解析异常";
-type ReportSkillOption = { label: string; value: string; source?: "system" | "upload" };
+type TokenRange = DashboardTokenRange;
+type ReportSkillOption = { label: string; value: string; source?: "system" | "upload"; content?: string };
+type DraftTaskStatus = "todo" | "in_progress" | "done";
+
+interface SessionOption {
+  tool: string;
+  timeRange: string;
+  summary: string;
+  value: string;
+  recommended: boolean;
+}
 
 interface FollowItem {
   key: string;
@@ -119,110 +150,22 @@ interface ConsoleRoleData {
   risks: RiskItem[];
 }
 
-interface TokenReport {
-  total: string;
-  sessions: number;
-  uploaders?: number;
-  bars: { label: string; value: number; text: string }[];
-  groups?: { name: string; sessions: number; total: string; uploaders: number; value: number }[];
-  mine?: { sessions: number; total: string };
-  status: SessionUploadStatus;
-}
+type TokenReport = DashboardTokenReport;
 
 interface TaskProgressSuggestion {
   key: string;
+  taskId: string;
   taskName: string;
   progress: number;
-  status: string;
+  status: DraftTaskStatus;
   sessionIds: string[];
+  evidenceSessionTitles: string[];
   note: string;
   syncState?: "已修改" | "待同步";
 }
 
-const ROLE_OPTIONS: { label: string; value: PreviewRole }[] = [
-  { label: "个人", value: "employee" },
-  { label: "TL", value: "team_leader" },
-  { label: "总监", value: "director" },
-  { label: "PM", value: "pm" }
-];
-
-const SESSION_OPTIONS = [
-  {
-    tool: "Claude Code session",
-    timeRange: "09:30 - 10:20",
-    summary: "控制台页面调整",
-    value: "session-am",
-    recommended: true
-  },
-  {
-    tool: "Codex session",
-    timeRange: "14:00 - 15:10",
-    summary: "需求看板原型修改",
-    value: "session-pm",
-    recommended: true
-  },
-  {
-    tool: "Claude Code session",
-    timeRange: "17:30 - 18:00",
-    summary: "日报流程讨论",
-    value: "session-evening",
-    recommended: false
-  },
-  {
-    tool: "Terminal session",
-    timeRange: "18:10 - 18:25",
-    summary: "类型检查与构建验证",
-    value: "session-build",
-    recommended: false
-  },
-  {
-    tool: "Codex session",
-    timeRange: "19:00 - 19:20",
-    summary: "日报内容复查",
-    value: "session-review",
-    recommended: false
-  }
-];
-
 const REPORT_SKILL_OPTIONS: ReportSkillOption[] = [
-  { label: "默认日报 Skill", value: "默认日报 Skill", source: "system" },
-  { label: "研发日报 Skill", value: "研发日报 Skill", source: "system" },
-  { label: "管理汇总 Skill", value: "管理汇总 Skill", source: "system" }
-];
-
-const TASK_PROGRESS_SUGGESTIONS: TaskProgressSuggestion[] = [
-  {
-    key: "task-console-daily-flow",
-    taskName: "控制台日报交互设计",
-    progress: 75,
-    status: "进行中",
-    sessionIds: ["session-am", "session-pm"],
-    note: ""
-  },
-  {
-    key: "task-daily-entry-state",
-    taskName: "日报入口状态优化",
-    progress: 25,
-    status: "进行中",
-    sessionIds: ["session-pm"],
-    note: ""
-  },
-  {
-    key: "task-skill-upload-flow",
-    taskName: "Skill 上传预设流程",
-    progress: 50,
-    status: "进行中",
-    sessionIds: ["session-evening", "session-review"],
-    note: ""
-  },
-  {
-    key: "task-modal-scroll-boundary",
-    taskName: "日报弹窗滚动边界设计",
-    progress: 75,
-    status: "进行中",
-    sessionIds: ["session-build"],
-    note: ""
-  }
+  { label: "默认日报 Skill", value: "default_daily", source: "system" }
 ];
 
 const TOKEN_RANGE_OPTIONS: { label: string; value: TokenRange }[] = [
@@ -230,148 +173,6 @@ const TOKEN_RANGE_OPTIONS: { label: string; value: TokenRange }[] = [
   { label: "近 3 天", value: "last3days" },
   { label: "近 7 天", value: "last7days" }
 ];
-
-const TOKEN_DATA: Record<PreviewRole, Record<TokenRange, TokenReport>> = {
-  employee: {
-    yesterday: {
-      total: "0.18M",
-      sessions: 1,
-      bars: [{ label: "06-22", value: 30, text: "1 session" }],
-      status: "上报完整"
-    },
-    last3days: {
-      total: "0.86M",
-      sessions: 5,
-      bars: [
-        { label: "06-21", value: 42, text: "2 session" },
-        { label: "06-22", value: 68, text: "2 session" },
-        { label: "06-23", value: 25, text: "1 session" }
-      ],
-      status: "上报完整"
-    },
-    last7days: {
-      total: "1.26M",
-      sessions: 8,
-      bars: [
-        { label: "06-17", value: 18, text: "1 session" },
-        { label: "06-19", value: 36, text: "2 session" },
-        { label: "06-21", value: 42, text: "2 session" },
-        { label: "06-22", value: 68, text: "2 session" },
-        { label: "06-23", value: 25, text: "1 session" }
-      ],
-      status: "上报完整"
-    }
-  },
-  pm: {
-    yesterday: {
-      total: "0.12M",
-      sessions: 1,
-      bars: [{ label: "06-22", value: 24, text: "1 session" }],
-      status: "上报完整"
-    },
-    last3days: {
-      total: "0.54M",
-      sessions: 4,
-      bars: [
-        { label: "06-21", value: 28, text: "1 session" },
-        { label: "06-22", value: 45, text: "2 session" },
-        { label: "06-23", value: 20, text: "1 session" }
-      ],
-      status: "上报完整"
-    },
-    last7days: {
-      total: "0.96M",
-      sessions: 6,
-      bars: [
-        { label: "06-18", value: 18, text: "1 session" },
-        { label: "06-20", value: 24, text: "1 session" },
-        { label: "06-21", value: 28, text: "1 session" },
-        { label: "06-22", value: 45, text: "2 session" },
-        { label: "06-23", value: 20, text: "1 session" }
-      ],
-      status: "上报完整"
-    }
-  },
-  team_leader: {
-    yesterday: {
-      total: "0.86M",
-      sessions: 7,
-      uploaders: 5,
-      bars: [
-        { label: "成员覆盖", value: 52, text: "5 人" },
-        { label: "Session 数", value: 38, text: "7 个" },
-        { label: "Token 合计", value: 32, text: "0.86M" }
-      ],
-      mine: { sessions: 1, total: "0.18M" },
-      status: "有上报记录"
-    },
-    last3days: {
-      total: "5.28M",
-      sessions: 36,
-      uploaders: 9,
-      bars: [
-        { label: "成员覆盖", value: 74, text: "9 人" },
-        { label: "Session 数", value: 86, text: "36 个" },
-        { label: "Token 合计", value: 64, text: "5.28M" }
-      ],
-      mine: { sessions: 5, total: "0.86M" },
-      status: "有上报记录"
-    },
-    last7days: {
-      total: "9.74M",
-      sessions: 64,
-      uploaders: 11,
-      bars: [
-        { label: "成员覆盖", value: 90, text: "11 人" },
-        { label: "Session 数", value: 92, text: "64 个" },
-        { label: "Token 合计", value: 78, text: "9.74M" }
-      ],
-      mine: { sessions: 8, total: "1.26M" },
-      status: "有上报记录"
-    }
-  },
-  director: {
-    yesterday: {
-      total: "3.2M",
-      sessions: 28,
-      bars: [],
-      groups: [
-        { name: "芯片组", sessions: 9, total: "1.1M", uploaders: 4, value: 62 },
-        { name: "后台组", sessions: 7, total: "0.8M", uploaders: 3, value: 48 },
-        { name: "平台组", sessions: 6, total: "0.7M", uploaders: 3, value: 42 },
-        { name: "模型组", sessions: 6, total: "0.6M", uploaders: 3, value: 44 }
-      ],
-      mine: { sessions: 1, total: "0.18M" },
-      status: "有上报记录"
-    },
-    last3days: {
-      total: "18.6M",
-      sessions: 142,
-      bars: [],
-      groups: [
-        { name: "芯片组", sessions: 42, total: "6.8M", uploaders: 12, value: 86 },
-        { name: "后台组", sessions: 31, total: "4.2M", uploaders: 8, value: 64 },
-        { name: "平台组", sessions: 28, total: "3.6M", uploaders: 7, value: 58 },
-        { name: "模型组", sessions: 41, total: "4.0M", uploaders: 10, value: 70 }
-      ],
-      mine: { sessions: 5, total: "0.86M" },
-      status: "有上报记录"
-    },
-    last7days: {
-      total: "34.2M",
-      sessions: 261,
-      bars: [],
-      groups: [
-        { name: "芯片组", sessions: 78, total: "12.4M", uploaders: 14, value: 90 },
-        { name: "后台组", sessions: 58, total: "7.9M", uploaders: 10, value: 68 },
-        { name: "平台组", sessions: 52, total: "6.4M", uploaders: 9, value: 60 },
-        { name: "模型组", sessions: 73, total: "7.5M", uploaders: 12, value: 74 }
-      ],
-      mine: { sessions: 8, total: "1.26M" },
-      status: "有上报记录"
-    }
-  }
-};
 
 const DEFAULT_MARKDOWN = `# 6 月 22 日日报
 
@@ -398,7 +199,32 @@ function createReport(overrides: Omit<ReportItem, "sessionCount" | "generateMode
   };
 }
 
-const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
+function findCurrentUserDailyReport(reports: DailyReport[], userId: string | undefined, reportDate: string) {
+  if (!userId) return undefined;
+  return reports.find((report) => report.user_id === userId && report.report_date === reportDate);
+}
+
+function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport | undefined, loaded: boolean): ReportItem {
+  if (!loaded) return report;
+  if (!dailyReport) {
+    return {
+      ...report,
+      status: "待生成",
+      sessionCount: 0,
+      updatedAt: "-"
+    };
+  }
+
+  return {
+    ...report,
+    status: "草稿待确认",
+    sessionCount: dailyReport.session_ids.length,
+    generateMode: dailyReport.edited ? "手动生成" : "系统自动生成",
+    updatedAt: formatDateTime(dailyReport.updated_at, "HH:mm")
+  };
+}
+
+const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
   employee: {
     label: "个人",
     userLine: "陈一 · 前端工程师",
@@ -432,9 +258,9 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
       focusCount: "4",
       focusNote: "我负责或主动关注的任务",
       riskCount: "3",
-      riskNote: "1 个阻塞，2 个临期",
+      riskNote: "1 个阻塞，2 个超期",
       dueCount: "2",
-      dueNote: "48 小时内到期"
+      dueNote: "已超过截止日期"
     },
     follows: [
       {
@@ -446,9 +272,9 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         taskId: "task-daily-ac",
         owner: "我",
         status: "进行中",
-        deadline: "明天",
+        deadline: "2026-06-23",
         dependency: "无阻塞依赖",
-        risk: "临期",
+        risk: "已超期",
         activity: "验收口径刚更新"
       },
       {
@@ -501,15 +327,15 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
       {
         key: "employee-risk-2",
         riskType: "deadline",
-        title: "日报生成验收标准明天到期",
-        source: "临期",
+        title: "日报生成验收标准已超过截止日期",
+        source: "已超期",
         target: "AI 日报生成 / 补充验收标准",
         relatedObjectType: "task",
         requirementId: "req-ai-daily",
         taskId: "task-daily-ac",
         owner: "我",
-        deadline: "明天",
-        reason: "任务未完成，deadline 将在 48 小时内到期",
+        deadline: "2026-06-23",
+        reason: "任务尚未完成，需要更新计划或推进状态",
         level: "中",
         tone: "orange",
         actionText: "查看任务",
@@ -614,7 +440,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         status: "进行中",
         deadline: "2026-06-27",
         dependency: "依赖：默认 Skill 输出",
-        risk: "临期",
+        risk: "已超期",
         activity: "草稿保存待确认"
       }
     ],
@@ -817,7 +643,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
       focusCount: "7",
       focusNote: "我关注的需求",
       riskCount: "5",
-      riskNote: "2 个临期，1 个依赖",
+      riskNote: "2 个超期，1 个依赖",
       dueCount: "3",
       dueNote: "本周需求节点"
     },
@@ -831,7 +657,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         status: "进行中",
         deadline: "2026-06-30",
         dependency: "2 个强依赖",
-        risk: "关键任务临期",
+        risk: "关键任务已超期",
         activity: "需求进度 62%"
       },
       {
@@ -857,7 +683,7 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
         status: "进行中",
         deadline: "2026-06-26",
         dependency: "无阻塞依赖",
-        risk: "临期",
+        risk: "已超期",
         activity: "模板评审待完成"
       }
     ],
@@ -882,15 +708,15 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
       {
         key: "pm-risk-2",
         riskType: "deadline",
-        title: "AI 日报生成存在关键任务临期",
-        source: "临期",
+        title: "AI 日报生成存在关键任务超期",
+        source: "已超期",
         target: "AI 日报生成 / 补齐验收标准模板",
         relatedObjectType: "requirement",
         requirementId: "req-ai-daily",
         taskId: "task-ac-template",
         owner: "韩梅梅",
         deadline: "2026-06-26",
-        reason: "关键任务「补齐验收标准模板」将在 48 小时内到期",
+        reason: "关键任务「补齐验收标准模板」已超过截止日期",
         level: "中",
         tone: "orange",
         actionText: "查看需求",
@@ -902,6 +728,11 @@ const ROLE_DATA: Record<PreviewRole, ConsoleRoleData> = {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { message } = App.useApp();
+  const today = dayjs();
+  const reportDate = today.format("YYYY-MM-DD");
 	const followsQuery = useQuery({
 		queryKey: ["dashboard", "follows"],
 		queryFn: fetchDashboardFollows,
@@ -912,7 +743,11 @@ export function DashboardPage() {
 		queryFn: fetchDashboardRisks,
 		staleTime: 30_000
 	});
-  const [previewRole, setPreviewRole] = useState<PreviewRole>("employee");
+  const todayReportsQuery = useQuery({
+    queryKey: ["reports", "dashboard-today", reportDate],
+    queryFn: () => fetchReports({ from: reportDate, to: reportDate }),
+    staleTime: 30_000
+  });
   const [reportStateById, setReportStateById] = useState<Record<string, ReportItem>>(() =>
     Object.fromEntries(
       Object.values(ROLE_DATA)
@@ -923,29 +758,126 @@ export function DashboardPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportModalStep, setReportModalStep] = useState<ReportModalStep>("sessions");
   const [activeReportId, setActiveReportId] = useState<string>("employee-personal-daily");
-  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(["session-am", "session-pm"]);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const [validatedDraftSessionIds, setValidatedDraftSessionIds] = useState<string[]>([]);
+  const [sessionSelectionTouched, setSessionSelectionTouched] = useState(false);
   const [reportSkillDraft, setReportSkillDraft] = useState<string>(REPORT_SKILL_OPTIONS[0].value);
   const [uploadedReportSkills, setUploadedReportSkills] = useState<ReportSkillOption[]>([]);
   const [draftMarkdown, setDraftMarkdown] = useState(DEFAULT_MARKDOWN);
-  const [taskSuggestions, setTaskSuggestions] = useState<TaskProgressSuggestion[]>(TASK_PROGRESS_SUGGESTIONS);
+  const [taskSuggestions, setTaskSuggestions] = useState<TaskProgressSuggestion[]>([]);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [editingTaskKey, setEditingTaskKey] = useState<string | null>(null);
   const [editingTaskDraft, setEditingTaskDraft] = useState<TaskProgressSuggestion | null>(null);
   const [tokenRange, setTokenRange] = useState<TokenRange>("last3days");
-  const data = useMemo(() => ROLE_DATA[previewRole], [previewRole]);
-  const personalReports = data.personalReports.map((reportItem) => reportStateById[reportItem.id] ?? reportItem);
+  const dashboardRole = getDashboardRole(user?.role);
+  const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
+  const todayDailyReport = useMemo(
+    () => findCurrentUserDailyReport(todayReportsQuery.data ?? [], user?.id, reportDate),
+    [reportDate, todayReportsQuery.data, user?.id]
+  );
+  const personalReports = data.personalReports.map((reportItem) => {
+    const currentReport = reportStateById[reportItem.id] ?? reportItem;
+    if (reportItem.kind !== "personal_daily") return currentReport;
+    return applyTodayDailyReportState(currentReport, todayDailyReport, todayReportsQuery.isSuccess);
+  });
   const summaryReports = (data.summaryReports ?? []).map((reportItem) => reportStateById[reportItem.id] ?? reportItem);
   const dailyReport = personalReports.find((reportItem) => reportItem.kind === "personal_daily") ?? personalReports[0];
-  const activeReport = reportStateById[activeReportId] ?? dailyReport;
+  const availableReportIds = new Set([...personalReports, ...summaryReports].map((reportItem) => reportItem.id));
+  const activeReport = availableReportIds.has(activeReportId)
+    ? reportStateById[activeReportId] ?? dailyReport
+    : dailyReport;
+  const tokenDateRange = useMemo(() => getDashboardTokenDateRange(tokenRange), [tokenRange]);
+  const tokenScope = dashboardRole === "employee" ? "mine" : "team";
+  const shouldLoadMineTokens = dashboardRole !== "employee";
+  const shouldLoadTeamTokenGroups = dashboardRole === "director";
+  const tokenSessionsQuery = useQuery({
+    queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, tokenScope],
+    queryFn: () => fetchSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: tokenScope }),
+    staleTime: 60_000
+  });
+  const mineTokenSessionsQuery = useQuery({
+    queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, "mine"],
+    queryFn: () => fetchSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
+    enabled: shouldLoadMineTokens,
+    staleTime: 60_000
+  });
+  const teamTokenGroupsQuery = useQuery({
+    queryKey: ["dashboard", "token-groups", tokenDateRange.from, tokenDateRange.to, "team"],
+    queryFn: () =>
+      fetchTokens({
+        period: "range",
+        from: tokenDateRange.from,
+        to: tokenDateRange.to,
+        group_by: "team"
+      }),
+    enabled: shouldLoadTeamTokenGroups,
+    staleTime: 60_000
+  });
   const reportSkillOptions = useMemo(
     () => [...REPORT_SKILL_OPTIONS, ...uploadedReportSkills],
     [uploadedReportSkills]
   );
-  const tokenReport = TOKEN_DATA[previewRole][tokenRange];
-	const followItems: FollowItem[] = followsQuery.data ?? [];
-	const riskItems: RiskItem[] = risksQuery.data ?? [];
+  const tokenReport = useMemo(
+    () =>
+      aggregateDashboardTokenReport(tokenSessionsQuery.data ?? [], tokenDateRange, {
+        mineSessions: shouldLoadMineTokens ? mineTokenSessionsQuery.data ?? [] : undefined,
+        teamAggregation: shouldLoadTeamTokenGroups ? teamTokenGroupsQuery.data ?? null : null,
+        showUploaders: dashboardRole !== "employee"
+      }),
+    [
+      dashboardRole,
+      mineTokenSessionsQuery.data,
+      shouldLoadMineTokens,
+      shouldLoadTeamTokenGroups,
+      teamTokenGroupsQuery.data,
+      tokenDateRange,
+      tokenSessionsQuery.data
+    ]
+  );
+  const isTokenLoading =
+    tokenSessionsQuery.isLoading ||
+    (shouldLoadMineTokens && mineTokenSessionsQuery.isLoading) ||
+    (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isLoading);
+  const isTokenError =
+    tokenSessionsQuery.isError ||
+    (shouldLoadMineTokens && mineTokenSessionsQuery.isError) ||
+    (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isError);
+		const followItems: FollowItem[] = followsQuery.data ?? [];
+		const riskItems: RiskItem[] = risksQuery.data ?? [];
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
   const followBlockedCount = followItems.filter((item) => item.risk.includes("阻塞") || item.status === "阻塞").length;
-  const followUrgentCount = followItems.filter((item) => item.risk.includes("临期") || item.deadline === "明天").length;
+  const followUrgentCount = followItems.filter((item) => item.risk.includes("超期")).length;
+  const reportSessionsQuery = useQuery({
+    queryKey: ["dashboard", "daily-report-sessions", reportDate],
+    queryFn: () =>
+      fetchSessions({
+        started_from: today.startOf("day").toISOString(),
+        started_to: today.endOf("day").toISOString(),
+        page: "1",
+        page_size: "100"
+      }),
+    enabled: isReportModalOpen && activeReport.kind === "personal_daily",
+    staleTime: 30_000
+  });
+  const currentUserId = user?.id;
+  const reportSessionItems = reportSessionsQuery.data?.items;
+  const reportSessions = useMemo(() => {
+    const items = reportSessionItems ?? [];
+    if (!currentUserId) return items;
+    return items.filter((session) => session.user_id === currentUserId);
+  }, [currentUserId, reportSessionItems]);
+  const sessionOptions = useMemo(
+    () => reportSessions.map((session) => toSessionOption(session)),
+    [reportSessions]
+  );
+  const selectedSkill = reportSkillOptions.find((skill) => skill.value === reportSkillDraft);
+  const effectiveSelectedSessionIds = sessionSelectionTouched
+    ? selectedSessionIds
+    : sessionOptions.map((session) => session.value);
+  const handleSelectedSessionIdsChange = (value: string[]) => {
+    setSessionSelectionTouched(true);
+    setSelectedSessionIds(value);
+  };
 
   const updateReport = (reportId: string, next: Partial<ReportItem>) => {
     setReportStateById((current) => ({
@@ -957,27 +889,130 @@ export function DashboardPage() {
     }));
   };
 
+  const draftMutation = useMutation({
+    mutationFn: (payload: GenerateReportDraftPayload) => generateTodayReportDraft(payload),
+    onSuccess: (draft) => {
+      setDraftMarkdown(draft.report_markdown);
+      setSelectedSessionIds(draft.selected_session_ids);
+      setValidatedDraftSessionIds(draft.selected_session_ids);
+      setTaskSuggestions(draft.task_progress_suggestions.map(mapDraftTaskSuggestion));
+      updateReport(activeReport.id, {
+        status: "草稿待确认",
+        sessionCount: draft.selected_session_ids.length,
+        generateMode: "手动生成",
+        skill: draft.skill_name,
+        updatedAt: "刚刚",
+        nextAt: "19:00"
+      });
+      setReportModalStep("editor");
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (error: unknown) => {
+      const text = error instanceof Error ? error.message : "日报草稿生成失败";
+      setDraftError(text);
+      message.error(text);
+    }
+  });
+
+  const saveReportMutation = useMutation({
+    mutationFn: async ({ closeAfterSave }: { closeAfterSave: boolean }) => {
+      const report = await fetchTodayReport();
+      const sessionIDs = validatedDraftSessionIds.length > 0 ? validatedDraftSessionIds : effectiveSelectedSessionIds;
+      const saved = await updateDailyReport(report.id, {
+        content: draftMarkdown,
+        session_ids: sessionIDs
+      });
+      return { saved, closeAfterSave };
+    },
+	    onSuccess: ({ saved, closeAfterSave }) => {
+	      message.success(closeAfterSave ? "日报已保存" : "日报修改已保存");
+	      updateReport(activeReport.id, {
+	        status: "草稿待确认",
+	        sessionCount: saved.session_ids.length,
+	        generateMode: "手动生成",
+	        skill: saved.edited ? "默认日报 Skill" : activeReport.skill,
+        updatedAt: "刚刚"
+      });
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      if (closeAfterSave) {
+        setIsReportModalOpen(false);
+      }
+    },
+    onError: (error: unknown) => {
+      message.error(error instanceof Error ? error.message : "日报保存失败");
+    }
+  });
+
+  const applyTaskSuggestionMutation = useMutation({
+    mutationFn: async (task: TaskProgressSuggestion) => {
+      if (task.status === "done") {
+        return updateTaskStatus(task.taskId, "done");
+      }
+      await updateTaskStatus(task.taskId, task.status);
+      return updateTaskProgress(task.taskId, task.progress);
+    },
+    onSuccess: (_, task) => {
+      message.success("任务进展已更新");
+      setTaskSuggestions((current) =>
+        current.map((item) =>
+          item.key === task.key
+            ? {
+                ...task,
+                syncState: "已修改"
+              }
+            : item
+        )
+      );
+      setEditingTaskKey(null);
+      setEditingTaskDraft(null);
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (error: unknown) => {
+      message.error(error instanceof Error ? error.message : "任务更新失败");
+    }
+  });
+
   const openReportModal = (reportItem: ReportItem, step?: ReportModalStep) => {
-    setSelectedSessionIds(selectedSessionIds.length > 0 ? selectedSessionIds : ["session-am", "session-pm"]);
+    const nextStep = step ?? getInitialReportModalStep(reportItem);
+    if (reportItem.kind === "personal_daily" && nextStep === "sessions") {
+      setSelectedSessionIds([]);
+      setValidatedDraftSessionIds([]);
+      setSessionSelectionTouched(false);
+      setTaskSuggestions([]);
+      setDraftMarkdown("");
+    }
     setActiveReportId(reportItem.id);
-    setReportSkillDraft(reportItem.skill);
-    setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
-    setReportModalStep(step ?? getInitialReportModalStep(reportItem));
+    setReportSkillDraft(
+      reportSkillOptions.some((skill) => skill.value === reportItem.skill)
+        ? reportItem.skill
+        : REPORT_SKILL_OPTIONS[0].value
+    );
+    if (nextStep !== "sessions") {
+      setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
+    }
+    setDraftError(null);
+    setReportModalStep(nextStep);
     setIsReportModalOpen(true);
   };
 
   const uploadReportSkill = (file: File) => {
     if (!file.name.toLowerCase().endsWith(".md")) {
+      message.error("请上传 markdown 格式的 skill.md 文件");
       return false;
     }
 
     void file.text().then((content) => {
       const uploadedSkillName = getUploadedSkillName(file.name, content);
+      const uploadedSkillValue = `upload:${uploadedSkillName}`;
       setUploadedReportSkills((current) => {
-        if (current.some((item) => item.value === uploadedSkillName)) return current;
-        return [...current, { label: uploadedSkillName, value: uploadedSkillName, source: "upload" }];
+        const next = current.filter((item) => item.value !== uploadedSkillValue);
+        return [...next, { label: uploadedSkillName, value: uploadedSkillValue, source: "upload", content }];
       });
-      setReportSkillDraft(uploadedSkillName);
+      setReportSkillDraft(uploadedSkillValue);
+      message.success("Skill 已载入，本次生成将作为补充约束");
+    }).catch(() => {
+      message.error("Skill 文件读取失败");
     });
 
     return false;
@@ -986,19 +1021,35 @@ export function DashboardPage() {
   const startGenerateDraft = () => {
     if (!activeReport) return;
 
+    if (activeReport.kind === "personal_daily") {
+      setDraftError(null);
+      const payload: GenerateReportDraftPayload = {
+        report_date: reportDate,
+        session_ids: effectiveSelectedSessionIds,
+        skill_id: "default_daily",
+        skill_content: selectedSkill?.source === "upload" ? selectedSkill.content : undefined,
+        include_task_progress: true
+      };
+      draftMutation.mutate(payload);
+      return;
+    }
+
     updateReport(activeReport.id, {
       status: "草稿待确认",
-      sessionCount: activeReport.kind === "personal_daily" ? selectedSessionIds.length : activeReport.sessionCount,
-      generateMode: activeReport.kind === "personal_daily" ? "手动生成" : "系统自动生成",
+      sessionCount: activeReport.sessionCount,
+      generateMode: "系统自动生成",
       skill: reportSkillDraft,
-      updatedAt: "刚刚",
-      nextAt: activeReport.kind === "personal_daily" ? "19:00" : undefined
+      updatedAt: "刚刚"
     });
     setReportModalStep("editor");
   };
 
   const saveDraft = () => {
     if (!activeReport) return;
+    if (activeReport.kind === "personal_daily") {
+      saveReportMutation.mutate({ closeAfterSave: false });
+      return;
+    }
     updateReport(activeReport.id, { status: "草稿待确认", updatedAt: "刚刚" });
   };
 
@@ -1009,6 +1060,10 @@ export function DashboardPage() {
 
   const sendReport = () => {
     if (!activeReport) return;
+    if (activeReport.kind === "personal_daily") {
+      saveReportMutation.mutate({ closeAfterSave: true });
+      return;
+    }
     updateReport(activeReport.id, { status: "已发送", updatedAt: "刚刚" });
     setIsReportModalOpen(false);
   };
@@ -1020,19 +1075,7 @@ export function DashboardPage() {
 
   const saveTaskEdit = () => {
     if (!editingTaskKey || !editingTaskDraft) return;
-
-    setTaskSuggestions((current) =>
-      current.map((task) =>
-        task.key === editingTaskKey
-          ? {
-              ...editingTaskDraft,
-              syncState: "待同步"
-            }
-          : task
-      )
-    );
-    setEditingTaskKey(null);
-    setEditingTaskDraft(null);
+    applyTaskSuggestionMutation.mutate(editingTaskDraft);
   };
 
   const handleRiskAction = (risk: RiskItem) => {
@@ -1058,16 +1101,6 @@ export function DashboardPage() {
       showNav={false}
     >
       <section className="console-dashboard">
-        <div className="console-prototype-bar">
-          <span>原型角色</span>
-          <Segmented
-            size="small"
-            options={ROLE_OPTIONS}
-            value={previewRole}
-            onChange={(value) => setPreviewRole(value as PreviewRole)}
-          />
-        </div>
-
         <div className="console-panel console-panel--follow">
           <PanelHeader
             icon={<FlagOutlined />}
@@ -1076,7 +1109,7 @@ export function DashboardPage() {
               <Space size={6} wrap>
                 <Tag>{followItems.length} 项</Tag>
                 {followBlockedCount > 0 ? <Tag color="red">{followBlockedCount} 阻塞</Tag> : null}
-                {followUrgentCount > 0 ? <Tag color="orange">{followUrgentCount} 临期</Tag> : null}
+                {followUrgentCount > 0 ? <Tag color="red">{followUrgentCount} 超期</Tag> : null}
               </Space>
             }
           />
@@ -1115,6 +1148,8 @@ export function DashboardPage() {
             <SessionUploadCard
               range={tokenRange}
               report={tokenReport}
+              loading={isTokenLoading}
+              error={isTokenError}
               onRangeChange={setTokenRange}
               onViewDetail={() => navigate("/tokens")}
             />
@@ -1149,8 +1184,11 @@ export function DashboardPage() {
         footer={renderReportModalFooter({
           step: reportModalStep,
           report: activeReport,
-          selectedCount: selectedSessionIds.length,
+          selectedCount: effectiveSelectedSessionIds.length,
           modifiedTaskCount,
+          isSessionLoading: reportSessionsQuery.isLoading,
+          isGenerating: draftMutation.isPending,
+          isSaving: saveReportMutation.isPending,
           onCancel: () => setIsReportModalOpen(false),
           onNext: startGenerateDraft,
           onGenerate: startGenerateDraft,
@@ -1164,13 +1202,17 @@ export function DashboardPage() {
           step={reportModalStep}
           report={activeReport}
           coverage={data.coverage}
-          selectedSessionIds={selectedSessionIds}
+          selectedSessionIds={effectiveSelectedSessionIds}
           selectedSkill={reportSkillDraft}
           skillOptions={reportSkillOptions}
           uploadedSkills={uploadedReportSkills}
+          sessionOptions={sessionOptions}
+          isSessionLoading={reportSessionsQuery.isLoading}
+          sessionError={reportSessionsQuery.isError ? "Session 加载失败，请稍后重试" : null}
+          draftError={draftError}
           taskSuggestions={taskSuggestions}
           draftMarkdown={draftMarkdown}
-          onSelectedSessionIdsChange={setSelectedSessionIds}
+          onSelectedSessionIdsChange={handleSelectedSessionIdsChange}
           onSelectedSkillChange={setReportSkillDraft}
           onSkillUpload={uploadReportSkill}
           onEditTask={openTaskEditModal}
@@ -1180,6 +1222,8 @@ export function DashboardPage() {
       <TaskProgressEditModal
         task={editingTaskDraft}
         open={Boolean(editingTaskDraft)}
+        sessionOptions={sessionOptions}
+        confirmLoading={applyTaskSuggestionMutation.isPending}
         onCancel={() => {
           setEditingTaskKey(null);
           setEditingTaskDraft(null);
@@ -1608,11 +1652,15 @@ function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
 function SessionUploadCard({
   range,
   report,
+  loading,
+  error,
   onRangeChange,
   onViewDetail
 }: {
   range: TokenRange;
   report: TokenReport;
+  loading: boolean;
+  error: boolean;
   onRangeChange: (range: TokenRange) => void;
   onViewDetail: () => void;
 }) {
@@ -1632,7 +1680,15 @@ function SessionUploadCard({
         }
       />
       <div className="console-report-status-card">
-        {renderSessionUploadSummary(range, report)}
+        {loading ? (
+          <div className="console-token-state">Token 数据加载中...</div>
+        ) : error ? (
+          <div className="console-token-state is-error">Token 数据加载失败</div>
+        ) : report.sessions === 0 ? (
+          <div className="console-token-state">当前范围暂无 Token 数据</div>
+        ) : (
+          renderSessionUploadSummary(range, report)
+        )}
         <div className="console-token-footer">
           <span>基于已上传 session 解析</span>
           <Button type="link" icon={<LinkOutlined />} onClick={onViewDetail}>
@@ -1849,9 +1905,7 @@ function TokenGroupBars({ groups }: { groups: NonNullable<TokenReport["groups"]>
         <div key={group.name} className="console-token-group-bars__item">
           <span>
             <strong>{group.name}</strong>
-            <small title={`${group.uploaders} 人 · ${group.sessions} 个 session`}>
-              {group.uploaders} 人 · {group.sessions} 次
-            </small>
+            {group.note ? <small title={group.note}>{group.note}</small> : null}
           </span>
           <i>
             <b style={{ width: `${Math.max(8, Math.round((group.value / maxValue) * 100))}%` }} />
@@ -1990,6 +2044,9 @@ function renderReportModalFooter({
   report,
   selectedCount,
   modifiedTaskCount,
+  isSessionLoading,
+  isGenerating,
+  isSaving,
   onCancel,
   onNext,
   onGenerate,
@@ -2001,6 +2058,9 @@ function renderReportModalFooter({
   report: ReportItem;
   selectedCount: number;
   modifiedTaskCount: number;
+  isSessionLoading: boolean;
+  isGenerating: boolean;
+  isSaving: boolean;
   onCancel: () => void;
   onNext: () => void;
   onGenerate: () => void;
@@ -2011,8 +2071,13 @@ function renderReportModalFooter({
   if (step === "sessions") {
     return (
       <Space>
-        <Button onClick={onCancel}>稍后处理</Button>
-        <Button type="primary" disabled={selectedCount === 0} onClick={onNext}>
+        <Button onClick={onCancel} disabled={isGenerating}>稍后处理</Button>
+        <Button
+          type="primary"
+          disabled={selectedCount === 0 || isSessionLoading}
+          loading={isGenerating}
+          onClick={onNext}
+        >
           下一步
         </Button>
       </Space>
@@ -2023,7 +2088,7 @@ function renderReportModalFooter({
     return (
       <Space>
         <Button onClick={onCancel}>稍后处理</Button>
-        <Button type="primary" onClick={onGenerate}>
+        <Button type="primary" loading={isGenerating} onClick={onGenerate}>
           生成报告
         </Button>
       </Space>
@@ -2037,9 +2102,9 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
         </span>
       ) : null}
-      <Button onClick={onBack}>上一步</Button>
-      <Button onClick={onSave}>保存修改</Button>
-      <Button type="primary" icon={<SendOutlined />} onClick={onSend}>
+      <Button onClick={onBack} disabled={isSaving}>上一步</Button>
+      <Button onClick={onSave} loading={isSaving}>保存修改</Button>
+      <Button type="primary" icon={<SendOutlined />} loading={isSaving} onClick={onSend}>
         {getSendButtonText(report)}
       </Button>
     </Space>
@@ -2048,11 +2113,14 @@ function renderReportModalFooter({
 
 function TaskProgressSuggestionList({
   tasks,
+  sessionOptions,
   onEditTask
 }: {
   tasks: TaskProgressSuggestion[];
+  sessionOptions: SessionOption[];
   onEditTask: (task: TaskProgressSuggestion) => void;
 }) {
+  const sessionTitleById = new Map(sessionOptions.map((session) => [session.value, `${session.tool} ${session.timeRange}`]));
   return (
     <aside className="console-task-suggestion-list">
       <div className="console-session-modal__section">
@@ -2060,33 +2128,35 @@ function TaskProgressSuggestionList({
         <span>LLM 根据已选 session 生成 {tasks.length} 条建议，可按需修改。</span>
       </div>
       <div className="console-task-suggestion-scroll">
-        {tasks.map((task) => (
+        {tasks.length === 0 ? (
+          <div className="console-task-suggestion-empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务进展建议" />
+          </div>
+        ) : tasks.map((task) => (
           <article key={task.key} className="console-task-suggestion-card">
             <div className="console-task-suggestion-card__top">
               <strong>{task.taskName}</strong>
               <Button size="small" onClick={() => onEditTask(task)}>编辑任务</Button>
             </div>
             <div className="console-task-suggestion-card__meta">
-              <Tag color="blue">{task.status}</Tag>
+              <Tag color="blue">{getTaskStatusLabel(task.status)}</Tag>
               <span>建议进度 {task.progress}%</span>
               <span>{task.sessionIds.length} 个 session</span>
             </div>
             <ul>
-              {task.sessionIds.map((sessionId) => {
-                const session = getSessionById(sessionId);
-                return <li key={sessionId}>{session ? `${session.tool} ${session.timeRange}` : sessionId}</li>;
-              })}
+              {task.sessionIds.map((sessionId, index) => (
+                <li key={sessionId}>
+                  {task.evidenceSessionTitles[index] ?? sessionTitleById.get(sessionId) ?? sessionId}
+                </li>
+              ))}
             </ul>
+            {task.note ? <p>{task.note}</p> : null}
             {task.syncState ? <Tag className="console-task-suggestion-card__sync" color="blue">{task.syncState}</Tag> : null}
           </article>
         ))}
       </div>
     </aside>
   );
-}
-
-function getSessionById(sessionId: string) {
-  return SESSION_OPTIONS.find((session) => session.value === sessionId);
 }
 
 function getUploadedSkillName(fileName: string, content: string) {
@@ -2097,15 +2167,68 @@ function getUploadedSkillName(fileName: string, content: string) {
   return /skill/i.test(rawName) || rawName.includes("Skill") ? rawName : `${rawName} Skill`;
 }
 
+function getDashboardRole(role?: UserRole | null): DashboardRole {
+  if (role === "admin") return "director";
+  if (role === "director" || role === "pm" || role === "team_leader" || role === "employee") return role;
+  return "employee";
+}
+
+function toSessionOption(session: Session): SessionOption {
+  const started = formatDateTime(session.started_at, "HH:mm");
+  const ended = session.ended_at ? formatDateTime(session.ended_at, "HH:mm") : "";
+  const timeRange = ended && ended !== "-" ? `${started} - ${ended}` : started;
+  return {
+    tool: getAgentLabel(session.agent_type),
+    timeRange: timeRange === "-" ? "时间未知" : timeRange,
+    summary: session.summary || session.task_title || session.session_ref,
+    value: session.id,
+    recommended: true
+  };
+}
+
+function getAgentLabel(agentType: string) {
+  if (agentType === "codex") return "Codex session";
+  if (agentType === "claude_code") return "Claude Code session";
+  return `${agentType || "AI"} session`;
+}
+
+function mapDraftTaskSuggestion(item: DraftTaskProgressSuggestion): TaskProgressSuggestion {
+  return {
+    key: item.task_id,
+    taskId: item.task_id,
+    taskName: item.task_title,
+    progress: clampTaskProgress(item.suggested_progress),
+    status: item.suggested_status,
+    sessionIds: item.evidence_session_ids,
+    evidenceSessionTitles: item.evidence_session_titles,
+    note: item.reason
+  };
+}
+
+function clampTaskProgress(progress: number) {
+  if (!Number.isFinite(progress)) return 0;
+  return Math.max(0, Math.min(100, Math.round(progress)));
+}
+
+function getTaskStatusLabel(status: DraftTaskStatus) {
+  if (status === "done") return "已完成";
+  if (status === "in_progress") return "进行中";
+  return "未开始";
+}
+
 function TaskProgressEditModal({
   task,
   open,
+  sessionOptions,
+  confirmLoading,
   onCancel,
   onChange,
   onSave
 }: {
   task: TaskProgressSuggestion | null;
   open: boolean;
+  sessionOptions: SessionOption[];
+  confirmLoading: boolean;
   onCancel: () => void;
   onChange: (task: TaskProgressSuggestion | null) => void;
   onSave: () => void;
@@ -2120,8 +2243,16 @@ function TaskProgressEditModal({
       onCancel={onCancel}
       footer={
         <Space>
-          <Button onClick={onCancel}>取消</Button>
-          <Button type="primary" onClick={onSave}>保存</Button>
+          <Button onClick={onCancel} disabled={confirmLoading}>取消</Button>
+          <Popconfirm
+            title="确认更新任务进展？"
+            description="确认后会调用任务接口更新状态或进度。"
+            okText="确认更新"
+            cancelText="取消"
+            onConfirm={onSave}
+          >
+            <Button type="primary" loading={confirmLoading}>确认更新任务</Button>
+          </Popconfirm>
         </Space>
       }
     >
@@ -2133,7 +2264,7 @@ function TaskProgressEditModal({
           <span>进度：</span>
           <Select
             value={task.progress}
-            options={[25, 50, 75, 100].map((value) => ({ label: `${value}%`, value }))}
+            options={[0, 25, 50, 75, 100].map((value) => ({ label: `${value}%`, value }))}
             onChange={(progress) => onChange({ ...task, progress })}
           />
         </label>
@@ -2141,18 +2272,32 @@ function TaskProgressEditModal({
           <span>状态：</span>
           <Select
             value={task.status}
-            options={["未开始", "进行中", "已完成"].map((value) => ({ label: value, value }))}
-            onChange={(status) => onChange({ ...task, status })}
+            options={[
+              { label: "未开始", value: "todo" },
+              { label: "进行中", value: "in_progress" },
+              { label: "已完成", value: "done" }
+            ]}
+            onChange={(status) => onChange({ ...task, status: status as DraftTaskStatus })}
           />
         </label>
         <div className="console-session-modal__section">
           <strong>关联 session：</strong>
           <Checkbox.Group
             value={task.sessionIds}
-            onChange={(value) => onChange({ ...task, sessionIds: value as string[] })}
+            onChange={(value) => {
+              const sessionIds = value as string[];
+              onChange({
+                ...task,
+                sessionIds,
+                evidenceSessionTitles: sessionIds.map((sessionId) => {
+                  const session = sessionOptions.find((item) => item.value === sessionId);
+                  return session ? `${session.tool} ${session.timeRange}` : sessionId;
+                })
+              });
+            }}
           >
             <div className="console-task-edit-sessions">
-              {SESSION_OPTIONS.map((session) => (
+              {sessionOptions.map((session) => (
                 <Checkbox key={session.value} value={session.value}>
                   {session.tool} {session.timeRange}
                 </Checkbox>
@@ -2182,6 +2327,10 @@ function ReportModalContent({
   selectedSkill,
   skillOptions,
   uploadedSkills,
+  sessionOptions,
+  isSessionLoading,
+  sessionError,
+  draftError,
   taskSuggestions,
   draftMarkdown,
   onSelectedSessionIdsChange,
@@ -2197,6 +2346,10 @@ function ReportModalContent({
   selectedSkill: string;
   skillOptions: ReportSkillOption[];
   uploadedSkills: ReportSkillOption[];
+  sessionOptions: SessionOption[];
+  isSessionLoading: boolean;
+  sessionError: string | null;
+  draftError: string | null;
   taskSuggestions: TaskProgressSuggestion[];
   draftMarkdown: string;
   onSelectedSessionIdsChange: (value: string[]) => void;
@@ -2215,11 +2368,27 @@ function ReportModalContent({
         />
         <div className="console-session-modal__section">
           <strong>选择生成来源</strong>
-          <span>已找到 {SESSION_OPTIONS.length} 个 session，默认勾选系统认为应进入日报的记录。</span>
+          <span>
+            {isSessionLoading
+              ? "正在加载今日已上传 session。"
+              : `已找到 ${sessionOptions.length} 个 session，默认勾选今日全部记录。`}
+          </span>
         </div>
+        {sessionError ? (
+          <Alert type="error" showIcon message={sessionError} />
+        ) : null}
+        {draftError ? (
+          <Alert type="error" showIcon message="日报草稿生成失败" description={draftError} />
+        ) : null}
         <Checkbox.Group value={selectedSessionIds} onChange={(value) => onSelectedSessionIdsChange(value as string[])}>
           <div className="console-session-list">
-            {SESSION_OPTIONS.map((session) => (
+            {isSessionLoading ? (
+              <div className="console-session-empty">正在加载 session...</div>
+            ) : sessionOptions.length === 0 ? (
+              <div className="console-session-empty">
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今日暂无已上传 session" />
+              </div>
+            ) : sessionOptions.map((session) => (
               <label key={session.value} className="console-session-item">
                 <Checkbox value={session.value} />
                 <span>
@@ -2291,7 +2460,11 @@ function ReportModalContent({
           onChange={(event) => onDraftMarkdownChange(event.target.value)}
         />
         {report.kind === "personal_daily" ? (
-          <TaskProgressSuggestionList tasks={taskSuggestions} onEditTask={onEditTask} />
+          <TaskProgressSuggestionList
+            tasks={taskSuggestions}
+            sessionOptions={sessionOptions}
+            onEditTask={onEditTask}
+          />
         ) : null}
       </div>
     </div>
@@ -2313,6 +2486,7 @@ function GenerationSettingsPanel({
   onSkillUpload: (file: File) => boolean;
   compact?: boolean;
 }) {
+  const selectedSkillLabel = skillOptions.find((option) => option.value === selectedSkill)?.label ?? selectedSkill;
   return (
     <section className={`console-generation-settings${compact ? " console-generation-settings--compact" : ""}`}>
       <div className="console-generation-settings__head">
@@ -2320,7 +2494,7 @@ function GenerationSettingsPanel({
           <strong>Skill 预设</strong>
           <em>选择日报生成口径；上传 skill.md 后会加入预设，并用于本次生成。</em>
         </span>
-        <Tag color="blue">{selectedSkill}</Tag>
+        <Tag color="blue">{selectedSkillLabel}</Tag>
       </div>
       <div className="console-generation-settings__body">
         <label>
@@ -2388,7 +2562,7 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
       </div>
       <strong className="console-follow-card__title">{item.title}</strong>
       <div className="console-follow-card__change">
-        <Tag color={tone === "red" ? "red" : tone === "orange" ? "orange" : "blue"}>{item.risk}</Tag>
+        <Tag color={tone === "red" ? "red" : "blue"}>{item.risk}</Tag>
         {item.activity ? <span>{item.activity}</span> : null}
       </div>
       <div className="console-follow-card__meta">
@@ -2408,9 +2582,9 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
   );
 }
 
-function getFollowTone(item: FollowItem) {
+function getFollowTone(item: FollowItem): "red" | "orange" | "blue" {
   if (item.risk.includes("阻塞") || item.status === "阻塞" || item.risk.includes("超期")) return "red";
-  if (item.risk.includes("临期") || item.deadline === "明天") return "orange";
+  if (item.risk.includes("依赖")) return "orange";
   return "blue";
 }
 
@@ -2421,7 +2595,6 @@ function sortFollowItems(items: FollowItem[]) {
 function getFollowPriority(item: FollowItem) {
   if (item.risk.includes("超期") || item.risk.includes("已超期")) return 1;
   if (item.risk.includes("依赖") || item.status === "阻塞") return 2;
-  if (item.risk.includes("临期") || item.deadline === "明天") return 3;
   if (item.status === "进行中") return 4;
   if (item.status === "已完成") return 9;
   return 5;

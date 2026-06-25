@@ -13,7 +13,7 @@ import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { requirementsBoardApi } from "../api/requirementsBoardApi";
-import type { MockRequirement, RequirementPriority } from "../mock/types";
+import type { MockRequirement, RequirementPriority } from "../types";
 
 interface CreateFormValues {
   title: string;
@@ -182,20 +182,10 @@ export function RequirementCreatePage() {
 
             <section className="aidashboard-form__section">
               <div className="aidashboard-form__section-head">
-                <h2>验收标准</h2>
-                <p>逐条定义可验证的完成条件，后续任务可以关联这些标准。</p>
+                <h2>需求验收标准（可选）</h2>
+                <p>逐条定义需求级完成条件；P0 不要求任务关联或覆盖这些标准。</p>
               </div>
-              <Form.Item
-                label="验收标准"
-                name="acceptance_criteria"
-                rules={[
-                  {
-                    required: true,
-                    whitespace: true,
-                    message: "请填写验收标准"
-                  }
-                ]}
-              >
+              <Form.Item label="需求验收标准（可选）" name="acceptance_criteria">
                 <Input.TextArea
                   rows={7}
                   placeholder={"1. 用户可以完成日报生成并发送\n2. 已关联 Token 来源能正确进入任务证据\n3. 异常情况下有明确提示"}
