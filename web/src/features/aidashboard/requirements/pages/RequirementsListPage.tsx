@@ -3,13 +3,17 @@ import {
   CalendarOutlined,
   CloseOutlined,
   ClockCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
   FileTextOutlined,
   LinkOutlined,
-  MinusOutlined,
+  MoreOutlined,
   PlusOutlined,
   ReloadOutlined,
+  RollbackOutlined,
   StarFilled,
   StarOutlined,
+  StopOutlined,
   TeamOutlined,
   UnorderedListOutlined,
   WarningOutlined
@@ -20,10 +24,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
+  Badge,
   Button,
   DatePicker,
   Descriptions,
   Drawer,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -551,6 +557,13 @@ export function RequirementsListPage() {
       tasksQuery.refetch(),
       tokenSourcesQuery.refetch()
     ]);
+  const allExpanded =
+    filteredRequirements.length > 0 && filteredRequirements.every((item) => expanded.has(item.id));
+  const hasActiveFilters = Boolean(keyword || searchDraft || priority || status || risk || onlyFavorite);
+  const resetFilters = () => {
+    setSearchDraft("");
+    setSearchParams(view === "board" ? {} : { view }, { replace: true });
+  };
 
   return (
     <PagePanel
@@ -592,87 +605,82 @@ export function RequirementsListPage() {
                   { value: "tree", label: "需求列表", icon: <UnorderedListOutlined /> }
                 ]}
               />
-              <Space>
-                <Button
-                  icon={
-                    onlyFavorite ? <StarFilled style={{ color: "#f59e0b" }} /> : <StarOutlined />
-                  }
-                  type={onlyFavorite ? "primary" : "default"}
-                  ghost={onlyFavorite}
-                  onClick={() => updateParam("favorite", onlyFavorite ? undefined : "1")}
-                >
-                  只看关注
-                </Button>
-                <Button
-                  icon={<ReloadOutlined />}
-                  loading={requirementsQuery.isFetching || tasksQuery.isFetching}
-                  onClick={refreshAll}
-                >
-                  刷新
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => navigate(appendSearch("/requirements/create", searchParams))}
-                >
-                  新建需求
-                </Button>
-              </Space>
+              <Button
+                className="requirements-board__primary-action"
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => navigate(appendSearch("/requirements/create", searchParams))}
+              >
+                新建需求
+              </Button>
             </div>
           </div>
 
           <div className="requirements-board__toolbar">
-            <Input.Search
-              allowClear
-              value={searchDraft}
-              placeholder="搜索需求、任务或负责人"
-              onChange={(event) => setSearchDraft(event.target.value)}
-              onSearch={(value) => updateParam("keyword", value.trim() || undefined)}
-            />
-            <Select
-              allowClear
-              placeholder="全部阶段"
-              value={status}
-              onChange={(next) => updateParam("status", next)}
-              options={STATUS_OPTIONS}
-            />
-            <Select
-              allowClear
-              placeholder="全部优先级"
-              value={priority}
-              onChange={(next) => updateParam("priority", next)}
-              options={PRIORITY_OPTIONS}
-            />
-            <Select
-              allowClear
-              placeholder="风险类型"
-              value={risk}
-              onChange={(next) => updateParam("risk", next)}
-              options={RISK_OPTIONS}
-            />
-            {view === "tree" ? (
+            <div className="requirements-board__filter-controls">
+              <Input.Search
+                allowClear
+                value={searchDraft}
+                placeholder="搜索需求、任务或负责人"
+                onChange={(event) => setSearchDraft(event.target.value)}
+                onSearch={(value) => updateParam("keyword", value.trim() || undefined)}
+              />
+              <Select
+                allowClear
+                placeholder="全部阶段"
+                value={status}
+                onChange={(next) => updateParam("status", next)}
+                options={STATUS_OPTIONS}
+              />
+              <Select
+                allowClear
+                placeholder="全部优先级"
+                value={priority}
+                onChange={(next) => updateParam("priority", next)}
+                options={PRIORITY_OPTIONS}
+              />
+              <Select
+                allowClear
+                placeholder="风险类型"
+                value={risk}
+                onChange={(next) => updateParam("risk", next)}
+                options={RISK_OPTIONS}
+              />
               <Button
-                onClick={() =>
-                  setExpanded(
-                    filteredRequirements.every((item) => expanded.has(item.id))
-                      ? new Set()
-                      : new Set(filteredRequirements.map((item) => item.id))
-                  )
-                }
+                className={`requirements-board__filter-chip${onlyFavorite ? " is-active" : ""}`}
+                icon={onlyFavorite ? <StarFilled /> : <StarOutlined />}
+                onClick={() => updateParam("favorite", onlyFavorite ? undefined : "1")}
               >
-                {filteredRequirements.every((item) => expanded.has(item.id))
-                  ? "收起任务"
-                  : "展开任务"}
+                关注
               </Button>
-            ) : null}
-            <Button
-              onClick={() => {
-                setSearchDraft("");
-                setSearchParams(view === "board" ? {} : { view }, { replace: true });
-              }}
-            >
-              重置
-            </Button>
+            </div>
+            <div className="requirements-board__toolbar-utilities">
+              {view === "tree" ? (
+                <Button
+                  className="requirements-board__utility-action"
+                  type="text"
+                  onClick={() =>
+                    setExpanded(
+                      allExpanded ? new Set() : new Set(filteredRequirements.map((item) => item.id))
+                    )
+                  }
+                >
+                  {allExpanded ? "收起全部" : "展开全部"}
+                </Button>
+              ) : null}
+              {hasActiveFilters ? (
+                <Button className="requirements-board__utility-action" type="text" onClick={resetFilters}>
+                  清除筛选
+                </Button>
+              ) : null}
+              <Button
+                className="requirements-board__refresh-action"
+                aria-label="刷新"
+                icon={<ReloadOutlined />}
+                loading={requirementsQuery.isFetching || tasksQuery.isFetching}
+                onClick={refreshAll}
+              />
+            </div>
           </div>
         </div>
 
@@ -914,11 +922,6 @@ function RequirementCard({
           <div className="requirements-board__card-top">
             <div className="requirements-board__card-title">
               <h3 title={requirement.title}>{requirement.title}</h3>
-              {requirement.description ? (
-                <p title={requirement.description}>{requirement.description}</p>
-              ) : (
-                <p>暂无需求描述</p>
-              )}
             </div>
             <div className="requirements-board__card-actions">
               <RequirementPriorityTag priority={requirement.priority} />
@@ -997,166 +1000,200 @@ function RequirementTree({
   onToggleRequirementFavorite: (requirementId: string) => void;
   onToggleTaskFavorite: (taskId: string) => void;
 }) {
-  return (
-    <div className="requirements-tree">
-      <div className="requirements-tree__header">
-        <span>需求</span>
-        <span>阶段</span>
-        <span>优先级</span>
-        <span>任务进度</span>
-        <span>风险</span>
-        <span>截止 / 更新</span>
-        <span>操作</span>
-      </div>
-      <div className="requirements-tree__body">
-        {requirements.map((requirement) => {
-          const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
-          const isExpanded = expanded.has(requirement.id);
-          const doneTasks = requirementTasks.filter((t) => t.status === "done").length;
-          const blockedTasks = requirementTasks.filter((t) => t.status === "blocked").length;
-          const taskSummary = requirementTasks.length
-            ? `${doneTasks}/${requirementTasks.length} 已完成`
-            : "待拆解";
-          const riskSummary = blockedTasks ? `${blockedTasks} 个上游阻塞` : "无明显风险";
-          return (
-            <div key={requirement.id}>
-              <div
-                className={`requirements-tree__row is-requirement${
-                  blockedTasks ? " has-blocked" : ""
-                }`}
-                onClick={() => onOpenRequirement(requirement)}
+  const columns: TableProps<MockRequirement>["columns"] = [
+    {
+      title: "需求",
+      key: "title",
+      width: 420,
+      render: (_, requirement) => {
+        const ownerLine =
+          requirement.team_names.join("、") || requirement.creator_name || "未分配团队";
+        return (
+          <div className="requirements-tree__title-main">
+            <strong title={requirement.title}>{requirement.title}</strong>
+            <small title={ownerLine}>{ownerLine}</small>
+          </div>
+        );
+      }
+    },
+    {
+      title: "阶段",
+      dataIndex: "status",
+      key: "status",
+      width: 96,
+      render: (stage: RequirementStage) => <RequirementStageTag stage={stage} />
+    },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      key: "priority",
+      width: 86,
+      render: (priority: RequirementPriority) => <PriorityPill priority={priority} />
+    },
+    {
+      title: "任务进度",
+      key: "progress",
+      width: 124,
+      render: (_, requirement) => {
+        const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
+        const doneTasks = requirementTasks.filter((task) => task.status === "done").length;
+        return (
+          <div className="requirements-tree__progress-summary">
+            <strong>{requirementTasks.length ? `${doneTasks}/${requirementTasks.length} 已完成` : "待拆解"}</strong>
+          </div>
+        );
+      }
+    },
+    {
+      title: "风险",
+      key: "risk",
+      width: 104,
+      render: (_, requirement) => {
+        const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
+        const blockedTasks = requirementTasks.filter((task) => task.status === "blocked").length;
+        const riskSummary = blockedTasks ? `${blockedTasks} 个上游阻塞` : "正常";
+        return (
+          <span
+            className={`requirements-tree__risk ${blockedTasks ? "is-danger" : ""}`}
+            title={riskSummary}
+          >
+            {riskSummary}
+          </span>
+        );
+      }
+    },
+    {
+      title: "截止 / 更新",
+      key: "updated",
+      width: 128,
+      render: (_, requirement) => (
+        <div className="requirements-tree__update">
+          <span>{formatDate(requirement.deadline)}</span>
+          <small>{formatRecentUpdate(requirement.updated_at)}</small>
+        </div>
+      )
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 128,
+      align: "right",
+      render: (_, requirement) => {
+        const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
+        return (
+          <Space size={2} className="requirements-tree__actions">
+            {!requirementTasks.length ? (
+              <Button
+                size="small"
+                type="link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAddTask(requirement.id);
+                }}
               >
-                <div className="requirements-tree__title">
-                  {requirementTasks.length ? (
-                    <button
-                      type="button"
-                      className="requirements-tree__expand"
-                      aria-label={isExpanded ? "收起任务" : "展开任务"}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggle(requirement.id);
-                      }}
-                    >
-                      {isExpanded ? <MinusOutlined /> : <PlusOutlined />}
-                    </button>
-                  ) : (
-                    <span className="requirements-tree__expand-placeholder" />
-                  )}
-                  <div>
-                    <strong>{requirement.title}</strong>
-                    <small>
-                      {requirement.description || "暂无描述"} ·{" "}
-                      {requirement.team_names.join("、") || "未分配团队"}
-                    </small>
-                  </div>
-                </div>
-                <div className="requirements-tree__cell">
-                  <RequirementStageTag stage={requirement.status} />
-                </div>
-                <PriorityPill priority={requirement.priority} />
-                <div className="requirements-tree__progress-summary">
-                  <strong>{taskSummary}</strong>
-                </div>
-                <span
-                  className={`requirements-tree__risk ${blockedTasks ? "is-danger" : ""}`}
-                  title={riskSummary}
-                >
-                  {riskSummary}
-                </span>
-                <div className="requirements-tree__update">
-                  <span>{formatDate(requirement.deadline)}</span>
-                  <small>{formatRecentUpdate(requirement.updated_at)}</small>
-                </div>
-                <Space size={2} className="requirements-tree__actions">
-                  {!requirementTasks.length && requirement.can_create_task ? (
-                    <Button
-                      size="small"
-                      type="link"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onAddTask(requirement.id);
-                      }}
-                    >
-                      添加任务
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleRequirementFavorite(requirement.id);
-                    }}
-                  >
-                    {favoriteRequirementIds.has(requirement.id) ? "已关注" : "关注"}
-                  </Button>
-                </Space>
-              </div>
+                添加任务
+              </Button>
+            ) : null}
+            <Button
+              size="small"
+              type="link"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleRequirementFavorite(requirement.id);
+              }}
+            >
+              {favoriteRequirementIds.has(requirement.id) ? "已关注" : "关注"}
+            </Button>
+          </Space>
+        );
+      }
+    }
+  ];
 
-              {isExpanded ? (
-                <div className="requirements-tree__task-panel">
-                  {[...requirementTasks]
-                    .sort((a, b) => Number(b.status === "blocked") - Number(a.status === "blocked"))
-                    .map((task) => {
-                      const taskTokens = sumTokensFromSources(
-                        task.token_source_ids,
-                        tokenSourceMap
-                      );
-                      return (
-                        <div
-                          className={`requirements-tree__task-item${
-                            task.status === "blocked" ? " has-blocked" : ""
-                          }`}
-                          key={task.id}
-                          onClick={() => onOpenTask(task)}
+  return (
+    <Table<MockRequirement>
+      className="requirements-tree"
+      columns={columns}
+      dataSource={requirements}
+      pagination={false}
+      rowKey="id"
+      size="middle"
+      scroll={{ x: 1080 }}
+      onRow={(requirement) => ({
+        onClick: () => onOpenRequirement(requirement)
+      })}
+      rowClassName={(requirement) => {
+        const blockedTasks = (tasksByRequirement.get(requirement.id) ?? []).some(
+          (task) => task.status === "blocked"
+        );
+        return blockedTasks ? "requirements-tree__table-row has-blocked" : "requirements-tree__table-row";
+      }}
+      expandable={{
+        columnWidth: 42,
+        expandedRowKeys: Array.from(expanded),
+        rowExpandable: (requirement) => Boolean(tasksByRequirement.get(requirement.id)?.length),
+        onExpand: (_isExpanded, requirement) => onToggle(requirement.id),
+        expandedRowRender: (requirement) => {
+          const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
+          return (
+            <div className="requirements-tree__task-panel">
+              {[...requirementTasks]
+                .sort((a, b) => Number(b.status === "blocked") - Number(a.status === "blocked"))
+                .map((task) => {
+                  const taskTokens = sumTokensFromSources(task.token_source_ids, tokenSourceMap);
+                  return (
+                    <div
+                      className={`requirements-tree__task-item${
+                        task.status === "blocked" ? " has-blocked" : ""
+                      }`}
+                      key={task.id}
+                      onClick={() => onOpenTask(task)}
+                    >
+                      <div className="requirements-tree__task-main">
+                        <strong title={task.title}>{task.title}</strong>
+                        <small>{formatDateTime(task.updated_at)} 更新</small>
+                      </div>
+                      <div className="requirements-tree__task-meta">
+                        <TaskStatusPill status={task.status} />
+                        <PriorityPill priority={task.priority} />
+                      </div>
+                      <div className="requirements-tree__task-progress">
+                        <RequirementProgress value={task.progress} />
+                      </div>
+                      <div className="requirements-tree__task-detail">
+                        <span>截止：{formatDate(task.due_date)}</span>
+                        <span>{taskTokens > 0 ? formatEvidenceCount(taskTokens) : "暂无关联 session"}</span>
+                      </div>
+                      <Space size={2} className="requirements-tree__task-actions">
+                        <Button
+                          size="small"
+                          type="link"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenTask(task);
+                          }}
                         >
-                          <div className="requirements-tree__task-main">
-                            <strong title={task.title}>{task.title}</strong>
-                            <small>{formatDateTime(task.updated_at)} 更新</small>
-                          </div>
-                          <div className="requirements-tree__task-meta">
-                            <TaskStatusPill status={task.status} />
-                            <PriorityPill priority={task.priority} />
-                          </div>
-                          <div className="requirements-tree__task-progress">
-                            <RequirementProgress value={task.progress} />
-                          </div>
-                          <div className="requirements-tree__task-detail">
-                            <span>截止：{formatDate(task.due_date)}</span>
-                            <span>{taskTokens > 0 ? formatEvidenceCount(taskTokens) : "暂无关联 session"}</span>
-                          </div>
-                          <Space size={2} className="requirements-tree__task-actions">
-                            <Button
-                              size="small"
-                              type="link"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onOpenTask(task);
-                              }}
-                            >
-                              详情
-                            </Button>
-                            <Button
-                              size="small"
-                              type="link"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onToggleTaskFavorite(task.id);
-                              }}
-                            >
-                              {favoriteTaskIds.has(task.id) ? "已关注" : "关注"}
-                            </Button>
-                          </Space>
-                        </div>
-                      );
-                    })}
-                </div>
-              ) : null}
+                          详情
+                        </Button>
+                        <Button
+                          size="small"
+                          type="link"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleTaskFavorite(task.id);
+                          }}
+                        >
+                          {favoriteTaskIds.has(task.id) ? "已关注" : "关注"}
+                        </Button>
+                      </Space>
+                    </div>
+                  );
+                })}
             </div>
           );
-        })}
-      </div>
-    </div>
+        }
+      }}
+    />
   );
 }
 
@@ -1178,11 +1215,31 @@ function TokenSourcePicker({
   confirmLoading
 }: TokenSourcePickerProps) {
   const [selected, setSelected] = useState<string[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const [tool, setTool] = useState<string>();
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds]);
   const available = useMemo(
     () => sources.filter((source) => !excludeSet.has(source.id) && source.token > 0),
     [sources, excludeSet]
   );
+  const toolOptions = useMemo(
+    () =>
+      Array.from(new Set(available.map((source) => source.tool).filter(Boolean))).map((value) => ({
+        value,
+        label: value
+      })),
+    [available]
+  );
+  const filteredAvailable = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    return available.filter((source) => {
+      const keywordMatched =
+        !normalizedKeyword ||
+        [source.summary, source.uploader, source.tool].join(" ").toLowerCase().includes(normalizedKeyword);
+      const toolMatched = !tool || source.tool === tool;
+      return keywordMatched && toolMatched;
+    });
+  }, [available, keyword, tool]);
   const selectedTokenTotal = useMemo(
     () =>
       selected.reduce((total, id) => {
@@ -1217,14 +1274,22 @@ function TokenSourcePicker({
 
   return (
     <Modal
-      title="关联 session"
+      className="requirements-session-modal"
+      title={
+        <div className="requirements-modal-title">
+          <strong>关联工作记录</strong>
+          <span>选择可作为该需求证据来源的 session</span>
+        </div>
+      }
       open={open}
       width={780}
       onCancel={() => {
         setSelected([]);
+        setKeyword("");
+        setTool(undefined);
         onCancel();
       }}
-      okText="确认关联"
+      okText={selected.length ? `关联 ${selected.length} 条记录` : "关联记录"}
       okButtonProps={{ disabled: !selected.length, loading: confirmLoading }}
       cancelText="取消"
       onOk={async () => {
@@ -1233,30 +1298,40 @@ function TokenSourcePicker({
       }}
       destroyOnHidden
     >
-      <p style={{ marginTop: 0, color: "#7a879a" }}>
-        选择已上报的 session 作为当前需求或任务的推进证据。
-      </p>
+      <div className="requirements-session-modal__toolbar">
+        <Input.Search
+          allowClear
+          value={keyword}
+          placeholder="搜索摘要、上传人或工具"
+          onChange={(event) => setKeyword(event.target.value)}
+        />
+        <Select
+          allowClear
+          value={tool}
+          placeholder="全部工具"
+          options={toolOptions}
+          onChange={setTool}
+        />
+      </div>
       <Table<MockTokenSource>
         rowKey="id"
         size="small"
         columns={columns}
-        dataSource={available}
-        pagination={{ pageSize: 6, showSizeChanger: false }}
+        dataSource={filteredAvailable}
+        pagination={false}
+        scroll={{ y: 360 }}
         rowSelection={{
           selectedRowKeys: selected,
           onChange: (keys) => setSelected(keys as string[])
         }}
         locale={{ emptyText: "暂无可关联 session" }}
       />
-      <div
-        style={{
-          marginTop: 12,
-          color: "#526173",
-          fontSize: 12,
-          textAlign: "right"
-        }}
-      >
-        已选 {selected.length} 条 · 累计 {formatTokens(selectedTokenTotal)} Token
+      <div className="requirements-session-modal__summary">
+        <span>
+          可选 {filteredAvailable.length} 条
+          {available.length !== filteredAvailable.length ? ` / 共 ${available.length} 条` : ""}
+        </span>
+        <strong>已选 {selected.length} 条 · {formatTokens(selectedTokenTotal)} Token</strong>
       </div>
     </Modal>
   );
@@ -1402,6 +1477,43 @@ function RequirementDrawer({
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "移除失败")
   });
+  const moreActionItems = requirement
+    ? requirement.status === "cancelled"
+      ? requirement.can_delete
+        ? [
+            {
+              key: "delete",
+              danger: true,
+              icon: <DeleteOutlined />,
+              label: "删除需求",
+              onClick: handleDelete
+            }
+          ]
+        : []
+      : [
+          ...(requirement.can_cancel
+            ? [
+                {
+                  key: "cancel",
+                  icon: <StopOutlined />,
+                  label: "取消需求",
+                  onClick: handleCancel
+                }
+              ]
+            : []),
+          ...(requirement.can_delete
+            ? [
+                {
+                  key: "delete",
+                  danger: true,
+                  icon: <DeleteOutlined />,
+                  label: "删除需求",
+                  onClick: handleDelete
+                }
+              ]
+            : [])
+        ]
+    : [];
 
   return (
     <Drawer
@@ -1413,7 +1525,6 @@ function RequirementDrawer({
         requirement ? (
           <div className="requirements-drawer__title-row">
             <div className="requirements-drawer__title">
-              <small>需求详情</small>
               <strong>{requirement.title}</strong>
             </div>
             {onToggleFavorite ? (
@@ -1433,68 +1544,40 @@ function RequirementDrawer({
       {requirement ? (
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <section className="requirements-drawer__summary">
-            <div className="requirements-drawer__summary-tags">
-              <RequirementStageTag stage={requirement.status} />
-              <RequirementPriorityTag priority={requirement.priority} />
-              {blockedCount ? <Tag color="error">{blockedCount} 个上游阻塞</Tag> : null}
-            </div>
-            {canManage ? (
-              <Space size={8} wrap style={{ marginBottom: 8 }}>
-                {requirement.status === "cancelled" ? (
-                  <>
-                    {requirement.can_restore ? (
+            <div className="requirements-drawer__summary-head">
+              <div className="requirements-drawer__summary-tags">
+                <RequirementStageTag stage={requirement.status} />
+                <RequirementPriorityTag priority={requirement.priority} />
+                {blockedCount ? <Tag color="error">{blockedCount} 个上游阻塞</Tag> : null}
+              </div>
+              {canManage ? (
+                <div className="requirements-drawer__actions">
+                  {requirement.status === "cancelled" ? (
+                    requirement.can_restore ? (
                       <Button
-                        size="small"
                         type="primary"
+                        icon={<RollbackOutlined />}
                         loading={restoreMutation.isPending}
                         onClick={handleRestore}
                       >
-                        恢复需求
+                        恢复
                       </Button>
-                    ) : null}
-                    {requirement.can_delete ? (
-                      <Button
-                        size="small"
-                        danger
-                        loading={deleteMutation.isPending}
-                        onClick={handleDelete}
-                      >
-                        删除需求
-                      </Button>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    {requirement.can_update ? (
-                      <Button size="small" onClick={() => setEditOpen(true)}>
-                        编辑需求
-                      </Button>
-                    ) : null}
-                    {requirement.can_cancel ? (
-                      <Button
-                        size="small"
-                        loading={cancelMutation.isPending}
-                        onClick={handleCancel}
-                      >
-                        取消需求
-                      </Button>
-                    ) : null}
-                    {requirement.can_delete ? (
-                      <Button
-                        size="small"
-                        danger
-                        loading={deleteMutation.isPending}
-                        onClick={handleDelete}
-                      >
-                        删除需求
-                      </Button>
-                    ) : null}
-                  </>
-                )}
-              </Space>
-            ) : null}
+                    ) : null
+                  ) : requirement.can_update ? (
+                    <Button type="primary" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                      编辑
+                    </Button>
+                  ) : null}
+                  {moreActionItems.length ? (
+                    <Dropdown menu={{ items: moreActionItems }} trigger={["click"]}>
+                      <Button icon={<MoreOutlined />} aria-label="更多操作" />
+                    </Dropdown>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <p>{requirement.description || "暂无需求描述"}</p>
-            <div className="requirements-drawer__summary-grid">
+            <div className="requirements-drawer__summary-strip">
               <div>
                 <span>推进进度</span>
                 {tasks.length ? (
@@ -1515,67 +1598,40 @@ function RequirementDrawer({
           </section>
 
           <Tabs
+            key={requirement.id}
             className="requirements-drawer__tabs"
+            defaultActiveKey="tasks"
             items={[
               {
-                key: "overview",
-                label: "概览",
-                children: (
-                  <section className="requirements-drawer__section">
-                    <h3>基础信息</h3>
-                    <Descriptions column={1} size="small" colon={false}>
-                      <Descriptions.Item label="创建者">
-                        {requirement.creator_name}（
-                        {ROLE_LABELS[requirement.creator_role as UserRole] ??
-                          requirement.creator_role}
-                        ）
-                      </Descriptions.Item>
-                      <Descriptions.Item label="参与团队">
-                        {requirement.team_names.join("、") || "-"}
-                      </Descriptions.Item>
-                      <Descriptions.Item label="更新时间">
-                        {formatDateTime(requirement.updated_at)}
-                      </Descriptions.Item>
-                      <Descriptions.Item label="飞书文档">
-                        {requirement.feishu_doc_url ? (
-                          <a href={requirement.feishu_doc_url} target="_blank" rel="noreferrer">
-                            <LinkOutlined /> 打开文档
-                          </a>
-                        ) : (
-                          "-"
-                        )}
-                      </Descriptions.Item>
-                    </Descriptions>
-                  </section>
-                )
-              },
-              {
                 key: "tasks",
-                label: `任务 ${tasks.length}`,
+                label: (
+                  <span className="requirements-drawer__tab-label">
+                    任务 <Badge size="small" count={tasks.length} />
+                  </span>
+                ),
                 children: (
                   <section className="requirements-drawer__section">
                     <div className="requirements-drawer__section-head">
                       <h3>任务拆解</h3>
-                      <Space size={6} wrap>
-                        <Tag>{tasks.length} 个任务</Tag>
-                        <Tag color="success">{completedCount} 个完成</Tag>
-                        <Tag color={blockedCount ? "error" : "default"}>
-                          {blockedCount} 个上游阻塞
-                        </Tag>
-                      </Space>
-                    </div>
-                    {!tasks.length ? (
-                      <div className="requirements-drawer__execution-empty">
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未拆解任务" />
+                      <div className="requirements-drawer__section-actions">
+                        <span>
+                          {completedCount}/{tasks.length || 0} 完成
+                          {blockedCount ? ` · ${blockedCount} 阻塞` : ""}
+                        </span>
                         {requirement.can_create_task ? (
                           <Button
-                            type="primary"
+                            size="small"
                             icon={<PlusOutlined />}
                             onClick={() => onCreatorOpenChange(true)}
                           >
                             添加任务
                           </Button>
                         ) : null}
+                      </div>
+                    </div>
+                    {!tasks.length ? (
+                      <div className="requirements-drawer__execution-empty">
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未拆解任务" />
                       </div>
                     ) : (
                       <div className="requirements-drawer__task-list">
@@ -1617,19 +1673,16 @@ function RequirementDrawer({
                           })}
                       </div>
                     )}
-                    {tasks.length && requirement.can_create_task ? (
-                      <div className="requirements-drawer__execution-footer">
-                        <Button icon={<PlusOutlined />} onClick={() => onCreatorOpenChange(true)}>
-                          继续添加任务
-                        </Button>
-                      </div>
-                    ) : null}
                   </section>
                 )
               },
               {
                 key: "acceptance",
-                label: `需求验收 ${requirement.acceptance_criteria.length}`,
+                label: (
+                  <span className="requirements-drawer__tab-label">
+                    验收 <Badge size="small" count={requirement.acceptance_criteria.length} />
+                  </span>
+                ),
                 children: (
                   <section className="requirements-drawer__section">
                     <div className="requirements-drawer__section-head">
@@ -1653,12 +1706,12 @@ function RequirementDrawer({
               },
               {
                 key: "records",
-                label: "关联 session",
+                label: "记录",
                 children: (
                   <section className="requirements-drawer__section">
                     <div className="requirements-drawer__section-head">
-                      <h3>关联 session</h3>
-                      <Space size={8}>
+                      <h3>工作记录</h3>
+                      <div className="requirements-drawer__section-actions">
                         {totalTokens > 0 ? (
                           <span>合计 {formatTokens(totalTokens)} Token</span>
                         ) : (
@@ -1671,7 +1724,7 @@ function RequirementDrawer({
                         >
                           关联 session
                         </Button>
-                      </Space>
+                      </div>
                     </div>
                     <TokenSourceList
                       requirementSources={requirement.token_source_ids
@@ -1686,6 +1739,38 @@ function RequirementDrawer({
                       onRemoveRequirementSource={(id) => unlinkMutation.mutate(id)}
                       removing={unlinkMutation.isPending ? unlinkMutation.variables : undefined}
                     />
+                  </section>
+                )
+              },
+              {
+                key: "overview",
+                label: "信息",
+                children: (
+                  <section className="requirements-drawer__section">
+                    <h3>基础信息</h3>
+                    <Descriptions column={1} size="small" colon={false}>
+                      <Descriptions.Item label="创建者">
+                        {requirement.creator_name}（
+                        {ROLE_LABELS[requirement.creator_role as UserRole] ??
+                          requirement.creator_role}
+                        ）
+                      </Descriptions.Item>
+                      <Descriptions.Item label="参与团队">
+                        {requirement.team_names.join("、") || "-"}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="更新时间">
+                        {formatDateTime(requirement.updated_at)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="飞书文档">
+                        {requirement.feishu_doc_url ? (
+                          <a href={requirement.feishu_doc_url} target="_blank" rel="noreferrer">
+                            <LinkOutlined /> 打开文档
+                          </a>
+                        ) : (
+                          "-"
+                        )}
+                      </Descriptions.Item>
+                    </Descriptions>
                   </section>
                 )
               }
@@ -1930,9 +2015,15 @@ function TaskCreateModal({
 
   return (
     <Modal
-      title={`为「${requirementTitle}」添加任务`}
+      className="requirements-task-modal"
+      title={
+        <div className="requirements-modal-title">
+          <strong>添加任务</strong>
+          <span>所属需求：{requirementTitle}</span>
+        </div>
+      }
       open={open}
-      width={560}
+      width={640}
       destroyOnHidden
       onCancel={handleCancel}
       onOk={() => form.submit()}
@@ -1941,61 +2032,76 @@ function TaskCreateModal({
       confirmLoading={createMutation.isPending}
     >
       <Form
+        className="requirements-task-modal__form"
         form={form}
         layout="vertical"
         initialValues={{ priority: "medium" }}
         onFinish={(values) => createMutation.mutate(values)}
       >
-        <Form.Item
-          label="任务标题"
-          name="title"
-          rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
-        >
-          <Input placeholder="任务标题" />
-        </Form.Item>
-        <Form.Item
-          label="负责人"
-          name="assignee_id"
-          rules={[{ required: true, message: "请选择负责人" }]}
-        >
-          <Select
-            placeholder="选择负责人"
-            loading={assigneesQuery.isLoading}
-            disabled={assigneesQuery.isLoading || assigneesQuery.isError}
-            options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
-              value: item.id,
-              label: `${item.name} (${item.employee_id})`
-            }))}
-          />
-        </Form.Item>
-        <Form.Item
-          label="优先级"
-          name="priority"
-          rules={[{ required: true, message: "请选择优先级" }]}
-        >
-          <Select
-            options={[
-              { value: "low", label: "低" },
-              { value: "medium", label: "中" },
-              { value: "high", label: "高" }
-            ]}
-          />
-        </Form.Item>
-        <Form.Item label="截止日期" name="due_date">
-          <DatePicker style={{ width: "100%" }} />
-        </Form.Item>
-        <Form.Item label="上游依赖" name="dependency_task_ids">
-          <Select
-            mode="multiple"
-            placeholder={dependencyOptions.length ? "选择上游依赖任务" : "当前需求暂无可选任务"}
-            disabled={!dependencyOptions.length}
-            options={dependencyOptions}
-            allowClear
-          />
-        </Form.Item>
-        <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
-          <Input.TextArea rows={4} placeholder={"1. 完成接口联调\n2. 页面状态展示正确"} />
-        </Form.Item>
+        <section className="requirements-task-modal__section">
+          <h4>基本信息</h4>
+          <Form.Item
+            label="任务标题"
+            name="title"
+            rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
+          >
+            <Input placeholder="输入清晰、可交付的任务标题" />
+          </Form.Item>
+          <div className="requirements-task-modal__grid">
+            <Form.Item
+              label="负责人"
+              name="assignee_id"
+              rules={[{ required: true, message: "请选择负责人" }]}
+            >
+              <Select
+                placeholder="选择负责人"
+                loading={assigneesQuery.isLoading}
+                disabled={assigneesQuery.isLoading || assigneesQuery.isError}
+                options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
+                  value: item.id,
+                  label: `${item.name} (${item.employee_id})`
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              label="优先级"
+              name="priority"
+              rules={[{ required: true, message: "请选择优先级" }]}
+            >
+              <Select
+                options={[
+                  { value: "low", label: "低" },
+                  { value: "medium", label: "中" },
+                  { value: "high", label: "高" }
+                ]}
+              />
+            </Form.Item>
+            <Form.Item label="截止日期" name="due_date">
+              <DatePicker style={{ width: "100%" }} />
+            </Form.Item>
+          </div>
+        </section>
+        <section className="requirements-task-modal__section">
+          <h4>依赖关系</h4>
+          {dependencyOptions.length ? (
+            <Form.Item label="上游依赖" name="dependency_task_ids">
+              <Select
+                mode="multiple"
+                placeholder="选择上游依赖任务"
+                options={dependencyOptions}
+                allowClear
+              />
+            </Form.Item>
+          ) : (
+            <p className="requirements-task-modal__hint">当前需求暂无可选上游任务。</p>
+          )}
+        </section>
+        <section className="requirements-task-modal__section">
+          <h4>验收标准</h4>
+          <Form.Item label="任务验收标准（可选）" name="acceptance_criteria">
+            <Input.TextArea rows={4} placeholder={"1. 完成接口联调\n2. 页面状态展示正确"} />
+          </Form.Item>
+        </section>
       </Form>
     </Modal>
   );
@@ -2113,7 +2219,9 @@ function TaskDrawer({
       title={
         task ? (
           <div className="requirements-drawer__title-row">
-            <span>任务详情 · {task.title}</span>
+            <div className="requirements-drawer__title">
+              <strong>{task.title}</strong>
+            </div>
             {onToggleFavorite ? (
               <button
                 type="button"
@@ -2277,13 +2385,70 @@ function TaskDrawerContent({
     .map((id) => tokenSourceMap.get(id))
     .filter((source): source is MockTokenSource => Boolean(source));
   const linkedTotal = linkedSources.reduce((total, source) => total + source.token, 0);
+  const primaryStatusAction = (() => {
+    if (!task.can_update_status) return undefined;
+    if (task.status === "done") {
+      return {
+        label: "重新打开",
+        onClick: () => requestStatusChange("todo")
+      };
+    }
+    if (dependencyBlocked) return undefined;
+    if (task.status === "todo") {
+      return {
+        label: "开始任务",
+        onClick: () => requestStatusChange("in_progress")
+      };
+    }
+    return {
+      label: "标记完成",
+      onClick: () => requestStatusChange("done")
+    };
+  })();
+  const moreActionItems = task.can_delete
+    ? [
+        {
+          key: "delete",
+          danger: true,
+          icon: <DeleteOutlined />,
+          label: "删除任务",
+          onClick: handleDelete
+        }
+      ]
+    : [];
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <section className="requirements-drawer__section">
-        <div className="requirements-drawer__section-head">
-          <h3>执行状态</h3>
-          <TaskStatusTag status={task.status} />
+      <section className="requirements-drawer__summary requirements-task-detail__summary">
+        <div className="requirements-drawer__summary-head">
+          <div className="requirements-drawer__summary-tags">
+            <TaskStatusTag status={task.status} />
+            <RequirementPriorityTag priority={task.priority} />
+            {dependencyBlocked ? <Tag color="error">上游阻塞</Tag> : null}
+          </div>
+          {(task.can_update_status || task.can_update_meta || task.can_delete) ? (
+            <div className="requirements-drawer__actions">
+              {primaryStatusAction ? (
+                <Button
+                  type="primary"
+                  loading={statusMutation.isPending}
+                  onClick={primaryStatusAction.onClick}
+                >
+                  {primaryStatusAction.label}
+                </Button>
+              ) : null}
+              {task.can_update_meta ? (
+                <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                  编辑
+                </Button>
+              ) : null}
+              {moreActionItems.length ? (
+                <Dropdown menu={{ items: moreActionItems }} trigger={["click"]}>
+                  <Button icon={<MoreOutlined />} aria-label="更多操作" />
+                </Dropdown>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {dependencyBlocked ? (
           <Alert
@@ -2293,6 +2458,20 @@ function TaskDrawerContent({
             style={{ marginBottom: 12 }}
           />
         ) : null}
+        <div className="requirements-drawer__summary-strip">
+          <div>
+            <span>任务进度</span>
+            <RequirementProgress value={task.progress} />
+          </div>
+          <div>
+            <span>负责人</span>
+            <strong>{task.assignee_name || "未分配"}</strong>
+          </div>
+          <div>
+            <span>截止日期</span>
+            <strong>{formatDate(task.due_date)}</strong>
+          </div>
+        </div>
         <div className="requirements-drawer__progress-editor">
           <Slider min={0} max={100} value={progress} disabled={!task.can_update_progress} onChange={setProgress} />
           <InputNumber
@@ -2312,63 +2491,20 @@ function TaskDrawerContent({
             保存进度
           </Button>
         </div>
-        {(task.can_update_status || task.can_update_meta || task.can_delete) ? (
-          <Space wrap size={8} style={{ marginTop: 12 }}>
-            {task.can_update_status && task.status !== "done" && !dependencyBlocked ? (
-              <Button
-                type="primary"
-                size="small"
-                loading={statusMutation.isPending}
-                onClick={() => requestStatusChange("done")}
-              >
-                标记完成
-              </Button>
-            ) : null}
-            {task.can_update_status && task.status === "done" ? (
-              <Button
-                size="small"
-                loading={statusMutation.isPending}
-                onClick={() => requestStatusChange("todo")}
-              >
-                重新打开
-              </Button>
-            ) : null}
-            {task.can_update_status && task.status === "todo" && !dependencyBlocked ? (
-              <Button
-                size="small"
-                loading={statusMutation.isPending}
-                onClick={() => requestStatusChange("in_progress")}
-              >
-                开始任务
-              </Button>
-            ) : null}
-              {task.can_update_meta ? (
-                <Button size="small" onClick={() => setEditOpen(true)}>
-                  编辑任务
-                </Button>
-              ) : null}
-              {task.can_delete ? (
-                <Button
-                  size="small"
-                  danger
-                  loading={deleteMutation.isPending}
-                  onClick={handleDelete}
-                >
-                  删除任务
-                </Button>
-              ) : null}
-          </Space>
-        ) : null}
       </section>
 
       <section className="requirements-drawer__section">
         <h3>任务信息</h3>
-        <Descriptions column={1} size="small" colon={false}>
-          <Descriptions.Item label="所属需求">{task.requirement_title}</Descriptions.Item>
-          <Descriptions.Item label="负责人">{task.assignee_name || "未分配"}</Descriptions.Item>
-          <Descriptions.Item label="截止日期">{formatDate(task.due_date)}</Descriptions.Item>
-          <Descriptions.Item label="最近更新">{formatDateTime(task.updated_at)}</Descriptions.Item>
-        </Descriptions>
+        <div className="requirements-task-detail__meta">
+          <div>
+            <span>所属需求</span>
+            <strong>{task.requirement_title}</strong>
+          </div>
+          <div>
+            <span>最近更新</span>
+            <strong>{formatDateTime(task.updated_at)}</strong>
+          </div>
+        </div>
         {task.acceptance_criteria.length ? (
           <ol className="requirements-drawer__ac-list">
             {task.acceptance_criteria.map((item, index) => (
@@ -2384,7 +2520,10 @@ function TaskDrawerContent({
       </section>
 
       <section className="requirements-drawer__section">
-        <h3>上游依赖</h3>
+        <div className="requirements-drawer__section-head">
+          <h3>上游依赖</h3>
+          <span>{task.dependencies.length ? `${task.dependencies.length} 个依赖` : "无上游依赖"}</span>
+        </div>
         {task.dependencies.length ? (
           <Space wrap size={6}>
             {task.dependencies.map((dependency) => (
@@ -2401,9 +2540,7 @@ function TaskDrawerContent({
               </Tag>
             ))}
           </Space>
-        ) : (
-          <span style={{ color: "#7a879a", fontSize: 12 }}>无上游依赖</span>
-        )}
+        ) : null}
         <Space.Compact style={{ width: "100%", marginTop: 12 }}>
           <Select
             allowClear
@@ -2434,18 +2571,16 @@ function TaskDrawerContent({
       <section className="requirements-drawer__section">
         <div className="requirements-drawer__section-head">
           <h3>关联 session</h3>
-          <Space size={8}>
+          <div className="requirements-drawer__section-actions">
             {linkedTotal > 0 ? (
               <span>已关联 {formatTokens(linkedTotal)} Token</span>
-            ) : (
-              <span>暂无关联 session</span>
-            )}
+            ) : null}
             {canManage ? (
               <Button size="small" icon={<LinkOutlined />} onClick={() => setPickerOpen(true)}>
                 关联 session
               </Button>
             ) : null}
-          </Space>
+          </div>
         </div>
         {linkedSources.length ? (
           <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -2473,7 +2608,7 @@ function TaskDrawerContent({
             ))}
           </Space>
         ) : (
-          <p style={{ margin: 0, color: "#7a879a" }}>暂无关联 session</p>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联 session" />
         )}
       </section>
 
