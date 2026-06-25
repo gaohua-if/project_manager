@@ -97,35 +97,9 @@ func (h *FollowHandler) Unfollow(w http.ResponseWriter, r *http.Request) {
 
 func (h *FollowHandler) targetVisible(u *model.User, targetType, targetID string) (bool, error) {
 	if targetType == "requirement" {
-		if u.Role == "team_leader" && u.TeamID != nil {
-			var visible bool
-			err := h.db.QueryRow(`
-				SELECT EXISTS(
-					SELECT 1 FROM requirements r
-					JOIN requirement_teams rt ON rt.requirement_id = r.id
-					WHERE r.id = $1 AND rt.team_id = $2
-				)`, targetID, *u.TeamID).Scan(&visible)
-			return visible, err
-		}
-		var visible bool
-		err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)", targetID).Scan(&visible)
-		return visible, err
+		return (&RequirementHandler{db: h.db}).canViewRequirement(u, targetID)
 	}
-
-	if u.Role == "team_leader" && u.TeamID != nil {
-		var visible bool
-		err := h.db.QueryRow(`
-			SELECT EXISTS(
-				SELECT 1
-				FROM tasks t
-				LEFT JOIN users assignee ON assignee.id = t.assignee_id
-				WHERE t.id = $1 AND (assignee.team_id = $2 OR t.creator_tl_id = $3)
-			)`, targetID, *u.TeamID, u.ID).Scan(&visible)
-		return visible, err
-	}
-	var visible bool
-	err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)", targetID).Scan(&visible)
-	return visible, err
+	return (&TaskHandler{db: h.db}).canViewTask(u, targetID)
 }
 
 func isFollowTargetType(targetType string) bool {

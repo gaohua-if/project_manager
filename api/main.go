@@ -64,12 +64,13 @@ func main() {
 
 	r.Post("/api/v1/auth/login", authH.Login)
 	r.Post("/api/v1/auth/register", authH.Register)
-	r.Get("/api/v1/users", authH.ListUsers)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(handler.AuthMiddleware(cfg.JWTSecret))
 
 		r.Get("/auth/me", authH.Me)
+		r.Get("/users", authH.ListUsers)
+		r.Get("/task-assignees", authH.ListTaskAssignees)
 		r.Get("/teams", authH.ListTeams)
 
 		r.Route("/admin", func(r chi.Router) {

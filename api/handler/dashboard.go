@@ -102,7 +102,7 @@ func (h *DashboardHandler) Risks(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		NewTaskHandler(h.db).enrichTask(&task, u.ID)
+		NewTaskHandler(h.db).enrichTask(&task, u)
 		tasks = append(tasks, task)
 	}
 
@@ -128,7 +128,7 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 		return model.DashboardFollowItem{}, false
 	}
 	req.Deadline = nullStringPtr(deadline)
-	NewRequirementHandler(h.db, nil).loadProjection(&req, userID)
+	NewRequirementHandler(h.db, nil).loadProjection(&req, &model.User{ID: userID})
 	url := fmt.Sprintf("/requirements?requirementId=%s", req.ID)
 	return model.DashboardFollowItem{
 		Key:           "requirement:" + req.ID,
@@ -199,7 +199,7 @@ func (h *DashboardHandler) loadTask(id, userID string) (model.Task, error) {
 	if err != nil {
 		return model.Task{}, err
 	}
-	NewTaskHandler(h.db).enrichTask(&task, userID)
+	NewTaskHandler(h.db).enrichTask(&task, &model.User{ID: userID})
 	return task, nil
 }
 

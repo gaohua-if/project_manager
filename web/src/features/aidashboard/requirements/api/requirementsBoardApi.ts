@@ -11,8 +11,8 @@ import {
   fetchSessionTokens,
   fetchTask,
   fetchTasks,
+  fetchTaskAssignees,
   fetchTeams,
-  fetchUsers,
   followTarget,
   removeTaskDependency,
   restoreRequirement,
@@ -57,7 +57,13 @@ function normalizeRequirement(requirement: Requirement): MockRequirement {
     team_names: requirement.team_names ?? [],
     token_source_ids: requirement.token_source_ids ?? [],
     risk_summary: requirement.risk_summary ?? { blocked: 0, overdue: 0 },
+    can_update: requirement.can_update,
+    can_change_status: requirement.can_change_status,
+    can_cancel: requirement.can_cancel,
+    can_restore: requirement.can_restore,
     can_delete: requirement.can_delete,
+    can_manage_ac: requirement.can_manage_ac,
+    can_create_task: requirement.can_create_task,
     created_at: requirement.created_at,
     updated_at: requirement.updated_at
   };
@@ -80,6 +86,12 @@ function normalizeTask(task: Task): MockTask {
     blocking: task.blocking ?? [],
     risk_types: task.risk_types ?? [],
     token_source_ids: task.token_source_ids ?? [],
+    can_update_meta: task.can_update_meta,
+    can_reassign: task.can_reassign,
+    can_update_status: task.can_update_status,
+    can_update_progress: task.can_update_progress,
+    can_manage_dependencies: task.can_manage_dependencies,
+    can_delete: task.can_delete,
     created_at: task.created_at,
     updated_at: task.updated_at
   };
@@ -183,10 +195,8 @@ export const requirementsBoardApi = {
   },
 
   async listAssignees() {
-    const users = await fetchUsers();
-    return users
-      .filter((user) => user.role === "employee")
-      .map((user) => ({
+    const users = await fetchTaskAssignees();
+    return users.map((user) => ({
         id: user.id,
         name: user.name,
         employee_id: user.employee_id,

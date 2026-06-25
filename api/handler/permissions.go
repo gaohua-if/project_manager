@@ -135,18 +135,17 @@ func (h *TaskHandler) canViewTaskRecord(u *model.User, task taskAccessRecord) (b
 			WHERE EXISTS (
 				SELECT 1 FROM requirement_teams rt
 				WHERE rt.requirement_id = $1 AND rt.team_id = $2
-			)`
-	if u.Role == "team_leader" {
-		query += `
+			)
 			OR EXISTS (
 				SELECT 1 FROM users assignee
 				WHERE assignee.id = $3 AND assignee.team_id = $2
-			)
-			OR $4 = $5`
+			)`
+	if u.Role == "team_leader" {
+		query += ` OR $4 = $5`
 		err := h.db.QueryRow(query+`)`, task.RequirementID, *u.TeamID, task.AssigneeID, task.CreatorTLID, u.ID).Scan(&allowed)
 		return allowed, err
 	}
-	err := h.db.QueryRow(query+`)`, task.RequirementID, *u.TeamID).Scan(&allowed)
+	err := h.db.QueryRow(query+`)`, task.RequirementID, *u.TeamID, task.AssigneeID).Scan(&allowed)
 	return allowed, err
 }
 
@@ -160,14 +159,19 @@ func (h *TaskHandler) canCreateTask(u *model.User, requirementID string, assigne
 	if assigneeID == nil || *assigneeID == "" {
 		return false, "assignee_id is required", nil
 	}
+	var status string
+	if err := h.db.QueryRow(`SELECT status FROM requirements WHERE id = $1`, requirementID).Scan(&status); err == sql.ErrNoRows {
+		return false, "requirement not found", nil
+	} else if err != nil {
+		return false, "requirement not found", err
+	}
+	if status == "cancelled" {
+		return false, "requirement is cancelled", nil
+	}
 	switch u.Role {
 	case "admin", "director", "pm":
 		var ok bool
-		err := h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)`, requirementID).Scan(&ok)
-		if err != nil || !ok {
-			return ok, "requirement not found", err
-		}
-		err = h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, *assigneeID).Scan(&ok)
+		err := h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND role = 'employee')`, *assigneeID).Scan(&ok)
 		if err != nil || !ok {
 			return ok, "assignee not found", err
 		}
@@ -270,4 +274,48 @@ func (h *TaskHandler) canReassignTask(u *model.User, assigneeID *string) (bool, 
 		return ok, "assignee must be an employee in your team", err
 	}
 	return true, "", nil
+}
+
+func (h *RequirementHandler) applyRequirementPermissions(req *model.Requirement, u *model.User) {
+	if u == nil {
+		return
+	}
+	manageable, _ := h.canManageRequirement(u, req.ID)
+	canCreate := false
+	if req.Status != "cancelled" {
+		if isGlobalTaskManager(u.Role) {
+			canCreate = true
+		} else if u.Role == "team_leader" && hasTeam(u) {
+			canCreate = containsString(req.TeamIDs, *u.TeamID)
+		} else if u.Role == "employee" && hasTeam(u) {
+			canCreate = containsString(req.TeamIDs, *u.TeamID)
+		}
+	}
+	req.CanUpdate = manageable
+	req.CanChangeStatus = manageable
+	req.CanCancel = manageable && req.Status != "cancelled"
+	req.CanRestore = manageable && req.Status == "cancelled"
+	req.CanManageAC = manageable
+	req.CanCreateTask = canCreate
+}
+
+func (h *TaskHandler) applyTaskPermissions(t *model.Task, u *model.User) {
+	if u == nil {
+		return
+	}
+	record := taskAccessRecord{ID: t.ID, RequirementID: t.RequirementID, CreatorTLID: t.CreatorTLID}
+	if t.AssigneeID != nil {
+		record.AssigneeID = sql.NullString{String: *t.AssigneeID, Valid: true}
+	}
+	manageable, _ := h.canManageTask(u, record)
+	reassignable := false
+	if manageable && u.Role != "employee" {
+		reassignable = true
+	}
+	t.CanUpdateMeta = manageable
+	t.CanReassign = reassignable
+	t.CanUpdateStatus = manageable
+	t.CanUpdateProgress = manageable
+	t.CanManageDependencies = manageable
+	t.CanDelete = manageable
 }

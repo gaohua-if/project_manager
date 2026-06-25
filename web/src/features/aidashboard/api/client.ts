@@ -39,6 +39,7 @@ function trimTrailingSlash(value: string) {
 // ───────────────────────── Users / Teams ─────────────────────────
 
 export const fetchUsers = () => unwrap(api.get<User[]>("/users"));
+export const fetchTaskAssignees = () => unwrap(api.get<User[]>("/task-assignees"));
 export const fetchTeams = () => unwrap(api.get<Team[]>("/teams"));
 export const fetchTeamActivity = (date?: string) =>
   unwrap(api.get<TeamActivity>("/teams/activity", date ? { date } : undefined));

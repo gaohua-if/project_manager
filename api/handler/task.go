@@ -71,12 +71,15 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	case "employee":
 		if u.TeamID != nil {
-			query += fmt.Sprintf(` AND EXISTS (
-				SELECT 1 FROM requirement_teams rt
-				WHERE rt.requirement_id = t.requirement_id AND rt.team_id = $%d
-			)`, argIdx)
-			args = append(args, *u.TeamID)
-			argIdx++
+			query += fmt.Sprintf(` AND (
+				t.assignee_id IN (SELECT id FROM users WHERE team_id = $%d)
+				OR EXISTS (
+					SELECT 1 FROM requirement_teams rt
+					WHERE rt.requirement_id = t.requirement_id AND rt.team_id = $%d
+				)
+			)`, argIdx, argIdx+1)
+			args = append(args, *u.TeamID, *u.TeamID)
+			argIdx += 2
 		} else {
 			query += " AND 1=0"
 		}
@@ -111,7 +114,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		t.AssigneeName = nullStringPtr(assigneeName)
 		t.DueDate = nullStringPtr(dueDate)
 		t.CompletedAt = nullTimePtr(completedAt)
-		h.enrichTask(&t, u.ID)
+		h.enrichTask(&t, u)
 		tasks = append(tasks, t)
 	}
 	if err := rows.Err(); err != nil {
@@ -169,7 +172,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	t.AssigneeName = nullStringPtr(assigneeName)
 	t.DueDate = nullStringPtr(dueDate)
 	t.CompletedAt = nullTimePtr(completedAt)
-	h.enrichTask(&t, u.ID)
+	h.enrichTask(&t, u)
 	writeJSON(w, http.StatusOK, t)
 }
 
@@ -185,6 +188,9 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement_id and title required"})
 		return
 	}
+	if (req.AssigneeID == nil || *req.AssigneeID == "") && u != nil && u.Role == "employee" {
+		req.AssigneeID = &u.ID
+	}
 	if req.AssigneeID == nil || *req.AssigneeID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "assignee_id is required"})
 		return
@@ -199,12 +205,17 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": permissionMessage})
+		status := http.StatusForbidden
+		if permissionMessage == "requirement is cancelled" {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]string{"error": permissionMessage})
 		return
 	}
 	for _, depID := range req.DependsOnIDs {
-		if err := h.validateDependency(req.RequirementID, "", depID); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		status, err := h.validateDependency(u, req.RequirementID, "", depID)
+		if err != nil {
+			writeJSON(w, status, map[string]string{"error": err.Error()})
 			return
 		}
 	}
@@ -263,6 +274,15 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, task)
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update task"})
 		return
 	}
@@ -376,6 +396,15 @@ func (h *TaskHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, task)
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update task status"})
 		return
 	}
@@ -428,6 +457,15 @@ func (h *TaskHandler) UpdateProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, task)
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update task progress"})
 		return
 	}
@@ -467,11 +505,21 @@ func (h *TaskHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, task)
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update task dependencies"})
 		return
 	}
-	if err := h.validateDependency(task.RequirementID, taskID, req.DependsOnID); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	status, err := h.validateDependency(u, task.RequirementID, taskID, req.DependsOnID)
+	if err != nil {
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -501,6 +549,15 @@ func (h *TaskHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, task)
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update task dependencies"})
 		return
 	}
@@ -549,6 +606,20 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
+		visible, viewErr := h.canViewTaskRecord(u, taskAccessRecord{
+			ID:            id,
+			RequirementID: requirementID,
+			AssigneeID:    assigneeID,
+			CreatorTLID:   creatorTL,
+		})
+		if viewErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": viewErr.Error()})
+			return
+		}
+		if !visible {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to delete tasks"})
 		return
 	}
@@ -624,12 +695,16 @@ func (h *TaskHandler) loadDeps(t *model.Task) {
 	}
 }
 
-func (h *TaskHandler) enrichTask(t *model.Task, userID string) {
+func (h *TaskHandler) enrichTask(t *model.Task, u *model.User) {
 	h.loadDeps(t)
 	t.RiskTypes = service.DeriveTaskRisks(*t, time.Now())
 	t.DisplayStatus = service.DisplayTaskStatus(*t)
 	if t.RiskTypes == nil {
 		t.RiskTypes = []string{}
+	}
+	userID := ""
+	if u != nil {
+		userID = u.ID
 	}
 	rows, err := h.db.Query(`
 		SELECT DISTINCT s.id
@@ -651,43 +726,52 @@ func (h *TaskHandler) enrichTask(t *model.Task, userID string) {
 			SELECT 1 FROM user_follows
 			WHERE user_id = $1 AND target_type = 'task' AND target_id = $2
 		)`, userID, t.ID).Scan(&t.IsFollowed)
+	h.applyTaskPermissions(t, u)
 }
 
-func (h *TaskHandler) validateDependency(requirementID, taskID, dependsOnID string) error {
+func (h *TaskHandler) validateDependency(u *model.User, requirementID, taskID, dependsOnID string) (int, error) {
 	if dependsOnID == "" {
-		return fmt.Errorf("depends_on_id is required")
+		return http.StatusBadRequest, fmt.Errorf("depends_on_id is required")
 	}
 	if taskID != "" && taskID == dependsOnID {
-		return fmt.Errorf("task cannot depend on itself")
+		return http.StatusBadRequest, fmt.Errorf("task cannot depend on itself")
 	}
-	var dependencyRequirementID string
-	if err := h.db.QueryRow("SELECT requirement_id FROM tasks WHERE id = $1", dependsOnID).Scan(&dependencyRequirementID); err == sql.ErrNoRows {
-		return fmt.Errorf("dependency task not found")
-	} else if err != nil {
-		return err
+	dependency, err := h.loadTaskAccess(dependsOnID)
+	if err == sql.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("dependency task not found")
 	}
-	if dependencyRequirementID != requirementID {
-		return fmt.Errorf("dependencies must belong to the same requirement")
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	visible, err := h.canViewTaskRecord(u, dependency)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !visible {
+		return http.StatusNotFound, fmt.Errorf("dependency task not found")
+	}
+	if dependency.RequirementID != requirementID {
+		return http.StatusBadRequest, fmt.Errorf("dependencies must belong to the same requirement")
 	}
 	if taskID == "" {
-		return nil
+		return http.StatusOK, nil
 	}
 	var createsCycle bool
 	if err := h.db.QueryRow(`
-		WITH RECURSIVE upstream(id) AS (
-			SELECT depends_on_id FROM task_dependencies WHERE task_id = $1
-			UNION
-			SELECT td.depends_on_id
-			FROM task_dependencies td
-			JOIN upstream u ON td.task_id = u.id
-		)
-		SELECT EXISTS(SELECT 1 FROM upstream WHERE id = $2)`, dependsOnID, taskID).Scan(&createsCycle); err != nil {
-		return err
+			WITH RECURSIVE upstream(id) AS (
+				SELECT depends_on_id FROM task_dependencies WHERE task_id = $1
+				UNION
+				SELECT td.depends_on_id
+				FROM task_dependencies td
+				JOIN upstream u ON td.task_id = u.id
+			)
+			SELECT EXISTS(SELECT 1 FROM upstream WHERE id = $2)`, dependsOnID, taskID).Scan(&createsCycle); err != nil {
+		return http.StatusInternalServerError, err
 	}
 	if createsCycle {
-		return fmt.Errorf("dependency would create a cycle")
+		return http.StatusBadRequest, fmt.Errorf("dependency would create a cycle")
 	}
-	return nil
+	return http.StatusOK, nil
 }
 
 func (h *TaskHandler) updateRequirementProgress(taskID string) {

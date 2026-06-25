@@ -188,7 +188,7 @@ export function TaskCreatePage() {
                     showSearch
                     optionFilterProp="label"
                     options={requirements
-                      .filter((item) => item.status !== "cancelled")
+                      .filter((item) => item.can_create_task)
                       .map((item) => ({ value: item.id, label: item.title }))}
                   />
                 </Form.Item>

@@ -19,7 +19,6 @@ import { useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
-import { useAuth } from "@/shared/auth/authContext";
 import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
@@ -58,7 +57,6 @@ export function TaskDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { message, modal } = App.useApp();
   const [progressOverride, setProgressOverride] = useState<number | null>(null);
   const backTo = buildListReturnUrl("/requirements", location.search);
@@ -157,11 +155,8 @@ export function TaskDetailPage() {
 
   const dependencyBlocked = task.status === "blocked";
   const progress = progressOverride ?? task.progress;
-  const canManageTask = Boolean(
-    user &&
-      (["admin", "director", "pm", "team_leader"].includes(user.role) ||
-        (user.role === "employee" && task.assignee_id === user.id))
-  );
+  const canUpdateStatus = Boolean(task.can_update_status);
+  const canUpdateProgress = Boolean(task.can_update_progress);
 
   const linkedSources = task.token_source_ids
     .map((id) => tokenSourceMap.get(id))
@@ -181,7 +176,7 @@ export function TaskDetailPage() {
     >
       <div className="aidashboard-task-detail">
         <section className="aidashboard-task-detail__actions">
-          {canManageTask ? (
+          {canUpdateStatus ? (
             <Space wrap>
               {task.status !== "done" && !dependencyBlocked ? (
                 <Button
@@ -291,27 +286,27 @@ export function TaskDetailPage() {
         </Card>
 
         <Card title="任务进度" className="aidashboard-task-detail__progress-card">
-          <p>{canManageTask ? "拖动滑块或输入百分比后保存。" : "当前任务为只读。"} </p>
+          <p>{canUpdateProgress ? "拖动滑块或输入百分比后保存。" : "当前任务为只读。"} </p>
           <div className="aidashboard-task-detail__progress-editor">
             <Slider
               min={0}
               max={100}
               value={progress}
-              disabled={!canManageTask}
+              disabled={!canUpdateProgress}
               onChange={setProgressOverride}
             />
             <InputNumber
               min={0}
               max={100}
               value={progress}
-              disabled={!canManageTask}
+              disabled={!canUpdateProgress}
               addonAfter="%"
               onChange={(value) => setProgressOverride(value ?? 0)}
             />
             <Button
               type="primary"
               loading={progressMutation.isPending}
-              disabled={!canManageTask || progress === task.progress}
+              disabled={!canUpdateProgress || progress === task.progress}
               onClick={() => progressMutation.mutate(progress)}
             >
               保存进度

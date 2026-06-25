@@ -38,7 +38,13 @@ type Requirement struct {
 	TaskSummary        RequirementTaskSummary `json:"task_summary"`
 	RiskSummary        RequirementRiskSummary `json:"risk_summary"`
 	IsFollowed         bool                   `json:"is_followed"`
+	CanUpdate          bool                   `json:"can_update"`
+	CanChangeStatus    bool                   `json:"can_change_status"`
+	CanCancel          bool                   `json:"can_cancel"`
+	CanRestore         bool                   `json:"can_restore"`
 	CanDelete          bool                   `json:"can_delete"`
+	CanManageAC        bool                   `json:"can_manage_ac"`
+	CanCreateTask      bool                   `json:"can_create_task"`
 	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`
@@ -63,6 +69,12 @@ type Task struct {
 	RiskTypes             []string   `json:"risk_types"`
 	TokenSourceIDs        []string   `json:"token_source_ids"`
 	IsFollowed            bool       `json:"is_followed"`
+	CanUpdateMeta         bool       `json:"can_update_meta"`
+	CanReassign           bool       `json:"can_reassign"`
+	CanUpdateStatus       bool       `json:"can_update_status"`
+	CanUpdateProgress     bool       `json:"can_update_progress"`
+	CanManageDependencies bool       `json:"can_manage_dependencies"`
+	CanDelete             bool       `json:"can_delete"`
 	CompletedAt           *time.Time `json:"completed_at,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`

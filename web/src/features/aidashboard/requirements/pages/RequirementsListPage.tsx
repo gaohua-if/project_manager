@@ -145,8 +145,13 @@ const EMPTY_FAVORITES: MockFavorite[] = [];
 
 function canManageTaskForUser(user: User | null, task?: MockTask) {
   if (!user || !task) return false;
-  if (["admin", "director", "pm", "team_leader"].includes(user.role)) return true;
-  return user.role === "employee" && task.assignee_id === user.id;
+  return Boolean(
+    task.can_update_meta ||
+      task.can_update_status ||
+      task.can_update_progress ||
+      task.can_manage_dependencies ||
+      task.can_delete
+  );
 }
 
 const STAGE_META: Record<RequirementStage, { label: string; color: string }> = {
@@ -816,7 +821,10 @@ export function RequirementsListPage() {
         creatorOpen={creatorOpen}
         isFavorite={activeRequirement ? favoriteRequirementIds.has(activeRequirement.id) : false}
         canManage={Boolean(
-          user && (user.role === "admin" || user.role === "director" || user.role === "pm")
+          activeRequirement?.can_update ||
+            activeRequirement?.can_cancel ||
+            activeRequirement?.can_restore ||
+            activeRequirement?.can_delete
         )}
         onToggleFavorite={
           activeRequirement ? () => toggleRequirementFavorite(activeRequirement.id) : undefined
@@ -1060,7 +1068,7 @@ function RequirementTree({
                   <small>{formatRecentUpdate(requirement.updated_at)}</small>
                 </div>
                 <Space size={2} className="requirements-tree__actions">
-                  {!requirementTasks.length ? (
+                  {!requirementTasks.length && requirement.can_create_task ? (
                     <Button
                       size="small"
                       type="link"
@@ -1434,14 +1442,16 @@ function RequirementDrawer({
               <Space size={8} wrap style={{ marginBottom: 8 }}>
                 {requirement.status === "cancelled" ? (
                   <>
-                    <Button
-                      size="small"
-                      type="primary"
-                      loading={restoreMutation.isPending}
-                      onClick={handleRestore}
-                    >
-                      恢复需求
-                    </Button>
+                    {requirement.can_restore ? (
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={restoreMutation.isPending}
+                        onClick={handleRestore}
+                      >
+                        恢复需求
+                      </Button>
+                    ) : null}
                     {requirement.can_delete ? (
                       <Button
                         size="small"
@@ -1455,16 +1465,20 @@ function RequirementDrawer({
                   </>
                 ) : (
                   <>
-                    <Button size="small" onClick={() => setEditOpen(true)}>
-                      编辑需求
-                    </Button>
-                    <Button
-                      size="small"
-                      loading={cancelMutation.isPending}
-                      onClick={handleCancel}
-                    >
-                      取消需求
-                    </Button>
+                    {requirement.can_update ? (
+                      <Button size="small" onClick={() => setEditOpen(true)}>
+                        编辑需求
+                      </Button>
+                    ) : null}
+                    {requirement.can_cancel ? (
+                      <Button
+                        size="small"
+                        loading={cancelMutation.isPending}
+                        onClick={handleCancel}
+                      >
+                        取消需求
+                      </Button>
+                    ) : null}
                     {requirement.can_delete ? (
                       <Button
                         size="small"
@@ -1553,13 +1567,15 @@ function RequirementDrawer({
                     {!tasks.length ? (
                       <div className="requirements-drawer__execution-empty">
                         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未拆解任务" />
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => onCreatorOpenChange(true)}
-                        >
-                          添加任务
-                        </Button>
+                        {requirement.can_create_task ? (
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => onCreatorOpenChange(true)}
+                          >
+                            添加任务
+                          </Button>
+                        ) : null}
                       </div>
                     ) : (
                       <div className="requirements-drawer__task-list">
@@ -1601,7 +1617,7 @@ function RequirementDrawer({
                           })}
                       </div>
                     )}
-                    {tasks.length ? (
+                    {tasks.length && requirement.can_create_task ? (
                       <div className="requirements-drawer__execution-footer">
                         <Button icon={<PlusOutlined />} onClick={() => onCreatorOpenChange(true)}>
                           继续添加任务
@@ -2278,27 +2294,27 @@ function TaskDrawerContent({
           />
         ) : null}
         <div className="requirements-drawer__progress-editor">
-          <Slider min={0} max={100} value={progress} disabled={!canManage} onChange={setProgress} />
+          <Slider min={0} max={100} value={progress} disabled={!task.can_update_progress} onChange={setProgress} />
           <InputNumber
             min={0}
             max={100}
             value={progress}
-            disabled={!canManage}
+            disabled={!task.can_update_progress}
             addonAfter="%"
             onChange={(value) => setProgress(value ?? 0)}
           />
           <Button
             type="primary"
             loading={progressMutation.isPending}
-            disabled={!canManage || progress === task.progress}
+            disabled={!task.can_update_progress || progress === task.progress}
             onClick={() => progressMutation.mutate()}
           >
             保存进度
           </Button>
         </div>
-        {canManage ? (
+        {(task.can_update_status || task.can_update_meta || task.can_delete) ? (
           <Space wrap size={8} style={{ marginTop: 12 }}>
-            {task.status !== "done" && !dependencyBlocked ? (
+            {task.can_update_status && task.status !== "done" && !dependencyBlocked ? (
               <Button
                 type="primary"
                 size="small"
@@ -2308,7 +2324,7 @@ function TaskDrawerContent({
                 标记完成
               </Button>
             ) : null}
-            {task.status === "done" ? (
+            {task.can_update_status && task.status === "done" ? (
               <Button
                 size="small"
                 loading={statusMutation.isPending}
@@ -2317,7 +2333,7 @@ function TaskDrawerContent({
                 重新打开
               </Button>
             ) : null}
-            {task.status === "todo" && !dependencyBlocked ? (
+            {task.can_update_status && task.status === "todo" && !dependencyBlocked ? (
               <Button
                 size="small"
                 loading={statusMutation.isPending}
@@ -2326,17 +2342,21 @@ function TaskDrawerContent({
                 开始任务
               </Button>
             ) : null}
-              <Button size="small" onClick={() => setEditOpen(true)}>
-                编辑任务
-              </Button>
-              <Button
-                size="small"
-                danger
-                loading={deleteMutation.isPending}
-                onClick={handleDelete}
-              >
-                删除任务
-              </Button>
+              {task.can_update_meta ? (
+                <Button size="small" onClick={() => setEditOpen(true)}>
+                  编辑任务
+                </Button>
+              ) : null}
+              {task.can_delete ? (
+                <Button
+                  size="small"
+                  danger
+                  loading={deleteMutation.isPending}
+                  onClick={handleDelete}
+                >
+                  删除任务
+                </Button>
+              ) : null}
           </Space>
         ) : null}
       </section>
@@ -2371,7 +2391,7 @@ function TaskDrawerContent({
               <Tag
                 key={dependency.task_id}
                 color={dependency.status === "done" ? "success" : "error"}
-                closable={canManage}
+                closable={Boolean(task.can_manage_dependencies)}
                 onClose={(event) => {
                   event.preventDefault();
                   removeDependencyMutation.mutate(dependency.task_id);
@@ -2389,7 +2409,7 @@ function TaskDrawerContent({
             allowClear
             showSearch
             value={dependencyDraft}
-            disabled={!canManage}
+            disabled={!task.can_manage_dependencies}
             placeholder="选择同一需求内的上游任务"
             optionFilterProp="label"
             options={requirementTasks
@@ -2403,7 +2423,7 @@ function TaskDrawerContent({
           />
           <Button
             loading={addDependencyMutation.isPending}
-            disabled={!canManage || !dependencyDraft}
+            disabled={!task.can_manage_dependencies || !dependencyDraft}
             onClick={() => dependencyDraft && addDependencyMutation.mutate(dependencyDraft)}
           >
             添加依赖

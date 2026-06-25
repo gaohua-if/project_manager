@@ -93,7 +93,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	for i := range reqs {
 		h.loadTeams(&reqs[i])
-		h.loadProjection(&reqs[i], u.ID)
+		h.loadProjection(&reqs[i], u)
 	}
 
 	writeJSON(w, http.StatusOK, reqs)
@@ -141,7 +141,7 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 	req.AcceptanceCriteria = parseTextArray(acStr)
 	req.CompletedAt = nullTimePtr(completedAt)
 	h.loadTeams(&req)
-	h.loadProjection(&req, u.ID)
+	h.loadProjection(&req, u)
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -210,7 +210,7 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	result.AcceptanceCriteria = parseTextArray(acStr)
 	result.CompletedAt = nullTimePtr(completedAt)
 	h.loadTeams(&result)
-	h.loadProjection(&result, u.ID)
+	h.loadProjection(&result, u)
 	writeJSON(w, http.StatusCreated, result)
 }
 
@@ -506,7 +506,7 @@ func (h *RequirementHandler) loadTeams(req *model.Requirement) {
 	}
 }
 
-func (h *RequirementHandler) loadProjection(req *model.Requirement, userID string) {
+func (h *RequirementHandler) loadProjection(req *model.Requirement, u *model.User) {
 	rows, err := h.db.Query(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
@@ -539,12 +539,16 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 			task.AssigneeName = nullStringPtr(assigneeName)
 			task.DueDate = nullStringPtr(dueDate)
 			task.CompletedAt = nullTimePtr(completedAt)
-			taskHandler.enrichTask(&task, userID)
+			taskHandler.enrichTask(&task, u)
 			tasks = append(tasks, task)
 		}
 	}
 	req.Progress = service.AggregateRequirementProgress(tasks)
 	req.TaskSummary, req.RiskSummary = service.SummarizeRequirementTasks(tasks)
+	userID := ""
+	if u != nil {
+		userID = u.ID
+	}
 	_ = h.db.QueryRow(`
 		SELECT EXISTS(
 			SELECT 1 FROM user_follows
@@ -558,6 +562,8 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 		    OR EXISTS(SELECT 1 FROM token_usage WHERE requirement_id = $1)
 		    OR EXISTS(SELECT 1 FROM documents WHERE requirement_id = $1)`, req.ID).Scan(&hasAssociations)
 	req.CanDelete = !hasAssociations
+	h.applyRequirementPermissions(req, u)
+	req.CanDelete = req.CanDelete && !hasAssociations
 
 	tokenRows, tokenErr := h.db.Query(`
 		SELECT DISTINCT s.id
@@ -582,11 +588,11 @@ func isRequirementStatus(status string) bool {
 
 func parseTextArray(pgArray string) []string {
 	if pgArray == "" || pgArray == "{}" || pgArray == "{NULL}" {
-		return nil
+		return []string{}
 	}
 	s := strings.Trim(pgArray, "{}")
 	if s == "" {
-		return nil
+		return []string{}
 	}
 	parts := strings.Split(s, ",")
 	result := make([]string, 0, len(parts))

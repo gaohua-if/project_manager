@@ -179,6 +179,60 @@ func (h *AuthHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, users)
 }
 
+func (h *AuthHandler) ListTaskAssignees(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	query := `
+		SELECT u.id, u.employee_id, COALESCE(u.email,''), u.name, u.role, u.team_id,
+			COALESCE((SELECT name FROM teams WHERE id = u.team_id), '')
+		FROM users u
+		WHERE u.role = 'employee'`
+	args := []any{}
+	switch u.Role {
+	case "admin", "director", "pm":
+	case "team_leader":
+		if u.TeamID == nil {
+			writeJSON(w, http.StatusOK, []model.User{})
+			return
+		}
+		query += " AND u.team_id = $1"
+		args = append(args, *u.TeamID)
+	case "employee":
+		query += " AND u.id = $1"
+		args = append(args, u.ID)
+	default:
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+		return
+	}
+	query += " ORDER BY u.name"
+
+	rows, err := h.db.Query(query, args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	users := []model.User{}
+	for rows.Next() {
+		var item model.User
+		if err := rows.Scan(&item.ID, &item.EmployeeID, &item.Email, &item.Name, &item.Role, &item.TeamID, &item.TeamName); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		users = append(users, item)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
 func (h *AuthHandler) ListTeams(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query("SELECT id, name FROM teams ORDER BY name")
 	if err != nil {

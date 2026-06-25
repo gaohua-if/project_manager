@@ -151,9 +151,11 @@ export function RequirementDetailPage() {
         { title: requirement.title }
       ]}
       actions={
-        <Button type="primary" onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}>
-          添加任务
-        </Button>
+        requirement.can_create_task ? (
+          <Button type="primary" onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}>
+            添加任务
+          </Button>
+        ) : null
       }
     >
       <div className="aidashboard-detail">
@@ -231,13 +233,15 @@ export function RequirementDetailPage() {
               description="该需求尚未拆分任务，拆分任务后可聚合进度、依赖阻塞和 Token。"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             >
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}
-              >
-                添加第一个任务
-              </Button>
+              {requirement.can_create_task ? (
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate(`/tasks/create?requirement_id=${id}`)}
+                >
+                  添加第一个任务
+                </Button>
+              ) : null}
             </Empty>
           ) : (
             <ResourceTable<MockTask>

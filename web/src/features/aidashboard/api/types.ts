@@ -41,7 +41,13 @@ export interface Requirement {
   task_summary: RequirementTaskSummaryDTO;
   risk_summary: RequirementRiskSummaryDTO;
   is_followed: boolean;
+  can_update?: boolean;
+  can_change_status?: boolean;
+  can_cancel?: boolean;
+  can_restore?: boolean;
   can_delete?: boolean;
+  can_manage_ac?: boolean;
+  can_create_task?: boolean;
   completed_at?: string;
   created_at: string;
   updated_at: string;
@@ -79,6 +85,12 @@ export interface Task {
   risk_types: Array<"blocked" | "overdue">;
   token_source_ids: string[];
   is_followed: boolean;
+  can_update_meta?: boolean;
+  can_reassign?: boolean;
+  can_update_status?: boolean;
+  can_update_progress?: boolean;
+  can_manage_dependencies?: boolean;
+  can_delete?: boolean;
   completed_at?: string;
   created_at: string;
   updated_at: string;
