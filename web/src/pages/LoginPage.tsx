@@ -49,7 +49,7 @@ export function LoginPage() {
             requiredMark={false}
             initialValues={
               import.meta.env.DEV
-                ? { employee_id: "admin", password: "Admin@123!" }
+                ? { employee_id: "admin", password: "123" }
                 : undefined
             }
             onValuesChange={() => setLoginError(null)}

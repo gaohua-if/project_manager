@@ -13,7 +13,7 @@ DO $$ BEGIN
     CHECK (role IN ('admin','director','team_leader','pm','employee'));
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 3) Backfill seeded users with employee_id + default password 'Changeme123!'.
+-- 3) Backfill seeded users with employee_id + default password '123'.
 --    bcrypt cost=10 hash precomputed; same hash reused for every legacy row.
 UPDATE users SET
   employee_id = CASE name
@@ -32,7 +32,7 @@ UPDATE users SET
     WHEN '吴十'   THEN 'wushi'
     ELSE 'legacy_' || lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g'))
   END,
-  password_hash = '$2a$10$2PbF4ynr.BH0jolD1gUnKuzCxDJKYm2HYXQd73GzMeybt8ZElHjMO'
+  password_hash = '$2a$10$JhYMfmI.FIanpfAG.sYLxuzJlyH6qTnZBWeluvAox1Y6UuOERYAUa'
 WHERE employee_id IS NULL;
 
 -- 4) Ensure email is set for legacy rows.
@@ -45,13 +45,13 @@ ALTER TABLE users ALTER COLUMN password_hash SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_employee_id ON users(employee_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- 6) Idempotent admin user (employee_id 'admin', password 'Admin@123!').
+-- 6) Idempotent admin user (employee_id 'admin', password '123').
 INSERT INTO users (id, employee_id, name, email, role, password_hash, team_id)
 VALUES ('b0000000-0000-0000-0000-000000000099',
         'admin',
         '管理员',
         'admin@example.com',
         'admin',
-        '$2a$10$9SD8eacmbngnudR/8noNPOgC.3K8CwVBFmFDiIHD6O48OKzTvO4Ue',
+        '$2a$10$JhYMfmI.FIanpfAG.sYLxuzJlyH6qTnZBWeluvAox1Y6UuOERYAUa',
         NULL)
 ON CONFLICT (employee_id) DO NOTHING;
