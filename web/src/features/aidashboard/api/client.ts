@@ -94,17 +94,27 @@ export const createTask = (data: {
   depends_on_ids?: string[];
 }) => unwrap(api.post<{ id: string; status: string }>("/tasks", data));
 export const updateTask = (id: string, data: Record<string, unknown>) =>
-  unwrap(api.put<Task>(`/tasks/${id}`, data));
+  unwrap(api.put<Task>(`/tasks/${id}`, data, { skipErrorHandler: true }));
 export const deleteTask = (id: string) =>
-  unwrap(api.delete<{ status: string }>(`/tasks/${id}`));
+  unwrap(api.delete<{ status: string }>(`/tasks/${id}`, undefined, { skipErrorHandler: true }));
 export const updateTaskStatus = (id: string, status: string) =>
-  unwrap(api.put<Task>(`/tasks/${id}/status`, { status }));
+  unwrap(api.put<Task>(`/tasks/${id}/status`, { status }, { skipErrorHandler: true }));
 export const updateTaskProgress = (id: string, progress: number) =>
-  unwrap(api.put<Task>(`/tasks/${id}/progress`, { progress }));
+  unwrap(api.put<Task>(`/tasks/${id}/progress`, { progress }, { skipErrorHandler: true }));
 export const addTaskDependency = (taskId: string, dependsOnId: string) =>
-  unwrap(api.post<Task>(`/tasks/${taskId}/dependencies`, { depends_on_id: dependsOnId }));
+  unwrap(
+    api.post<Task>(
+      `/tasks/${taskId}/dependencies`,
+      { depends_on_id: dependsOnId },
+      { skipErrorHandler: true }
+    )
+  );
 export const removeTaskDependency = (taskId: string, depId: string) =>
-  unwrap(api.delete<Task>(`/tasks/${taskId}/dependencies/${depId}`));
+  unwrap(
+    api.delete<Task>(`/tasks/${taskId}/dependencies/${depId}`, undefined, {
+      skipErrorHandler: true
+    })
+  );
 
 // ───────────────────────── Follows / Dashboard projections ─────────────────────────
 

@@ -41,7 +41,12 @@ export function TasksListPage() {
   };
 
   const canCreate = Boolean(
-    user && (user.role === "team_leader" || user.role === "director" || user.role === "admin")
+    user &&
+      (user.role === "team_leader" ||
+        user.role === "pm" ||
+        user.role === "director" ||
+        user.role === "admin" ||
+        user.role === "employee")
   );
 
   const tasksQuery = useQuery<Task[]>({

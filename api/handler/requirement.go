@@ -47,9 +47,15 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if u.Role == "team_leader" && u.TeamID != nil {
+		query += fmt.Sprintf(" AND (r.creator_id = $%d OR EXISTS (SELECT 1 FROM requirement_teams rt WHERE rt.requirement_id = r.id AND rt.team_id = $%d))", argIdx, argIdx+1)
+		args = append(args, u.ID, *u.TeamID)
+		argIdx += 2
+	} else if u.Role == "employee" && u.TeamID != nil {
 		query += fmt.Sprintf(" AND EXISTS (SELECT 1 FROM requirement_teams rt WHERE rt.requirement_id = r.id AND rt.team_id = $%d)", argIdx)
 		args = append(args, *u.TeamID)
 		argIdx++
+	} else if u.Role == "employee" {
+		query += " AND 1=0"
 	}
 
 	query += " ORDER BY r.created_at DESC"
@@ -95,6 +101,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	u := getUser(r)
 	var req model.Requirement
 	var acStr string
 	var deadline sql.NullString
@@ -116,12 +123,25 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	allowed, permErr := h.canViewRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
 	req.FeishuDocURL = nullStringPtr(feishuURL)
 	req.Deadline = nullStringPtr(deadline)
 	req.AcceptanceCriteria = parseTextArray(acStr)
 	req.CompletedAt = nullTimePtr(completedAt)
 	h.loadTeams(&req)
-	h.loadProjection(&req, getUser(r).ID)
+	h.loadProjection(&req, u.ID)
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -139,6 +159,10 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.TeamIDs) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one team_id required"})
+		return
+	}
+	if !h.canCreateRequirement(u, req.TeamIDs) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to create requirements for these teams"})
 		return
 	}
 	if req.Priority == "" {
@@ -192,6 +216,7 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	u := getUser(r)
 	var req model.UpdateRequirementRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
@@ -199,6 +224,15 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Status != nil && !isRequirementStatus(*req.Status) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid requirement status"})
+		return
+	}
+	allowed, permErr := h.canManageRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update requirement"})
 		return
 	}
 
@@ -272,7 +306,12 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm") {
+	allowed, permErr := h.canManageRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to restore requirements"})
 		return
 	}
@@ -305,7 +344,12 @@ func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm") {
+	allowed, permErr := h.canManageRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to delete requirements"})
 		return
 	}
@@ -364,6 +408,16 @@ func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	allowed, permErr := h.canViewRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
 	var acStr string
 	err := h.db.QueryRow("SELECT acceptance_criteria FROM requirements WHERE id = $1", id).Scan(&acStr)
 	if err != nil {
@@ -389,7 +443,12 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u == nil || (u.Role != "director" && u.Role != "pm" && u.Role != "team_leader") {
+	allowed, permErr := h.canManageRequirement(u, id)
+	if permErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
+		return
+	}
+	if !allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only director/pm/tl can regenerate AC"})
 		return
 	}

@@ -42,14 +42,14 @@ func (h *RequirementHandler) canViewRequirement(u *model.User, requirementID str
 		SELECT EXISTS(
 			SELECT 1 FROM requirements r
 			WHERE r.id = $1
-			  AND EXISTS (
+			  AND (EXISTS (
 				SELECT 1 FROM requirement_teams rt
 				WHERE rt.requirement_id = r.id AND rt.team_id = $2
 			  )`
 	if u.Role == "team_leader" {
 		query += ` OR r.creator_id = $3`
 	}
-	query += `)`
+	query += `))`
 	if u.Role == "team_leader" {
 		return allowed, h.db.QueryRow(query, requirementID, *u.TeamID, u.ID).Scan(&allowed)
 	}

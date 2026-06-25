@@ -46,7 +46,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "@/shared/auth/authContext";
-import { ROLE_LABELS, type UserRole } from "@/shared/auth/types";
+import { ROLE_LABELS, type User, type UserRole } from "@/shared/auth/types";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { appendSearch } from "@/shared/utils/urlQuery";
 
@@ -142,6 +142,12 @@ const EMPTY_REQUIREMENTS: MockRequirement[] = [];
 const EMPTY_TASKS: MockTask[] = [];
 const EMPTY_TOKEN_SOURCES: MockTokenSource[] = [];
 const EMPTY_FAVORITES: MockFavorite[] = [];
+
+function canManageTaskForUser(user: User | null, task?: MockTask) {
+  if (!user || !task) return false;
+  if (["admin", "director", "pm", "team_leader"].includes(user.role)) return true;
+  return user.role === "employee" && task.assignee_id === user.id;
+}
 
 const STAGE_META: Record<RequirementStage, { label: string; color: string }> = {
   todo: { label: "待开始", color: "default" },
@@ -831,13 +837,7 @@ export function RequirementsListPage() {
         tokenSources={tokenSources}
         tokenSourceMap={tokenSourceMap}
         isFavorite={activeTask ? favoriteTaskIds.has(activeTask.id) : false}
-        canManage={Boolean(
-          user &&
-            (user.role === "admin" ||
-              user.role === "director" ||
-              user.role === "pm" ||
-              user.role === "team_leader")
-        )}
+        canManage={canManageTaskForUser(user, activeTask)}
         onToggleFavorite={activeTask ? () => toggleTaskFavorite(activeTask.id) : undefined}
         onClose={() => {
           setSelectedTask(undefined);
@@ -2278,54 +2278,54 @@ function TaskDrawerContent({
           />
         ) : null}
         <div className="requirements-drawer__progress-editor">
-          <Slider min={0} max={100} value={progress} onChange={setProgress} />
+          <Slider min={0} max={100} value={progress} disabled={!canManage} onChange={setProgress} />
           <InputNumber
             min={0}
             max={100}
             value={progress}
+            disabled={!canManage}
             addonAfter="%"
             onChange={(value) => setProgress(value ?? 0)}
           />
           <Button
             type="primary"
             loading={progressMutation.isPending}
-            disabled={progress === task.progress}
+            disabled={!canManage || progress === task.progress}
             onClick={() => progressMutation.mutate()}
           >
             保存进度
           </Button>
         </div>
-        <Space wrap size={8} style={{ marginTop: 12 }}>
-          {task.status !== "done" && !dependencyBlocked ? (
-            <Button
-              type="primary"
-              size="small"
-              loading={statusMutation.isPending}
-              onClick={() => requestStatusChange("done")}
-            >
-              标记完成
-            </Button>
-          ) : null}
-          {task.status === "done" ? (
-            <Button
-              size="small"
-              loading={statusMutation.isPending}
-              onClick={() => requestStatusChange("todo")}
-            >
-              重新打开
-            </Button>
-          ) : null}
-          {task.status === "todo" && !dependencyBlocked ? (
-            <Button
-              size="small"
-              loading={statusMutation.isPending}
-              onClick={() => requestStatusChange("in_progress")}
-            >
-              开始任务
-            </Button>
-          ) : null}
-          {canManage ? (
-            <>
+        {canManage ? (
+          <Space wrap size={8} style={{ marginTop: 12 }}>
+            {task.status !== "done" && !dependencyBlocked ? (
+              <Button
+                type="primary"
+                size="small"
+                loading={statusMutation.isPending}
+                onClick={() => requestStatusChange("done")}
+              >
+                标记完成
+              </Button>
+            ) : null}
+            {task.status === "done" ? (
+              <Button
+                size="small"
+                loading={statusMutation.isPending}
+                onClick={() => requestStatusChange("todo")}
+              >
+                重新打开
+              </Button>
+            ) : null}
+            {task.status === "todo" && !dependencyBlocked ? (
+              <Button
+                size="small"
+                loading={statusMutation.isPending}
+                onClick={() => requestStatusChange("in_progress")}
+              >
+                开始任务
+              </Button>
+            ) : null}
               <Button size="small" onClick={() => setEditOpen(true)}>
                 编辑任务
               </Button>
@@ -2337,9 +2337,8 @@ function TaskDrawerContent({
               >
                 删除任务
               </Button>
-            </>
-          ) : null}
-        </Space>
+          </Space>
+        ) : null}
       </section>
 
       <section className="requirements-drawer__section">
@@ -2372,7 +2371,7 @@ function TaskDrawerContent({
               <Tag
                 key={dependency.task_id}
                 color={dependency.status === "done" ? "success" : "error"}
-                closable
+                closable={canManage}
                 onClose={(event) => {
                   event.preventDefault();
                   removeDependencyMutation.mutate(dependency.task_id);
@@ -2390,6 +2389,7 @@ function TaskDrawerContent({
             allowClear
             showSearch
             value={dependencyDraft}
+            disabled={!canManage}
             placeholder="选择同一需求内的上游任务"
             optionFilterProp="label"
             options={requirementTasks
@@ -2403,7 +2403,7 @@ function TaskDrawerContent({
           />
           <Button
             loading={addDependencyMutation.isPending}
-            disabled={!dependencyDraft}
+            disabled={!canManage || !dependencyDraft}
             onClick={() => dependencyDraft && addDependencyMutation.mutate(dependencyDraft)}
           >
             添加依赖
@@ -2420,9 +2420,11 @@ function TaskDrawerContent({
             ) : (
               <span>暂无关联 session</span>
             )}
-            <Button size="small" icon={<LinkOutlined />} onClick={() => setPickerOpen(true)}>
-              关联 session
-            </Button>
+            {canManage ? (
+              <Button size="small" icon={<LinkOutlined />} onClick={() => setPickerOpen(true)}>
+                关联 session
+              </Button>
+            ) : null}
           </Space>
         </div>
         {linkedSources.length ? (
@@ -2442,6 +2444,7 @@ function TaskDrawerContent({
                     type="text"
                     icon={<CloseOutlined />}
                     loading={unlinkMutation.isPending && unlinkMutation.variables === source.id}
+                    disabled={!canManage}
                     onClick={() => unlinkMutation.mutate(source.id)}
                     aria-label="移除"
                   />

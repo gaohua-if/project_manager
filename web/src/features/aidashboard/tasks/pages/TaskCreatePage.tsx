@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { FormPageWrap } from "@/shared/components/FormPageWrap/FormPageWrap";
 import { FormSubmitButton } from "@/shared/components/FormSubmitButton/FormSubmitButton";
+import { useAuth } from "@/shared/auth/authContext";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { useFormLeaveConfirm } from "@/shared/hooks/useFormLeaveConfirm";
 import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
@@ -36,6 +37,7 @@ export function TaskCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [form] = Form.useForm<CreateTaskFormValues>();
   const [formError, setFormError] = useState<string>();
   const initialRequirementId =
@@ -62,7 +64,10 @@ export function TaskCreatePage() {
   });
 
   const requirements = requirementsQuery.data ?? [];
-  const assignees = assigneesQuery.data ?? [];
+  const assignees =
+    user?.role === "employee"
+      ? (assigneesQuery.data ?? []).filter((item) => item.id === user.id)
+      : assigneesQuery.data ?? [];
   const allTasks = tasksQuery.data ?? [];
   const selectedRequirementId = Form.useWatch("requirement_id", form);
   const dependencyOptions = allTasks
@@ -93,10 +98,11 @@ export function TaskCreatePage() {
     form.setFieldsValue({
       priority: "medium",
       dependency_task_ids: [],
-      requirement_id: initialRequirementId
+      requirement_id: initialRequirementId,
+      assignee_id: user?.role === "employee" ? user.id : undefined
     });
     markClean();
-  }, [form, initialRequirementId, markClean]);
+  }, [form, initialRequirementId, markClean, user?.id, user?.role]);
 
   const handleSubmit = async (values: CreateTaskFormValues) => {
     setFormError(undefined);
@@ -194,7 +200,11 @@ export function TaskCreatePage() {
                   <Select
                     placeholder="选择负责人"
                     loading={assigneesQuery.isLoading}
-                    disabled={assigneesQuery.isLoading || assigneesQuery.isError}
+                    disabled={
+                      user?.role === "employee" ||
+                      assigneesQuery.isLoading ||
+                      assigneesQuery.isError
+                    }
                     options={assignees.map((item) => ({
                       value: item.id,
                       label: `${item.name} (${item.employee_id})`

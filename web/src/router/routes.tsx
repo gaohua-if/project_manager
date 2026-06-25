@@ -86,21 +86,21 @@ export const appRoutes: AppRoute[] = [
     path: "/tasks",
     title: "任务",
     hideInMenu: true,
-    roles: ["admin", "director", "team_leader", "employee"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <TasksListPage />
   },
   {
     path: "/tasks/create",
     title: "创建任务",
     hideInMenu: true,
-    roles: ["admin", "director", "team_leader"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <TaskCreatePage />
   },
   {
     path: "/tasks/:id",
     title: "任务详情",
     hideInMenu: true,
-    roles: ["admin", "director", "team_leader", "employee"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <TaskDetailPage />
   },
   {

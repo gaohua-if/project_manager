@@ -36,8 +36,8 @@ function getErrorMessage(error: unknown): string {
 
 function getPayloadMessage(payload: unknown) {
   if (payload && typeof payload === "object") {
-    const data = payload as { msg?: unknown; message?: unknown; Msg?: unknown };
-    const message = data.msg ?? data.message ?? data.Msg;
+    const data = payload as { error?: unknown; msg?: unknown; message?: unknown; Msg?: unknown };
+    const message = data.error ?? data.msg ?? data.message ?? data.Msg;
     if (typeof message === "string" && message) return message;
   }
   return undefined;
@@ -98,9 +98,9 @@ function handleHttpError(error: AxiosError, skipErrorHandler?: boolean) {
   if (status === 403) {
     if (!skipErrorHandler) {
       feedback.message()?.error("暂无访问权限");
-    }
-    if (window.location.pathname !== "/403") {
-      window.location.assign("/403");
+      if (window.location.pathname !== "/403") {
+        window.location.assign("/403");
+      }
     }
     throw new HttpError("暂无访问权限", { status, payload });
   }
