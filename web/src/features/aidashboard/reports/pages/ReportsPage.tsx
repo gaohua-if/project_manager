@@ -1,960 +1,829 @@
+import { RobotOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
   Button,
+  Card,
   DatePicker,
   Empty,
   Input,
   Segmented,
-  Skeleton
+  Space,
+  Table,
+  Tabs,
+  Tag,
+  Typography
 } from "antd";
-import {
-  CalendarOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  EditOutlined,
-  FileTextOutlined,
-  LinkOutlined,
-  RobotOutlined,
-  TeamOutlined
-} from "@ant-design/icons";
-import { useMemo, useState } from "react";
+import type { ColumnsType } from "antd/es/table";
+import type { Dayjs } from "dayjs";
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 
+import { useAuth } from "@/shared/auth/authContext";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+
 import {
+  fetchDepartmentReport,
+  fetchDepartmentReports,
   fetchDepartmentReportSources,
-  fetchDepartmentReportTodayOrNull,
-  fetchReports,
+  fetchMyReports,
+  fetchReport,
+  fetchTeamReport,
+  fetchTeamReports,
   fetchTeamReportSources,
-  fetchTeamReportTodayOrNull,
-  generateDepartmentReport,
-  generateTeamReport,
-  generateTodayReport,
   submitTeamReport,
   updateDepartmentReport,
   updateReport,
   updateTeamReport
 } from "../../api/client";
-import type { DailyReport, DepartmentReport, DepartmentReportSources, TeamReport, TeamReportSources } from "../../api/types";
-import {
-  RequirementMetricCard,
-  RequirementMetricGrid
-} from "../../requirements/components/RequirementMetricCard";
-import { useAuth } from "@/shared/auth/authContext";
-import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { DailyReportGenerateModal, type DailyGenerateScope } from "../components/DailyReportGenerateModal";
+import type {
+  DailyReportListItem,
+  DepartmentMissingTeam,
+  DepartmentReportListItem,
+  DepartmentReportSources,
+  DepartmentTeamReportSource,
+  TeamReportListItem,
+  TeamMemberReport,
+  TeamReportSources
+} from "../../api/types";
 
 import "./ReportsPage.css";
 
 const { TextArea } = Input;
+const { Paragraph, Text } = Typography;
+const { RangePicker } = DatePicker;
+const pageSizeOptions = [10, 20, 50, 100];
 
-const todayStr = () => new Date().toISOString().split("T")[0];
-const weekAgoStr = () => new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+type DailyTab = "personal" | "team" | "department";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "请稍后重试";
 }
 
-function reportStateClass(edited: boolean) {
-  return edited ? "is-edited" : "is-auto";
+function formatDateTime(value?: string) {
+  return value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-";
 }
 
-function FeishuLink({ url }: { url: string }) {
-  return (
-    <a className="reports-feishu-link" href={url} target="_blank" rel="noreferrer">
-      <LinkOutlined />
-      飞书文档
-    </a>
-  );
+function formatDate(value?: string) {
+  return value ? dayjs(value).format("YYYY-MM-DD") : "-";
 }
 
-function ReportsSkeleton({ rows = 6 }: { rows?: number }) {
-  return (
-    <div className="reports-loading-frame">
-      <Skeleton active paragraph={{ rows }} />
-    </div>
-  );
+function personalStatus(record: DailyReportListItem, role?: string) {
+  if (role === "director" || role === "admin") {
+    return record.status === "saved" || record.status === "submitted" ? <Tag color="blue">已保存</Tag> : <Tag>待生成</Tag>;
+  }
+  if (record.status === "submitted") return <Tag color="green">已发送</Tag>;
+  if (record.status === "saved" && record.submitted_at) return <Tag color="gold">已保存，未发送最新修改</Tag>;
+  if (record.status === "saved") return <Tag color="blue">已保存</Tag>;
+  return <Tag>待生成</Tag>;
 }
 
-function ReportsEmpty({ description }: { description: string }) {
-  return (
-    <div className="reports-empty-frame">
-      <Empty description={description} />
-    </div>
-  );
+function teamStatus(submittedAt?: string) {
+  return submittedAt ? <Tag color="green">已提交总监</Tag> : <Tag color="orange">草稿</Tag>;
+}
+
+function departmentStatus(archivedAt?: string) {
+  return archivedAt ? <Tag color="green">已归档</Tag> : <Tag color="orange">草稿</Tag>;
+}
+
+function useTablePagination() {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  return {
+    page,
+    pageSize,
+    tablePagination: (total: number) => ({
+      current: page,
+      pageSize,
+      total,
+      showSizeChanger: true,
+      pageSizeOptions,
+      onChange: (next: number, size: number) => {
+        setPage(next);
+        if (size && size !== pageSize) setPageSize(size);
+      }
+    })
+  };
+}
+
+export function DailyReportsPage() {
+  return <ReportsPage />;
 }
 
 export function ReportsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<DailyTab>("personal");
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [generateTarget, setGenerateTarget] = useState<{ scope: DailyGenerateScope; reportId?: string; reportDate?: string } | null>(null);
+
+  const options =
+    user?.role === "director" || user?.role === "admin"
+      ? [
+          { label: "我的日报记录", value: "personal" },
+          { label: "部门日报记录", value: "department" }
+        ]
+      : user?.role === "team_leader"
+        ? [
+            { label: "我的日报记录", value: "personal" },
+            { label: "小组日报记录", value: "team" }
+          ]
+        : [{ label: "我的日报记录", value: "personal" }];
+
+  const activeTab = options.some((item) => item.value === tab) ? tab : "personal";
+  const from = dateRange?.[0].format("YYYY-MM-DD");
+  const to = dateRange?.[1].format("YYYY-MM-DD");
+  const generateLabel =
+    activeTab === "team" ? "生成今日小组日报" : activeTab === "department" ? "生成今日部门日报" : "生成今日日报";
+
   if (!user) return null;
-
-  if (user.role === "team_leader") return <TLReportsView />;
-  if (user.role === "director" || user.role === "admin") return <DirectorReportsView />;
-  if (user.role === "pm") return <PMReportsView />;
-  return <EmployeeReportsView />;
-}
-
-// ───────────────────────── Employee ─────────────────────────
-
-function EmployeeReportsView() {
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [editFeishuUrl, setEditFeishuUrl] = useState("");
-
-  const reportsQuery = useQuery<DailyReport[]>({
-    queryKey: ["reports", { from: weekAgoStr(), to: todayStr() }],
-    queryFn: () => fetchReports({ from: weekAgoStr(), to: todayStr() }),
-    staleTime: 30_000
-  });
-  const reports = reportsQuery.data ?? [];
-
-  const generateMutation = useMutation({
-    mutationFn: () => generateTodayReport(),
-    onSuccess: () => {
-      message.success("日报已生成");
-      void queryClient.invalidateQueries({ queryKey: ["reports"] });
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "生成失败")
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: (id: string) =>
-      updateReport(id, { content: editContent, feishu_doc_url: editFeishuUrl || undefined }),
-    onSuccess: () => {
-      message.success("已保存");
-      setEditingId(null);
-      void queryClient.invalidateQueries({ queryKey: ["reports"] });
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
-  });
-
-  const today = todayStr();
-  const todayCount = reports.filter((r) => r.report_date === today).length;
-  const weekCount = reports.length;
-  const editedCount = reports.filter((r) => r.edited).length;
-  const feishuCount = reports.filter((r) => r.feishu_doc_url).length;
-
-  return (
-    <PagePanel
-      title="个人日报"
-      description="查看和编辑你的日报"
-      breadcrumbs={[{ title: "报告" }, { title: "个人日报" }]}
-      className="reports-page aidashboard-list"
-      showNav={false}
-      actions={
-        <Button
-          type="primary"
-          icon={<RobotOutlined />}
-          loading={generateMutation.isPending}
-          onClick={() => generateMutation.mutate()}
-        >
-          生成 AI 日报
-        </Button>
-      }
-    >
-      <RequirementMetricGrid>
-        <RequirementMetricCard
-          tone="primary"
-          icon={<CalendarOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "today",
-            title: "今日日报",
-            value: todayCount,
-            description: todayCount > 0 ? "今日已生成" : "今日待生成"
-          }}
-        />
-        <RequirementMetricCard
-          tone="info"
-          icon={<FileTextOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "week",
-            title: "本周日报",
-            value: weekCount,
-            description: "近 7 天"
-          }}
-        />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<EditOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "edited",
-            title: "已编辑",
-            value: editedCount,
-            description: "手动调整后的日报"
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<LinkOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "feishu",
-            title: "关联飞书",
-            value: feishuCount,
-            description: "已挂飞书文档"
-          }}
-        />
-      </RequirementMetricGrid>
-
-      {reportsQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="日报加载失败"
-          description={errorMessage(reportsQuery.error)}
-          action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
-        />
-      ) : reportsQuery.isLoading ? (
-        <ReportsSkeleton />
-      ) : reports.length === 0 ? (
-        <ReportsEmpty description="暂无报告，点击「生成 AI 日报」开始" />
-      ) : (
-        <div className="reports-day-grid">
-          {reports.map((r) => (
-            <article
-              key={r.id}
-              className={`reports-report-card ${reportStateClass(r.edited)}`}
-            >
-              <header className="reports-report-card__head">
-                <span className="reports-report-card__head-left">
-                  <span className="reports-report-card__date">{r.report_date}</span>
-                  <span className={`reports-tag ${reportStateClass(r.edited)}`}>
-                    {r.edited ? "已编辑" : "自动生成"}
-                  </span>
-                </span>
-                <span className="reports-report-card__head-right">
-                  {r.feishu_doc_url ? <FeishuLink url={r.feishu_doc_url} /> : null}
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      if (editingId === r.id) {
-                        saveMutation.mutate(r.id);
-                      } else {
-                        setEditingId(r.id);
-                        setEditContent(r.content);
-                        setEditFeishuUrl(r.feishu_doc_url || "");
-                      }
-                    }}
-                    loading={editingId === r.id && saveMutation.isPending}
-                  >
-                    {editingId === r.id ? "保存" : "编辑"}
-                  </Button>
-                  {editingId === r.id ? (
-                    <Button size="small" onClick={() => setEditingId(null)}>
-                      取消
-                    </Button>
-                  ) : null}
-                </span>
-              </header>
-              {editingId === r.id ? (
-                <div className="reports-edit-shell">
-                  <TextArea
-                    rows={8}
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                  />
-                  <Input
-                    placeholder="飞书文档 URL"
-                    value={editFeishuUrl}
-                    onChange={(e) => setEditFeishuUrl(e.target.value)}
-                  />
-                </div>
-              ) : (
-                <p className="reports-report-card__content">{r.content}</p>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-    </PagePanel>
-  );
-}
-
-// ───────────────────────── PM ─────────────────────────
-
-function PMReportsView() {
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-
-  const reportsQuery = useQuery<DailyReport[]>({
-    queryKey: ["reports", { from: weekAgoStr(), to: todayStr() }],
-    queryFn: () => fetchReports({ from: weekAgoStr(), to: todayStr() }),
-    staleTime: 30_000
-  });
-  const reports = useMemo(() => reportsQuery.data ?? [], [reportsQuery.data]);
-
-  const generateMutation = useMutation({
-    mutationFn: () => generateTodayReport(),
-    onSuccess: () => {
-      message.success("日报已生成");
-      void queryClient.invalidateQueries({ queryKey: ["reports"] });
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "生成失败")
-  });
-
-  const grouped = useMemo(() => {
-    const byDate: Record<string, DailyReport[]> = {};
-    for (const r of reports) {
-      if (!byDate[r.report_date]) byDate[r.report_date] = [];
-      byDate[r.report_date].push(r);
-    }
-    return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a));
-  }, [reports]);
-
-  const today = todayStr();
-  const todayCount = reports.filter((r) => r.report_date === today).length;
-  const editedCount = reports.filter((r) => r.edited).length;
-  const autoCount = reports.length - editedCount;
-  const feishuCount = reports.filter((r) => r.feishu_doc_url).length;
 
   return (
     <PagePanel
       title="日报"
-      description="查看团队成员日报"
+      description="按记录列表查看日报，个人日报通过生成弹窗处理，汇总日报正文与来源进入详情页处理。"
       breadcrumbs={[{ title: "报告" }, { title: "日报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
-      actions={
-        <Button
-          type="primary"
-          icon={<RobotOutlined />}
-          loading={generateMutation.isPending}
-          onClick={() => generateMutation.mutate()}
-        >
-          生成我的日报
-        </Button>
-      }
     >
-      <RequirementMetricGrid>
-        <RequirementMetricCard
-          tone="primary"
-          icon={<CalendarOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "today",
-            title: "今日报告",
-            value: todayCount,
-            description: "今日已生成数"
+      <Card>
+        <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
+          <Space wrap>
+            {options.length > 1 ? (
+              <Segmented value={activeTab} onChange={(value) => setTab(value as DailyTab)} options={options} />
+            ) : null}
+            <RangePicker value={dateRange} onChange={(value) => setDateRange(value as [Dayjs, Dayjs] | null)} />
+          </Space>
+          <Button type="primary" icon={<RobotOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
+            {generateLabel}
+          </Button>
+        </Space>
+      </Card>
+      {activeTab === "personal" ? (
+        <PersonalDailyTable
+          from={from}
+          to={to}
+          onEdit={(record) => setGenerateTarget({ scope: "personal", reportId: record.id, reportDate: record.report_date })}
+        />
+      ) : null}
+      {activeTab === "team" ? <TeamDailyTable from={from} to={to} onGenerate={(reportDate) => setGenerateTarget({ scope: "team", reportDate })} /> : null}
+      {activeTab === "department" ? <DepartmentDailyTable from={from} to={to} onGenerate={(reportDate) => setGenerateTarget({ scope: "department", reportDate })} /> : null}
+      {generateTarget ? (
+        <DailyReportGenerateModal
+          open
+          scope={generateTarget.scope}
+          reportId={generateTarget.reportId}
+          reportDate={generateTarget.reportDate}
+          onClose={() => setGenerateTarget(null)}
+          onDone={() => {
+            void queryClient.invalidateQueries({ queryKey: ["reports", "daily"] });
           }}
         />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<EditOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "edited",
-            title: "已编辑",
-            value: editedCount,
-            description: "手动调整后"
-          }}
-        />
-        <RequirementMetricCard
-          tone="info"
-          icon={<RobotOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "auto",
-            title: "自动生成",
-            value: autoCount,
-            description: "未经编辑的 AI 日报"
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<LinkOutlined />}
-          loading={reportsQuery.isLoading}
-          metric={{
-            key: "feishu",
-            title: "关联飞书",
-            value: feishuCount,
-            description: "已挂飞书文档"
-          }}
-        />
-      </RequirementMetricGrid>
+      ) : null}
+    </PagePanel>
+  );
+}
 
+function PersonalDailyTable({
+  from,
+  to,
+  onEdit
+}: {
+  from?: string;
+  to?: string;
+  onEdit: (record: DailyReportListItem) => void;
+}) {
+  const { user } = useAuth();
+  const { page, pageSize, tablePagination } = useTablePagination();
+
+  const reportsQuery = useQuery({
+    queryKey: ["reports", "daily", "personal-list", { from, to, page, pageSize }],
+    queryFn: () =>
+      fetchMyReports({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        page: String(page),
+        page_size: String(pageSize)
+      }),
+    staleTime: 30_000
+  });
+
+  const columns: ColumnsType<DailyReportListItem> = [
+    { title: "日期", dataIndex: "report_date", width: 140, render: formatDate },
+    { title: "状态", key: "status", width: 180, render: (_, record) => personalStatus(record, user?.role) },
+    { title: "来源 session 数", dataIndex: "source_session_count", width: 150 },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 160,
+      render: (_, record) => (
+        <Space>
+          <Button size="small" onClick={() => onEdit(record)}>
+            查看
+          </Button>
+          <Button size="small" type="link" onClick={() => onEdit(record)}>
+            编辑
+          </Button>
+        </Space>
+      )
+    }
+  ];
+
+  return (
+    <Card
+      title="我的日报记录"
+    >
       {reportsQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="日报加载失败"
-          description={errorMessage(reportsQuery.error)}
-          action={<Button onClick={() => void reportsQuery.refetch()}>重试</Button>}
-        />
-      ) : reportsQuery.isLoading ? (
-        <ReportsSkeleton />
-      ) : reports.length === 0 ? (
-        <ReportsEmpty description="暂无报告" />
+        <Alert type="error" showIcon message="我的日报加载失败" description={errorMessage(reportsQuery.error)} />
       ) : (
-        grouped.map(([date, dateReports]) => (
-          <section className="reports-day-section" key={date}>
-            <header className="reports-day-section__head">
-              <span className="reports-day-section__date">{date}</span>
-              <span className="reports-day-section__rule" aria-hidden="true" />
-              <span className="reports-day-section__count">{dateReports.length} 份</span>
-            </header>
-            <div className="reports-day-grid">
-              {dateReports.map((r) => (
-                <article
-                  key={r.id}
-                  className={`reports-report-card ${reportStateClass(r.edited)}`}
-                >
-                  <header className="reports-report-card__head">
-                    <span className="reports-report-card__head-left">
-                      <span className="reports-report-card__author">{r.user_name}</span>
-                      <span className={`reports-tag ${reportStateClass(r.edited)}`}>
-                        {r.edited ? "已编辑" : "自动生成"}
-                      </span>
-                    </span>
-                    {r.feishu_doc_url ? (
-                      <span className="reports-report-card__head-right">
-                        <FeishuLink url={r.feishu_doc_url} />
-                      </span>
-                    ) : null}
-                  </header>
-                  <p className="reports-report-card__content">{r.content}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        ))
+        <Table<DailyReportListItem>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data?.items ?? []}
+          loading={reportsQuery.isLoading}
+          pagination={tablePagination(reportsQuery.data?.total ?? 0)}
+        />
+      )}
+    </Card>
+  );
+}
+
+function TeamDailyTable({
+  from,
+  to,
+  readonly,
+  onGenerate
+}: {
+  from?: string;
+  to?: string;
+  readonly?: boolean;
+  onGenerate: (reportDate?: string) => void;
+}) {
+  const navigate = useNavigate();
+  const { page, pageSize, tablePagination } = useTablePagination();
+
+  const reportsQuery = useQuery({
+    queryKey: ["reports", "daily", "team-list", { from, to, page, pageSize }],
+    queryFn: () =>
+      fetchTeamReports({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        page: String(page),
+        page_size: String(pageSize)
+      }),
+    staleTime: 30_000
+  });
+
+  const columns: ColumnsType<TeamReportListItem> = [
+    { title: "日期", dataIndex: "report_date", width: 130, render: formatDate },
+    { title: "成员数", dataIndex: "member_count", width: 100 },
+    { title: "已提交人数", dataIndex: "submitted_count", width: 120 },
+    { title: "未提交人数", dataIndex: "missing_count", width: 120 },
+    { title: "小组日报状态", dataIndex: "submitted_at", width: 140, render: teamStatus },
+    { title: "提交给总监时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 220,
+      render: (_, record) => (
+        <Space>
+          <Button size="small" onClick={() => navigate(`/reports/daily/team/${record.id}`)}>
+            查看
+          </Button>
+          {!readonly ? (
+            <Button size="small" type="link" onClick={() => onGenerate(formatDate(record.report_date))}>
+              生成
+            </Button>
+          ) : null}
+          {!readonly && !record.submitted_at ? (
+            <Button size="small" type="link" onClick={() => navigate(`/reports/daily/team/${record.id}`)}>
+              编辑
+            </Button>
+          ) : null}
+        </Space>
+      )
+    }
+  ];
+  return (
+    <Card
+      title="小组日报记录"
+    >
+      {reportsQuery.isError ? (
+        <Alert type="error" showIcon message="小组日报加载失败" description={errorMessage(reportsQuery.error)} />
+      ) : (
+        <Table<TeamReportListItem>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data?.items ?? []}
+          loading={reportsQuery.isLoading}
+          pagination={tablePagination(reportsQuery.data?.total ?? 0)}
+        />
+      )}
+    </Card>
+  );
+}
+
+function DepartmentDailyTable({
+  from,
+  to,
+  onGenerate
+}: {
+  from?: string;
+  to?: string;
+  onGenerate: (reportDate?: string) => void;
+}) {
+  const navigate = useNavigate();
+  const { page, pageSize, tablePagination } = useTablePagination();
+
+  const reportsQuery = useQuery({
+    queryKey: ["reports", "daily", "department-list", { from, to, page, pageSize }],
+    queryFn: () =>
+      fetchDepartmentReports({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        page: String(page),
+        page_size: String(pageSize)
+      }),
+    staleTime: 30_000
+  });
+
+  const columns: ColumnsType<DepartmentReportListItem> = [
+    { title: "日期", dataIndex: "report_date", width: 140, render: formatDate },
+    { title: "小组总数", dataIndex: "team_count", width: 120 },
+    { title: "已提交小组数", dataIndex: "submitted_team_count", width: 140 },
+    { title: "未提交小组数", dataIndex: "missing_team_count", width: 140 },
+    { title: "状态", dataIndex: "archived_at", width: 120, render: departmentStatus },
+    { title: "归档时间", dataIndex: "archived_at", render: formatDateTime },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 160,
+      render: (_, record) => (
+        <Space>
+          <Button size="small" onClick={() => navigate(`/reports/daily/department/${record.id}`)}>
+            查看
+          </Button>
+          <Button size="small" type="link" onClick={() => onGenerate(formatDate(record.report_date))}>
+            生成
+          </Button>
+          {!record.archived_at ? (
+            <Button size="small" type="link" onClick={() => navigate(`/reports/daily/department/${record.id}`)}>
+              编辑
+            </Button>
+          ) : null}
+        </Space>
+      )
+    }
+  ];
+
+  return (
+    <Card
+      title="部门日报记录"
+    >
+      {reportsQuery.isError ? (
+        <Alert type="error" showIcon message="部门日报加载失败" description={errorMessage(reportsQuery.error)} />
+      ) : (
+        <Table<DepartmentReportListItem>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data?.items ?? []}
+          loading={reportsQuery.isLoading}
+          pagination={tablePagination(reportsQuery.data?.total ?? 0)}
+        />
+      )}
+    </Card>
+  );
+}
+
+export function PersonalDailyReportDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const [draft, setDraft] = useState<{ reportId?: string; content: string }>({ content: "" });
+
+  const reportQuery = useQuery({
+    queryKey: ["reports", "daily", "personal-detail", id],
+    queryFn: () => fetchReport(id ?? ""),
+    enabled: Boolean(id),
+    staleTime: 30_000
+  });
+  const report = reportQuery.data;
+  const content = draft.reportId === report?.id ? draft.content : (report?.content ?? "");
+
+  const saveMutation = useMutation({
+    mutationFn: () => updateReport(id ?? "", { content }),
+    onSuccess: () => {
+      message.success("已保存");
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily"] });
+    },
+    onError: (error: unknown) => message.error(errorMessage(error))
+  });
+
+  return (
+    <PagePanel title="个人日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "个人日报详情" }]} showNav={false}>
+      {reportQuery.isError ? (
+        <Alert type="error" showIcon message="个人日报加载失败" description={errorMessage(reportQuery.error)} />
+      ) : !report ? (
+        <Card loading={reportQuery.isLoading} />
+      ) : (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Card>
+            <Space size="large" wrap>
+              <Text>日期：{report.report_date}</Text>
+              <Text>状态：{report.edited ? "已编辑" : "自动生成"}</Text>
+              <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
+              <Text>来源 session 数：{report.session_ids.length}</Text>
+            </Space>
+          </Card>
+          <Card title="来源 session / 工作记录">
+            {report.session_ids.length === 0 ? (
+              <Empty description="暂无来源 session" />
+            ) : (
+              <Space wrap>
+                {report.session_ids.map((sessionId) => (
+                  <Tag key={sessionId}>{sessionId}</Tag>
+                ))}
+              </Space>
+            )}
+          </Card>
+          <Card
+            title="日报正文"
+            extra={
+              <Button type="primary" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                保存
+              </Button>
+            }
+          >
+            <TextArea
+              rows={14}
+              value={content}
+              onChange={(event) => setDraft({ reportId: report.id, content: event.target.value })}
+            />
+          </Card>
+        </Space>
       )}
     </PagePanel>
   );
 }
 
-// ───────────────────────── Team Leader ─────────────────────────
-
-function TLReportsView() {
+export function TeamDailyReportDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [tab, setTab] = useState<"sources" | "draft">("sources");
-  const [sourceDate, setSourceDate] = useState<dayjs.Dayjs>(dayjs());
-  const [editingTeam, setEditingTeam] = useState(false);
-  const [teamContent, setTeamContent] = useState("");
+  const [draft, setDraft] = useState<{ reportId?: string; content: string }>({ content: "" });
+  const [generateOpen, setGenerateOpen] = useState(false);
 
-  const teamReportQuery = useQuery<TeamReport | null>({
-    queryKey: ["team-report-today"],
-    queryFn: () => fetchTeamReportTodayOrNull(),
+  const reportQuery = useQuery({
+    queryKey: ["reports", "daily", "team-detail", id],
+    queryFn: () => fetchTeamReport(id ?? ""),
+    enabled: Boolean(id),
     staleTime: 30_000
   });
-  const teamReport = teamReportQuery.data ?? null;
+  const report = reportQuery.data;
+  const content = draft.reportId === report?.id ? draft.content : (report?.content ?? "");
 
   const sourcesQuery = useQuery<TeamReportSources>({
-    queryKey: ["team-report-sources", sourceDate.format("YYYY-MM-DD")],
-    queryFn: () => fetchTeamReportSources(sourceDate.format("YYYY-MM-DD")),
+    queryKey: ["reports", "daily", "team-sources", report?.report_date, report?.team_id],
+    queryFn: () => fetchTeamReportSources(report?.report_date ?? "", report?.team_id),
+    enabled: Boolean(report?.report_date),
     staleTime: 30_000
   });
-  const sources = sourcesQuery.data;
-  const memberReports = sources?.members ?? [];
 
-  const generateMutation = useMutation({
-    mutationFn: () => generateTeamReport(),
-    onSuccess: () => {
-      message.success("小组日报草稿已生成");
-      void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
-      setTab("draft");
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "生成失败")
-  });
-
+  const canEdit = user?.role === "team_leader" && !report?.submitted_at;
   const saveMutation = useMutation({
-    mutationFn: (id: string) =>
-      updateTeamReport(id, { content: teamContent }),
+    mutationFn: () => updateTeamReport(id ?? "", { content }),
     onSuccess: () => {
       message.success("已保存");
-      setEditingTeam(false);
-      void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-detail", id] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-list"] });
     },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
+    onError: (error: unknown) => message.error(errorMessage(error))
   });
-
   const submitMutation = useMutation({
-    mutationFn: (id: string) => submitTeamReport(id),
+    mutationFn: () => submitTeamReport(id ?? ""),
     onSuccess: () => {
       message.success("已提交给总监");
-      void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
-      void queryClient.invalidateQueries({ queryKey: ["department-report-sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-detail", id] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-list"] });
     },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "提交失败")
+    onError: (error: unknown) => message.error(errorMessage(error))
   });
 
-  const memberTotal = memberReports.length;
-  const submitted = sources?.submitted ?? memberReports.filter((m) => m.has_report).length;
-  const missing = sources?.missing ?? memberTotal - submitted;
-  const edited = memberReports.filter((m) => m.has_report && m.content && m.content.length > 0).length;
-
   return (
-    <PagePanel
-      title="团队日报"
-      description="先核对成员原始日报，再生成小组日报草稿"
-      breadcrumbs={[{ title: "报告" }, { title: "团队日报" }]}
-      className="reports-page aidashboard-list"
-      showNav={false}
-    >
-      <RequirementMetricGrid>
-        <RequirementMetricCard
-          tone="primary"
-          icon={<TeamOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "total",
-            title: "成员总数",
-            value: memberTotal,
-            description: sourceDate.format("YYYY-MM-DD")
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<CheckCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "submitted",
-            title: "今日已交",
-            value: submitted,
-            description:
-              memberTotal > 0 ? `提交率 ${Math.round((submitted * 100) / memberTotal)}%` : "暂无成员"
-          }}
-        />
-        <RequirementMetricCard
-          tone="danger"
-          icon={<CloseCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "missing",
-            title: "今日未交",
-            value: missing,
-            description: missing > 0 ? "需要提醒" : "全员到齐"
-          }}
-        />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<EditOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "edited",
-            title: "已编辑",
-            value: edited,
-            description: "成员有内容的日报"
-          }}
-        />
-      </RequirementMetricGrid>
-
-      <div className="reports-toolbar">
-        <div className="reports-toolbar__meta">
-          <strong>{tab === "sources" ? "原始日报收集" : "小组日报草稿"}</strong>
-          <span>·</span>
-          <span>{sourceDate.format("YYYY-MM-DD")}</span>
-        </div>
-        <div className="reports-toolbar__right">
-          <Segmented
-            value={tab}
-            onChange={(v) => setTab(v as "sources" | "draft")}
-            options={[
-              { label: "原始日报收集", value: "sources" },
-              { label: "小组日报草稿", value: "draft" }
+    <PagePanel title="小组日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "小组日报详情" }]} showNav={false}>
+      {reportQuery.isError ? (
+        <Alert type="error" showIcon message="小组日报加载失败" description={errorMessage(reportQuery.error)} />
+      ) : !report ? (
+        <Card loading={reportQuery.isLoading} />
+      ) : (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Card>
+            <Space size="large" wrap>
+              <Text>日期：{report.report_date}</Text>
+              <Text>小组：{report.team_name}</Text>
+              <Text>成员提交：{sourcesQuery.data ? `${sourcesQuery.data.submitted}/${sourcesQuery.data.members.length}` : "-"}</Text>
+              <Text>状态：{report.submitted_at ? "已提交总监" : "草稿"}</Text>
+              <Text>提交时间：{formatDateTime(report.submitted_at)}</Text>
+            </Space>
+          </Card>
+          <Tabs
+            items={[
+              {
+                key: "sources",
+                label: "原始成员日报",
+                children: sourcesQuery.isError ? (
+                  <Alert type="error" showIcon message="成员日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
+                ) : sourcesQuery.isLoading ? (
+                  <Card loading />
+                ) : (
+                  <TeamSources sources={sourcesQuery.data} />
+                )
+              },
+              {
+                key: "report",
+                label: "小组日报",
+                children: (
+                  <Card
+                    extra={
+                      <Space>
+                        {canEdit ? (
+                          <Button onClick={() => setGenerateOpen(true)}>
+                            生成草稿
+                          </Button>
+                        ) : null}
+                        {canEdit ? (
+                          <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                            保存
+                          </Button>
+                        ) : null}
+                        {canEdit ? (
+                          <Button type="primary" loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>
+                            提交给总监
+                          </Button>
+                        ) : null}
+                      </Space>
+                    }
+                  >
+                    {canEdit ? (
+                      <TextArea
+                        rows={14}
+                        value={content}
+                        onChange={(event) => setDraft({ reportId: report.id, content: event.target.value })}
+                      />
+                    ) : (
+                      <Paragraph>{report.content}</Paragraph>
+                    )}
+                  </Card>
+                )
+              }
             ]}
           />
-          <DatePicker
-            value={sourceDate}
-            onChange={(v) => v && setSourceDate(v)}
-            allowClear={false}
-          />
-          {tab === "sources" ? (
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateMutation.isPending}
-              onClick={() => generateMutation.mutate()}
-            >
-              生成小组日报草稿
-            </Button>
+          {generateOpen ? (
+            <DailyReportGenerateModal
+              open
+              scope="team"
+              reportDate={report.report_date}
+              onClose={() => setGenerateOpen(false)}
+              onDone={() => {
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-detail", id] });
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-sources"] });
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-list"] });
+              }}
+            />
           ) : null}
-        </div>
-      </div>
-
-      {tab === "draft" ? (
-        teamReportQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="团队日报加载失败"
-            description={errorMessage(teamReportQuery.error)}
-            action={<Button onClick={() => void teamReportQuery.refetch()}>重试</Button>}
-          />
-        ) : teamReportQuery.isLoading ? (
-          <ReportsSkeleton />
-        ) : !teamReport ? (
-          <ReportsEmpty description="尚未生成小组日报草稿，请先核对原始日报收集情况。" />
-        ) : (
-          <section className="reports-team-card">
-            <header className="reports-team-card__head">
-              <span className="reports-team-card__title">{teamReport.team_name}</span>
-              <span className="reports-team-card__meta">
-                <span className={`reports-tag ${teamReport.submitted_at ? "is-submitted" : "is-team"}`}>
-                  {teamReport.submitted_at ? "已提交总监" : "草稿"}
-                </span>
-                <span>{teamReport.report_date}</span>
-                {!editingTeam ? (
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditingTeam(true);
-                      setTeamContent(teamReport.content);
-                    }}
-                  >
-                    编辑
-                  </Button>
-                ) : null}
-                {!editingTeam && !teamReport.submitted_at ? (
-                  <Button
-                    size="small"
-                    type="primary"
-                    loading={submitMutation.isPending}
-                    onClick={() => submitMutation.mutate(teamReport.id)}
-                  >
-                    提交给总监
-                  </Button>
-                ) : null}
-              </span>
-            </header>
-            {editingTeam ? (
-              <div className="reports-edit-shell">
-                <TextArea
-                  rows={10}
-                  value={teamContent}
-                  onChange={(e) => setTeamContent(e.target.value)}
-                />
-                <div className="reports-edit-shell__actions">
-                  <Button onClick={() => setEditingTeam(false)}>取消</Button>
-                  <Button
-                    type="primary"
-                    loading={saveMutation.isPending}
-                    onClick={() => saveMutation.mutate(teamReport.id)}
-                  >
-                    保存
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p className="reports-team-card__body">{teamReport.content}</p>
-            )}
-          </section>
-        )
-      ) : sourcesQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="成员日报加载失败"
-          description={errorMessage(sourcesQuery.error)}
-          action={<Button onClick={() => void sourcesQuery.refetch()}>重试</Button>}
-        />
-      ) : sourcesQuery.isLoading ? (
-        <ReportsSkeleton />
-      ) : memberReports.length === 0 ? (
-        <ReportsEmpty description="该日期未找到团队成员日报" />
-      ) : (
-        <div className="reports-member-grid">
-          {memberReports.map((mr) => (
-            <article
-              key={mr.user_id}
-              className={`reports-report-card ${mr.has_report ? "is-auto" : "is-missing"}`}
-            >
-              <header className="reports-report-card__head">
-                <span className="reports-report-card__head-left">
-                  <span className="reports-report-card__author">{mr.user_name}</span>
-                  <span className={`reports-tag ${mr.has_report ? "is-submitted" : "is-missing"}`}>
-                    {mr.has_report ? "已提交" : "未提交"}
-                  </span>
-                </span>
-                {mr.submitted_at ? (
-                  <span className="reports-report-card__head-right">
-                    <span className="reports-report-card__date">{dayjs(mr.submitted_at).format("HH:mm")}</span>
-                  </span>
-                ) : null}
-              </header>
-              {mr.has_report ? (
-                <p className="reports-report-card__content">{mr.content}</p>
-              ) : (
-                <span className="reports-report-card__empty">该日期暂无报告。</span>
-              )}
-            </article>
-          ))}
-        </div>
+        </Space>
       )}
     </PagePanel>
   );
 }
 
-// ───────────────────────── Director ─────────────────────────
+function TeamSources({ sources }: { sources?: TeamReportSources }) {
+  if (!sources) return <Empty description="暂无来源" />;
+  const columns: ColumnsType<TeamMemberReport> = [
+    { title: "成员", dataIndex: "user_name", width: 180 },
+    {
+      title: "提交状态",
+      dataIndex: "has_report",
+      width: 140,
+      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已提交</Tag> : <Tag>未提交</Tag>)
+    },
+    { title: "提交 / 更新时间", dataIndex: "submitted_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 140,
+      render: (_, record) => (record.has_report ? <Text type="secondary">展开查看原文</Text> : "-")
+    }
+  ];
+  return (
+    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Card>
+        <Space size="large" wrap>
+          <Text>成员数：{sources.members.length}</Text>
+          <Text>已提交：{sources.submitted}</Text>
+          <Text>未提交：{sources.missing}</Text>
+        </Space>
+      </Card>
+      <Table<TeamMemberReport>
+        rowKey="user_id"
+        columns={columns}
+        dataSource={sources.members}
+        pagination={false}
+        expandable={{
+          rowExpandable: (record) => record.has_report,
+          expandedRowRender: (record) => <pre className="reports-source-content">{record.content || "暂无日报原文"}</pre>
+        }}
+      />
+    </Space>
+  );
+}
 
-function DirectorReportsView() {
+export function DepartmentDailyReportDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [tab, setTab] = useState<"sources" | "draft">("sources");
-  const [sourceDate, setSourceDate] = useState<dayjs.Dayjs>(dayjs());
-  const [editingDepartment, setEditingDepartment] = useState(false);
-  const [editContent, setEditContent] = useState("");
+  const [draft, setDraft] = useState<{ reportId?: string; content: string }>({ content: "" });
+  const [generateOpen, setGenerateOpen] = useState(false);
+
+  const reportQuery = useQuery({
+    queryKey: ["reports", "daily", "department-detail", id],
+    queryFn: () => fetchDepartmentReport(id ?? ""),
+    enabled: Boolean(id),
+    staleTime: 30_000
+  });
+  const report = reportQuery.data;
+  const content = draft.reportId === report?.id ? draft.content : (report?.content ?? "");
 
   const sourcesQuery = useQuery<DepartmentReportSources>({
-    queryKey: ["department-report-sources", sourceDate.format("YYYY-MM-DD")],
-    queryFn: () => fetchDepartmentReportSources(sourceDate.format("YYYY-MM-DD")),
+    queryKey: ["reports", "daily", "department-sources", report?.report_date],
+    queryFn: () => fetchDepartmentReportSources(report?.report_date ?? ""),
+    enabled: Boolean(report?.report_date),
     staleTime: 30_000
-  });
-  const sources = sourcesQuery.data;
-  const submittedTeamReports = sources?.submitted_team_reports ?? [];
-  const missingTeams = sources?.missing_teams ?? [];
-
-  const departmentReportQuery = useQuery<DepartmentReport | null>({
-    queryKey: ["department-report-today"],
-    queryFn: () => fetchDepartmentReportTodayOrNull(),
-    staleTime: 30_000
-  });
-  const departmentReport = departmentReportQuery.data ?? null;
-
-  const generateMutation = useMutation({
-    mutationFn: () => generateDepartmentReport(),
-    onSuccess: () => {
-      message.success("部门日报草稿已生成");
-      void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
-      setTab("draft");
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "生成失败")
   });
 
   const saveMutation = useMutation({
-    mutationFn: (id: string) =>
-      updateDepartmentReport(id, { content: editContent }),
+    mutationFn: () => updateDepartmentReport(id ?? "", { content }),
     onSuccess: () => {
       message.success("已保存");
-      setEditingDepartment(false);
-      void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-detail", id] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-list"] });
     },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
+    onError: (error: unknown) => message.error(errorMessage(error))
   });
-
   const archiveMutation = useMutation({
-    mutationFn: (id: string) =>
-      updateDepartmentReport(id, { content: editContent || departmentReport?.content, archive: true }),
+    mutationFn: () => updateDepartmentReport(id ?? "", { content, archive: true }),
     onSuccess: () => {
-      message.success("部门日报已归档");
-      setEditingDepartment(false);
-      void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
+      message.success("已归档");
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-detail", id] });
+      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-list"] });
     },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "归档失败")
+    onError: (error: unknown) => message.error(errorMessage(error))
   });
-
-  const submitted = sources?.submitted_team_count ?? submittedTeamReports.length;
-  const totalTeams = sources?.total_team_count ?? submittedTeamReports.length + missingTeams.length;
-  const missing = missingTeams.length;
-  const archived = departmentReport?.archived_at ? 1 : 0;
 
   return (
-    <PagePanel
-      title="部门报告"
-      description="先核对已提交小组日报，再生成部门日报草稿"
-      breadcrumbs={[{ title: "报告" }, { title: "部门报告" }]}
-      className="reports-page aidashboard-list"
-      showNav={false}
-    >
-      <RequirementMetricGrid>
-        <RequirementMetricCard
-          tone="primary"
-          icon={<CalendarOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "date",
-            title: "报告日期",
-            value: sourceDate.format("MM-DD"),
-            description: sourceDate.format("YYYY-MM-DD")
-          }}
-        />
-        <RequirementMetricCard
-          tone="info"
-          icon={<TeamOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "submitted",
-            title: "已提交小组",
-            value: submitted,
-            description: totalTeams > 0 ? `提交率 ${Math.round((submitted * 100) / totalTeams)}%` : "暂无小组"
-          }}
-        />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<CloseCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "missing",
-            title: "未提交小组",
-            value: missing,
-            description: missing > 0 ? "等待 TL 提交" : "小组日报到齐"
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<RobotOutlined />}
-          loading={departmentReportQuery.isLoading}
-          metric={{
-            key: "archived",
-            title: "归档状态",
-            value: archived,
-            description: departmentReport?.archived_at ? "部门日报已归档" : "待生成或待归档"
-          }}
-        />
-      </RequirementMetricGrid>
-
-      <div className="reports-toolbar">
-        <div className="reports-toolbar__meta">
-          <strong>{tab === "sources" ? "小组日报收集" : "部门日报草稿"}</strong>
-          <span>·</span>
-          <span>{sourceDate.format("YYYY-MM-DD")}</span>
-        </div>
-        <div className="reports-toolbar__right">
-          <Segmented
-            value={tab}
-            onChange={(v) => setTab(v as "sources" | "draft")}
-            options={[
-              { label: "小组日报收集", value: "sources" },
-              { label: "部门日报草稿", value: "draft" }
+    <PagePanel title="部门日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "部门日报详情" }]} showNav={false}>
+      {reportQuery.isError ? (
+        <Alert type="error" showIcon message="部门日报加载失败" description={errorMessage(reportQuery.error)} />
+      ) : !report ? (
+        <Card loading={reportQuery.isLoading} />
+      ) : (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Card>
+            <Space size="large" wrap>
+              <Text>日期：{report.report_date}</Text>
+              <Text>
+                小组提交：
+                {sourcesQuery.data
+                  ? `${sourcesQuery.data.submitted_team_count}/${sourcesQuery.data.total_team_count}`
+                  : "-"}
+              </Text>
+              <Text>状态：{report.archived_at ? "已归档" : "草稿"}</Text>
+              <Text>归档时间：{formatDateTime(report.archived_at)}</Text>
+              <Text>来源小组日报数：{report.source_team_report_ids.length}</Text>
+            </Space>
+          </Card>
+          <Tabs
+            items={[
+              {
+                key: "sources",
+                label: "原始小组日报",
+                children: sourcesQuery.isError ? (
+                  <Alert type="error" showIcon message="小组日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
+                ) : sourcesQuery.isLoading ? (
+                  <Card loading />
+                ) : (
+                  <DepartmentSources sources={sourcesQuery.data} />
+                )
+              },
+              {
+                key: "report",
+                label: "部门日报",
+                children: (
+                  <Card
+                    extra={
+                      <Space>
+                        {!report.archived_at ? (
+                          <Button onClick={() => setGenerateOpen(true)}>
+                            生成草稿
+                          </Button>
+                        ) : null}
+                        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                          保存
+                        </Button>
+                        {!report.archived_at ? (
+                          <Button type="primary" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
+                            归档
+                          </Button>
+                        ) : null}
+                      </Space>
+                    }
+                  >
+                    <TextArea
+                      rows={14}
+                      value={content}
+                      onChange={(event) => setDraft({ reportId: report.id, content: event.target.value })}
+                    />
+                  </Card>
+                )
+              }
             ]}
           />
-          <DatePicker
-            value={sourceDate}
-            onChange={(v) => v && setSourceDate(v)}
-            allowClear={false}
-          />
-          {tab === "sources" ? (
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateMutation.isPending}
-              onClick={() => generateMutation.mutate()}
-            >
-              生成部门日报草稿
-            </Button>
+          {generateOpen ? (
+            <DailyReportGenerateModal
+              open
+              scope="department"
+              reportDate={report.report_date}
+              onClose={() => setGenerateOpen(false)}
+              onDone={() => {
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-detail", id] });
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-sources"] });
+                void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-list"] });
+              }}
+            />
           ) : null}
-        </div>
-      </div>
-
-      {tab === "draft" ? (
-        departmentReportQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="部门日报加载失败"
-            description={errorMessage(departmentReportQuery.error)}
-            action={<Button onClick={() => void departmentReportQuery.refetch()}>重试</Button>}
-          />
-        ) : departmentReportQuery.isLoading ? (
-          <ReportsSkeleton />
-        ) : !departmentReport ? (
-          <ReportsEmpty description="尚未生成部门日报草稿，请先核对小组日报收集情况。" />
-        ) : (
-          <section className="reports-team-card">
-            <header className="reports-team-card__head">
-              <span className="reports-team-card__title">部门日报</span>
-              <span className="reports-team-card__meta">
-                <span className={`reports-tag ${departmentReport.archived_at ? "is-submitted" : "is-team"}`}>
-                  {departmentReport.archived_at ? "已归档" : "草稿"}
-                </span>
-                <span>{departmentReport.report_date}</span>
-                {!editingDepartment ? (
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditingDepartment(true);
-                      setEditContent(departmentReport.content);
-                    }}
-                  >
-                    编辑
-                  </Button>
-                ) : null}
-                {!editingDepartment && !departmentReport.archived_at ? (
-                  <Button
-                    size="small"
-                    type="primary"
-                    loading={archiveMutation.isPending}
-                    onClick={() => archiveMutation.mutate(departmentReport.id)}
-                  >
-                    归档
-                  </Button>
-                ) : null}
-              </span>
-            </header>
-            {editingDepartment ? (
-              <div className="reports-edit-shell">
-                <TextArea
-                  rows={10}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                />
-                <div className="reports-edit-shell__actions">
-                  <Button onClick={() => setEditingDepartment(false)}>取消</Button>
-                  <Button
-                    type="primary"
-                    loading={saveMutation.isPending}
-                    onClick={() => saveMutation.mutate(departmentReport.id)}
-                  >
-                    保存
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p className="reports-team-card__body">{departmentReport.content}</p>
-            )}
-          </section>
-        )
-      ) : sourcesQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="报告加载失败"
-          description={errorMessage(sourcesQuery.error)}
-          action={<Button onClick={() => void sourcesQuery.refetch()}>重试</Button>}
-        />
-      ) : sourcesQuery.isLoading ? (
-        <ReportsSkeleton />
-      ) : totalTeams === 0 ? (
-        <ReportsEmpty description="暂无小组配置或小组日报收集数据。" />
-      ) : (
-        <div className="reports-member-grid">
-          {submittedTeamReports.map((item) => (
-            <article className="reports-report-card is-auto" key={item.team_id}>
-              <header className="reports-report-card__head">
-                <span className="reports-report-card__head-left">
-                  <span className="reports-report-card__author">{item.team_name}</span>
-                  <span className="reports-tag is-submitted">已提交</span>
-                </span>
-                {item.submitted_at ? (
-                  <span className="reports-report-card__head-right">
-                    <span className="reports-report-card__date">
-                      {item.team_leader_name ? `${item.team_leader_name} · ` : ""}
-                      {dayjs(item.submitted_at).format("HH:mm")}
-                    </span>
-                  </span>
-                ) : null}
-              </header>
-              <p className="reports-report-card__content">{item.content}</p>
-            </article>
-          ))}
-          {missingTeams.map((team) => (
-            <article className="reports-report-card is-missing" key={team.team_id}>
-              <header className="reports-report-card__head">
-                <span className="reports-report-card__head-left">
-                  <span className="reports-report-card__author">{team.team_name}</span>
-                  <span className="reports-tag is-missing">未提交</span>
-                </span>
-              </header>
-              <span className="reports-report-card__empty">该小组尚未提交小组日报。</span>
-            </article>
-          ))}
-        </div>
+        </Space>
       )}
     </PagePanel>
+  );
+}
+
+function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
+  if (!sources) return <Empty description="暂无来源" />;
+  type DepartmentSourceRow = DepartmentTeamReportSource | (DepartmentMissingTeam & { has_report: false });
+  const rows: DepartmentSourceRow[] = [
+    ...sources.submitted_team_reports,
+    ...sources.missing_teams.map((team) => ({ ...team, has_report: false as const }))
+  ];
+  const columns: ColumnsType<DepartmentSourceRow> = [
+    { title: "小组", dataIndex: "team_name", width: 180 },
+    {
+      title: "TL",
+      key: "leader",
+      width: 160,
+      render: (_, record) => ("team_leader_name" in record ? record.team_leader_name || record.leader_name : "-")
+    },
+    {
+      title: "提交状态",
+      dataIndex: "has_report",
+      width: 140,
+      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已提交</Tag> : <Tag>未提交</Tag>)
+    },
+    { title: "提交时间", dataIndex: "submitted_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 140,
+      render: (_, record) => (record.has_report ? <Text type="secondary">展开查看原文</Text> : "-")
+    }
+  ];
+  return (
+    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Card>
+        <Space size="large" wrap>
+          <Text>小组总数：{sources.total_team_count}</Text>
+          <Text>已提交：{sources.submitted_team_count}</Text>
+          <Text>未提交：{sources.missing_teams.length}</Text>
+        </Space>
+      </Card>
+      <Table<DepartmentSourceRow>
+        rowKey="team_id"
+        columns={columns}
+        dataSource={rows}
+        pagination={false}
+        expandable={{
+          rowExpandable: (record) => record.has_report,
+          expandedRowRender: (record) => (
+            <pre className="reports-source-content">{"content" in record ? record.content || "暂无小组日报原文" : ""}</pre>
+          )
+        }}
+      />
+    </Space>
   );
 }

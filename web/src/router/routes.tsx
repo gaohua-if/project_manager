@@ -14,7 +14,14 @@ import { OrganizationPasswordResetPage } from "@/features/aidashboard/organizati
 import { OrganizationUserEditPage } from "@/features/aidashboard/organization/pages/OrganizationUserEditPage";
 import { ProductDocumentCreatePage } from "@/features/aidashboard/products/pages/ProductDocumentCreatePage";
 import { ProductsPage } from "@/features/aidashboard/products/pages/ProductsPage";
-import { ReportsPage } from "@/features/aidashboard/reports/pages/ReportsPage";
+import {
+  DailyReportsPage,
+  DepartmentDailyReportDetailPage,
+  PersonalDailyReportDetailPage,
+  ReportsPage,
+  TeamDailyReportDetailPage
+} from "@/features/aidashboard/reports/pages/ReportsPage";
+import { WeeklyReportsPage } from "@/features/aidashboard/reports/pages/WeeklyReportsPage";
 import { RequirementCreatePage } from "@/features/aidashboard/requirements/pages/RequirementCreatePage";
 import { RequirementDetailPage } from "@/features/aidashboard/requirements/pages/RequirementDetailPage";
 import { RequirementsListPage } from "@/features/aidashboard/requirements/pages/RequirementsListPage";
@@ -128,11 +135,43 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/reports",
-    title: "日报 / 周报",
+    title: "日报",
+    hideInMenu: true,
+    element: <ReportsPage />
+  },
+  {
+    path: "/reports/daily",
+    title: "日报",
     icon: <FileTextOutlined />,
     menuGroup: "报告",
     menuOrder: 70,
-    element: <ReportsPage />
+    element: <DailyReportsPage />
+  },
+  {
+    path: "/reports/daily/personal/:id",
+    title: "个人日报详情",
+    hideInMenu: true,
+    element: <PersonalDailyReportDetailPage />
+  },
+  {
+    path: "/reports/daily/team/:id",
+    title: "小组日报详情",
+    hideInMenu: true,
+    element: <TeamDailyReportDetailPage />
+  },
+  {
+    path: "/reports/daily/department/:id",
+    title: "部门日报详情",
+    hideInMenu: true,
+    element: <DepartmentDailyReportDetailPage />
+  },
+  {
+    path: "/reports/weekly",
+    title: "周报",
+    icon: <FileTextOutlined />,
+    menuGroup: "报告",
+    menuOrder: 71,
+    element: <WeeklyReportsPage />
   },
   {
     path: "/tokens",

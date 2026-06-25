@@ -305,3 +305,16 @@
   border-radius: 12px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
 }
+
+.reports-source-content {
+  margin: 0;
+  padding: 12px;
+  color: #263244;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  background: #f8fafc;
+  border: 1px solid #e6ebf3;
+  border-radius: 8px;
+}

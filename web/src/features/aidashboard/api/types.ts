@@ -185,11 +185,39 @@ export interface DailyReport {
   user_name: string;
   report_date: string;
   content: string;
+  submitted_content?: string;
+  status?: "saved" | "submitted" | null;
+  submitted_to?: "team_leader" | "director" | null;
   edited: boolean;
   feishu_doc_url?: string;
   session_ids: string[];
+  saved_at?: string;
+  submitted_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface DailyReportListItem {
+  id: string;
+  user_id: string;
+  user_name: string;
+  report_date: string;
+  status?: "saved" | "submitted" | null;
+  submitted_to?: "team_leader" | "director" | null;
+  edited: boolean;
+  source_session_count: number;
+  session_ids: string[];
+  saved_at?: string;
+  submitted_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedDailyReports {
+  items: DailyReportListItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface GenerateReportDraftPayload {
@@ -234,6 +262,28 @@ export interface TeamReport {
   submitted_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TeamReportListItem {
+  id: string;
+  team_id: string;
+  team_name: string;
+  leader_id: string;
+  leader_name: string;
+  report_date: string;
+  member_count: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedTeamReports {
+  items: TeamReportListItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface TeamMemberReport {
@@ -285,6 +335,114 @@ export interface DepartmentReport {
   report_date: string;
   content: string;
   source_team_report_ids: string[];
+  archived_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DepartmentReportListItem {
+  id: string;
+  report_date: string;
+  team_count: number;
+  submitted_team_count: number;
+  missing_team_count: number;
+  archived_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedDepartmentReports {
+  items: DepartmentReportListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface WeeklyDailyReportSource {
+  report_id: string;
+  user_id: string;
+  user_name: string;
+  report_date: string;
+  content: string;
+}
+
+export interface WeeklyTeamDailyReportSource {
+  report_id: string;
+  team_id: string;
+  team_name: string;
+  leader_id: string;
+  leader_name: string;
+  report_date: string;
+  content: string;
+  submitted_at?: string;
+}
+
+export interface WeeklyTaskSource {
+  task_id: string;
+  task_title: string;
+  requirement_id: string;
+  requirement_title: string;
+  assignee_id?: string;
+  assignee_name: string;
+  status: string;
+  priority: string;
+  due_date?: string;
+}
+
+export interface TeamWeeklyReportSources {
+  team_id: string;
+  team_name: string;
+  week_start: string;
+  week_end: string;
+  daily_reports: WeeklyDailyReportSource[];
+  team_reports: WeeklyTeamDailyReportSource[];
+  tasks: WeeklyTaskSource[];
+  submitted_daily_count: number;
+  team_report_count: number;
+  task_count: number;
+}
+
+export interface TeamWeeklyReport {
+  id: string;
+  team_id: string;
+  team_name: string;
+  leader_id: string;
+  leader_name: string;
+  week_start: string;
+  content: string;
+  source_daily_report_ids: string[];
+  source_team_report_ids: string[];
+  source_task_ids: string[];
+  submitted_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DepartmentTeamWeeklyReportSource {
+  team_id: string;
+  team_name: string;
+  leader_id?: string;
+  leader_name: string;
+  report_id?: string;
+  content: string;
+  submitted_at?: string;
+  has_report: boolean;
+}
+
+export interface DepartmentWeeklyReportSources {
+  week_start: string;
+  week_end: string;
+  submitted_team_count: number;
+  total_team_count: number;
+  submitted_team_reports: DepartmentTeamWeeklyReportSource[];
+  missing_teams: DepartmentMissingTeam[];
+}
+
+export interface DepartmentWeeklyReport {
+  id: string;
+  week_start: string;
+  content: string;
+  source_team_weekly_report_ids: string[];
   archived_at?: string;
   created_at: string;
   updated_at: string;

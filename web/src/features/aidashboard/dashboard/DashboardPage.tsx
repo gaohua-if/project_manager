@@ -62,11 +62,15 @@ import {
   type DashboardTokenRange,
   type DashboardTokenReport
 } from "./dashboardTokenStats";
+import {
+  DailyReportGenerateModal,
+  type DailyGenerateScope
+} from "../reports/components/DailyReportGenerateModal";
 
 import "./console-dashboard.css";
 
 type DashboardRole = "employee" | "team_leader" | "director" | "pm";
-type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已归档" | "生成失败";
+type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已保存" | "已发送" | "已保存，未发送最新修改" | "已归档" | "生成失败";
 type ReportGenerateMode = "系统自动生成" | "手动生成";
 type ReportModalStep = "sessions" | "source" | "editor";
 type ReportKind =
@@ -216,11 +220,6 @@ function createReport(overrides: Omit<ReportItem, "sessionCount" | "generateMode
   };
 }
 
-function findCurrentUserDailyReport(reports: DailyReport[], userId: string | undefined, reportDate: string) {
-  if (!userId) return undefined;
-  return reports.find((report) => report.user_id === userId && report.report_date === reportDate);
-}
-
 function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport | undefined, loaded: boolean): ReportItem {
   if (!loaded) return report;
   if (!dailyReport) {
@@ -232,9 +231,18 @@ function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport
     };
   }
 
+  let status: ReportStatus = "待生成";
+  if (dailyReport.status === "submitted") {
+    status = "已发送";
+  } else if (dailyReport.status === "saved" && dailyReport.submitted_at) {
+    status = "已保存，未发送最新修改";
+  } else if (dailyReport.status === "saved") {
+    status = "已保存";
+  }
+
   return {
     ...report,
-    status: "草稿待确认",
+    status,
     sessionCount: dailyReport.session_ids.length,
     generateMode: dailyReport.edited ? "手动生成" : "系统自动生成",
     updatedAt: formatDateTime(dailyReport.updated_at, "HH:mm")
@@ -259,6 +267,31 @@ function applyTeamDailyReportState(report: ReportItem, teamReport: TeamReport | 
     generateMode: "系统自动生成",
     skill: "小组日报 Agent",
     updatedAt: formatDateTime(teamReport.updated_at, "HH:mm")
+  };
+}
+
+function applyDepartmentDailyReportState(
+  report: ReportItem,
+  departmentReport: DepartmentReport | null | undefined,
+  loaded: boolean
+): ReportItem {
+  if (!loaded) return report;
+  if (!departmentReport) {
+    return {
+      ...report,
+      status: "待生成",
+      sessionCount: 0,
+      updatedAt: "-"
+    };
+  }
+
+  return {
+    ...report,
+    status: departmentReport.archived_at ? "已归档" : "草稿待确认",
+    sessionCount: departmentReport.source_team_report_ids.length,
+    generateMode: "系统自动生成",
+    skill: "部门日报 Agent",
+    updatedAt: formatDateTime(departmentReport.updated_at, "HH:mm")
   };
 }
 
@@ -783,16 +816,9 @@ export function DashboardPage() {
 	});
   const todayReportsQuery = useQuery({
     queryKey: ["reports", "dashboard-today", reportDate],
-    queryFn: () => fetchReports({ from: reportDate, to: reportDate }),
+    queryFn: () => fetchReports({ scope: "mine", from: reportDate, to: reportDate, page: "1", page_size: "1" }),
     staleTime: 30_000
   });
-  const [reportStateById, setReportStateById] = useState<Record<string, ReportItem>>(() =>
-    Object.fromEntries(
-      Object.values(ROLE_DATA)
-        .flatMap((roleData) => [...roleData.personalReports, ...(roleData.summaryReports ?? [])])
-        .map((reportItem) => [reportItem.id, reportItem])
-    )
-  );
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportModalStep, setReportModalStep] = useState<ReportModalStep>("sessions");
   const [activeReportId, setActiveReportId] = useState<string>("employee-personal-daily");
@@ -810,6 +836,7 @@ export function DashboardPage() {
   const [editingTaskKey, setEditingTaskKey] = useState<string | null>(null);
   const [editingTaskDraft, setEditingTaskDraft] = useState<TaskProgressSuggestion | null>(null);
   const [tokenRange, setTokenRange] = useState<TokenRange>("last3days");
+  const [dailyGenerateTarget, setDailyGenerateTarget] = useState<{ scope: DailyGenerateScope; reportDate?: string } | null>(null);
   const dashboardRole = getDashboardRole(user?.role);
   const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
   const departmentSourcesQuery = useQuery({
@@ -833,23 +860,22 @@ export function DashboardPage() {
   const departmentReportQuery = useQuery({
     queryKey: ["department-report-today", reportDate],
     queryFn: () => fetchDepartmentReportTodayOrNull(),
-    enabled: dashboardRole === "director" && isReportModalOpen && activeReportId === "director-department-daily",
+    enabled: dashboardRole === "director",
     staleTime: 30_000
   });
-  const todayDailyReport = useMemo(
-    () => findCurrentUserDailyReport(todayReportsQuery.data ?? [], user?.id, reportDate),
-    [reportDate, todayReportsQuery.data, user?.id]
-  );
+  const todayDailyReport = todayReportsQuery.data?.[0];
   const personalReports = data.personalReports.map((reportItem) => {
-    const currentReport = reportStateById[reportItem.id] ?? reportItem;
-    if (reportItem.kind !== "personal_daily") return currentReport;
-    return applyTodayDailyReportState(currentReport, todayDailyReport, todayReportsQuery.isSuccess);
+    if (reportItem.kind !== "personal_daily") return reportItem;
+    return applyTodayDailyReportState(reportItem, todayDailyReport, todayReportsQuery.isSuccess);
   });
-  const summaryReports = (data.summaryReports ?? []).map((reportItem) => {
-    const currentReport = reportStateById[reportItem.id] ?? reportItem;
-    if (reportItem.kind !== "team_daily") return currentReport;
-    return applyTeamDailyReportState(currentReport, teamReportQuery.data, teamReportQuery.isSuccess);
-  });
+  const summaryReports = (data.summaryReports ?? [])
+    .filter((reportItem) => reportItem.kind === "team_daily" || reportItem.kind === "department_daily")
+    .map((reportItem) => {
+      if (reportItem.kind === "team_daily") {
+        return applyTeamDailyReportState(reportItem, teamReportQuery.data, teamReportQuery.isSuccess);
+      }
+      return applyDepartmentDailyReportState(reportItem, departmentReportQuery.data, departmentReportQuery.isSuccess);
+    });
   const effectiveCoverage =
     dashboardRole === "director" && departmentSourcesQuery.data
       ? {
@@ -977,14 +1003,9 @@ export function DashboardPage() {
     setDraftMarkdown(value);
   };
 
-  const updateReport = (reportId: string, next: Partial<ReportItem>) => {
-    setReportStateById((current) => ({
-      ...current,
-      [reportId]: {
-        ...current[reportId],
-        ...next
-      }
-    }));
+  const updateReport = (...args: unknown[]) => {
+    void args;
+    // Dashboard 状态只来自接口；旧弹窗分支保留时不再写本地假状态。
   };
 
 	  const draftMutation = useMutation({
@@ -1185,6 +1206,22 @@ export function DashboardPage() {
   });
 
   const openReportModal = (reportItem: ReportItem, step?: ReportModalStep) => {
+    if (reportItem.kind === "personal_daily") {
+      setDailyGenerateTarget({ scope: "personal", reportDate });
+      return;
+    }
+    if (reportItem.kind === "team_daily") {
+      setDailyGenerateTarget({ scope: "team", reportDate });
+      return;
+    }
+    if (reportItem.kind === "department_daily") {
+      setDailyGenerateTarget({ scope: "department", reportDate });
+      return;
+    }
+    if (reportItem.kind === "team_weekly" || reportItem.kind === "department_weekly" || reportItem.kind === "personal_weekly") {
+      navigate("/reports/weekly");
+      return;
+    }
     const nextStep = step ?? getInitialReportModalStep(reportItem);
     setDraftMarkdownTouched(false);
     if (reportItem.kind === "personal_daily" && nextStep === "sessions") {
@@ -1423,6 +1460,23 @@ export function DashboardPage() {
         </div>
       </section>
 
+      {dailyGenerateTarget ? (
+        <DailyReportGenerateModal
+          open
+          scope={dailyGenerateTarget.scope}
+          reportDate={dailyGenerateTarget.reportDate}
+          onClose={() => setDailyGenerateTarget(null)}
+          onDone={() => {
+            void queryClient.invalidateQueries({ queryKey: ["reports"] });
+            void queryClient.invalidateQueries({ queryKey: ["reports", "dashboard-today", reportDate] });
+            void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
+            void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
+            void queryClient.invalidateQueries({ queryKey: ["team-report-sources"] });
+            void queryClient.invalidateQueries({ queryKey: ["department-report-sources"] });
+          }}
+        />
+      ) : null}
+
       <Modal
         className="console-report-workflow-modal"
         title={getReportModalTitle(activeReport, reportModalStep)}
@@ -1650,11 +1704,11 @@ function renderReportActions(
     );
   }
 
-  if (report.status === "草稿待确认") {
+  if (report.status === "草稿待确认" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          确认{getReportActionNoun(report)}
+          {report.scope === "personal" ? "查看并编辑日报" : `确认${getReportActionNoun(report)}`}
         </Button>
       </>
     );
@@ -1687,7 +1741,7 @@ function renderPrimaryReportAction(
     );
   }
 
-  if (report.status === "草稿待确认") {
+  if (report.status === "草稿待确认" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
     return (
       <Button
         className="console-report-primary-action console-report-primary-action--confirm"
@@ -1695,7 +1749,11 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        {report.scope === "department" ? "编辑部门日报" : `确认${getReportActionNoun(report)}`}
+        {report.scope === "personal"
+          ? "查看并编辑日报"
+          : report.scope === "department"
+            ? "编辑部门日报"
+            : `确认${getReportActionNoun(report)}`}
       </Button>
     );
   }
@@ -1739,6 +1797,18 @@ function getReportActionNoun(report: ReportItem) {
 }
 
 function getDailyReportCopy(report: ReportItem) {
+  if (report.status === "已发送") {
+    return "今日日报已发送给上级，可继续打开修改并重新发送。";
+  }
+
+  if (report.status === "已保存，未发送最新修改") {
+    return "今日日报已保存，最新修改尚未再次发送给上级。";
+  }
+
+  if (report.status === "已保存") {
+    return "今日日报已保存，尚未发送给上级。";
+  }
+
   if (report.status === "草稿待确认") {
     return "已根据今日 AI 工作记录生成日报，确认内容后即可发送。";
   }
@@ -3005,11 +3075,11 @@ function GenerationSettingsPanel({
 
 function ReportStatusTag({ status }: { status: ReportStatus }) {
   const color =
-    status === "已归档"
+    status === "已归档" || status === "已发送"
       ? "green"
       : status === "生成失败"
         ? "red"
-        : status === "草稿待确认" || status === "生成中"
+        : status === "草稿待确认" || status === "生成中" || status === "已保存"
           ? "blue"
           : "gold";
   const label = status === "草稿待确认" ? "待确认" : status;
