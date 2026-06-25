@@ -8,7 +8,6 @@ import {
   FlagOutlined,
   LinkOutlined,
   RightOutlined,
-  SendOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 import { Alert, App, Badge, Button, Checkbox, Col, Empty, Input, Modal, Popconfirm, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
@@ -26,6 +25,8 @@ import type { UserRole } from "@/shared/auth/types";
 import { formatDateTime } from "@/shared/utils/dateTime";
 
 import {
+  fetchDepartmentReportSources,
+  fetchDepartmentReportTodayOrNull,
 	fetchDashboardFollows,
 	fetchDashboardRisks,
   fetchReports,
@@ -33,12 +34,21 @@ import {
   fetchSessionTokens,
 	fetchTodayReport,
   fetchTokens,
+  generateDepartmentReport,
 	generateTodayReportDraft,
+  updateDepartmentReport,
 	updateReport as updateDailyReport,
 	updateTaskProgress,
 	updateTaskStatus
 } from "../api/client";
-import type { DailyReport, GenerateReportDraftPayload, Session, TaskProgressSuggestion as DraftTaskProgressSuggestion } from "../api/types";
+import type {
+  DailyReport,
+  DepartmentReport,
+  DepartmentReportSources,
+  GenerateReportDraftPayload,
+  Session,
+  TaskProgressSuggestion as DraftTaskProgressSuggestion
+} from "../api/types";
 import {
   aggregateDashboardTokenReport,
   getDashboardTokenDateRange,
@@ -49,7 +59,7 @@ import {
 import "./console-dashboard.css";
 
 type DashboardRole = "employee" | "team_leader" | "director" | "pm";
-type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已发送" | "发送失败" | "生成失败";
+type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已归档" | "生成失败";
 type ReportGenerateMode = "系统自动生成" | "手动生成";
 type ReportModalStep = "sessions" | "source" | "editor";
 type ReportKind =
@@ -248,8 +258,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
-        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
+        description: "本周周报尚未生成，可查看来源后生成草稿。",
+        sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
     ],
@@ -367,7 +377,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         name: "本周周报",
         status: "草稿待确认",
         description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
-        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
+        sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:40"
       })
     ],
@@ -491,8 +501,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         kind: "personal_daily",
         scope: "personal",
         name: "今日日报",
-        status: "已发送",
-        description: "今日日报已发送。",
+        status: "已归档",
+        description: "今日日报已归档。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 1,
         updatedAt: "17:55"
@@ -501,10 +511,10 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         id: "director-personal-weekly",
         kind: "personal_weekly",
         scope: "personal",
-        name: "本周周报",
+        name: "本周个人周报",
         status: "草稿待确认",
         description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
-        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
+        sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:20"
       })
     ],
@@ -514,8 +524,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         kind: "department_daily",
         scope: "department",
         name: "今日部门日报",
-        status: "发送失败",
-        description: "部门日报发送失败，请重试或检查发送目标。",
+        status: "待生成",
+        description: "先查看各组小组日报收集情况，再生成部门日报草稿。",
         sourceSummary: "各组日报、各组提交情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
@@ -633,8 +643,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可基于本周日报和任务记录生成报告。",
-        sourceSummary: "本周个人日报、个人 session 摘要、我负责的任务、我关注的任务、风险与阻塞",
+        description: "本周周报尚未生成，可查看来源后生成草稿。",
+        sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
     ],
@@ -764,6 +774,7 @@ export function DashboardPage() {
   const [reportSkillDraft, setReportSkillDraft] = useState<string>(REPORT_SKILL_OPTIONS[0].value);
   const [uploadedReportSkills, setUploadedReportSkills] = useState<ReportSkillOption[]>([]);
   const [draftMarkdown, setDraftMarkdown] = useState(DEFAULT_MARKDOWN);
+  const [departmentDraft, setDepartmentDraft] = useState<DepartmentReport | null>(null);
   const [taskSuggestions, setTaskSuggestions] = useState<TaskProgressSuggestion[]>([]);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [editingTaskKey, setEditingTaskKey] = useState<string | null>(null);
@@ -771,6 +782,18 @@ export function DashboardPage() {
   const [tokenRange, setTokenRange] = useState<TokenRange>("last3days");
   const dashboardRole = getDashboardRole(user?.role);
   const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
+  const departmentSourcesQuery = useQuery({
+    queryKey: ["department-report-sources", reportDate],
+    queryFn: () => fetchDepartmentReportSources(reportDate),
+    enabled: dashboardRole === "director",
+    staleTime: 30_000
+  });
+  const departmentReportQuery = useQuery({
+    queryKey: ["department-report-today", reportDate],
+    queryFn: () => fetchDepartmentReportTodayOrNull(),
+    enabled: dashboardRole === "director" && isReportModalOpen && activeReportId === "director-department-daily",
+    staleTime: 30_000
+  });
   const todayDailyReport = useMemo(
     () => findCurrentUserDailyReport(todayReportsQuery.data ?? [], user?.id, reportDate),
     [reportDate, todayReportsQuery.data, user?.id]
@@ -781,6 +804,15 @@ export function DashboardPage() {
     return applyTodayDailyReportState(currentReport, todayDailyReport, todayReportsQuery.isSuccess);
   });
   const summaryReports = (data.summaryReports ?? []).map((reportItem) => reportStateById[reportItem.id] ?? reportItem);
+  const effectiveCoverage =
+    dashboardRole === "director" && departmentSourcesQuery.data
+      ? {
+          expected: departmentSourcesQuery.data.total_team_count,
+          submitted: departmentSourcesQuery.data.submitted_team_count,
+          missing: departmentSourcesQuery.data.missing_teams.length,
+          failed: 0
+        }
+      : data.coverage;
   const dailyReport = personalReports.find((reportItem) => reportItem.kind === "personal_daily") ?? personalReports[0];
   const availableReportIds = new Set([...personalReports, ...summaryReports].map((reportItem) => reportItem.id));
   const activeReport = availableReportIds.has(activeReportId)
@@ -889,10 +921,10 @@ export function DashboardPage() {
     }));
   };
 
-  const draftMutation = useMutation({
-    mutationFn: (payload: GenerateReportDraftPayload) => generateTodayReportDraft(payload),
-    onSuccess: (draft) => {
-      setDraftMarkdown(draft.report_markdown);
+	  const draftMutation = useMutation({
+	    mutationFn: (payload: GenerateReportDraftPayload) => generateTodayReportDraft(payload),
+	    onSuccess: (draft) => {
+	      setDraftMarkdown(draft.report_markdown);
       setSelectedSessionIds(draft.selected_session_ids);
       setValidatedDraftSessionIds(draft.selected_session_ids);
       setTaskSuggestions(draft.task_progress_suggestions.map(mapDraftTaskSuggestion));
@@ -901,20 +933,71 @@ export function DashboardPage() {
         sessionCount: draft.selected_session_ids.length,
         generateMode: "手动生成",
         skill: draft.skill_name,
-        updatedAt: "刚刚",
-        nextAt: "19:00"
-      });
-      setReportModalStep("editor");
-      void queryClient.invalidateQueries({ queryKey: ["reports"] });
-    },
+	        updatedAt: "刚刚",
+	        nextAt: "19:00"
+	      });
+	      setReportModalStep("editor");
+	      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+	    },
     onError: (error: unknown) => {
       const text = error instanceof Error ? error.message : "日报草稿生成失败";
+      setDraftError(text);
+      message.error(text);
+	    }
+	  });
+
+  const departmentGenerateMutation = useMutation({
+    mutationFn: () => generateDepartmentReport(),
+    onSuccess: (report) => {
+      setDepartmentDraft(report);
+      setDraftMarkdown(report.content);
+      updateReport(activeReport.id, {
+        status: "草稿待确认",
+        sessionCount: report.source_team_report_ids.length,
+        generateMode: "系统自动生成",
+        skill: "部门日报 Agent",
+        updatedAt: "刚刚"
+      });
+      setReportModalStep("editor");
+      void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
+    },
+    onError: (error: unknown) => {
+      const text = error instanceof Error ? error.message : "部门日报草稿生成失败";
       setDraftError(text);
       message.error(text);
     }
   });
 
-  const saveReportMutation = useMutation({
+  const saveDepartmentMutation = useMutation({
+    mutationFn: async ({ archive }: { archive: boolean }) => {
+      const current = departmentDraft ?? departmentReportQuery.data;
+      if (!current) {
+        throw new Error("请先生成部门日报草稿");
+      }
+      return updateDepartmentReport(current.id, { content: draftMarkdown, archive });
+    },
+    onSuccess: (report, variables) => {
+      setDepartmentDraft(report);
+      setDraftMarkdown(report.content);
+      updateReport(activeReport.id, {
+        status: variables.archive ? "已归档" : "草稿待确认",
+        sessionCount: report.source_team_report_ids.length,
+        generateMode: "系统自动生成",
+        skill: "部门日报 Agent",
+        updatedAt: "刚刚"
+      });
+      void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
+      message.success(variables.archive ? "部门日报已归档" : "部门日报已保存");
+      if (variables.archive) {
+        setIsReportModalOpen(false);
+      }
+    },
+    onError: (error: unknown) => {
+      message.error(error instanceof Error ? error.message : "部门日报保存失败");
+    }
+  });
+
+	  const saveReportMutation = useMutation({
     mutationFn: async ({ closeAfterSave }: { closeAfterSave: boolean }) => {
       const report = await fetchTodayReport();
       const sessionIDs = validatedDraftSessionIds.length > 0 ? validatedDraftSessionIds : effectiveSelectedSessionIds;
@@ -982,13 +1065,18 @@ export function DashboardPage() {
       setTaskSuggestions([]);
       setDraftMarkdown("");
     }
+    if (reportItem.kind === "department_daily" && nextStep === "source") {
+      setDraftError(null);
+      setDepartmentDraft(null);
+      setDraftMarkdown("");
+    }
     setActiveReportId(reportItem.id);
     setReportSkillDraft(
       reportSkillOptions.some((skill) => skill.value === reportItem.skill)
         ? reportItem.skill
         : REPORT_SKILL_OPTIONS[0].value
     );
-    if (nextStep !== "sessions") {
+    if (nextStep !== "sessions" && reportItem.kind !== "department_daily") {
       setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
     }
     setDraftError(null);
@@ -1034,6 +1122,12 @@ export function DashboardPage() {
       return;
     }
 
+    if (activeReport.kind === "department_daily") {
+      setDraftError(null);
+      departmentGenerateMutation.mutate();
+      return;
+    }
+
     updateReport(activeReport.id, {
       status: "草稿待确认",
       sessionCount: activeReport.sessionCount,
@@ -1050,6 +1144,10 @@ export function DashboardPage() {
       saveReportMutation.mutate({ closeAfterSave: false });
       return;
     }
+    if (activeReport.kind === "department_daily") {
+      saveDepartmentMutation.mutate({ archive: false });
+      return;
+    }
     updateReport(activeReport.id, { status: "草稿待确认", updatedAt: "刚刚" });
   };
 
@@ -1064,7 +1162,11 @@ export function DashboardPage() {
       saveReportMutation.mutate({ closeAfterSave: true });
       return;
     }
-    updateReport(activeReport.id, { status: "已发送", updatedAt: "刚刚" });
+    if (activeReport.kind === "department_daily") {
+      saveDepartmentMutation.mutate({ archive: true });
+      return;
+    }
+    updateReport(activeReport.id, { status: "已归档", updatedAt: "刚刚" });
     setIsReportModalOpen(false);
   };
 
@@ -1129,19 +1231,15 @@ export function DashboardPage() {
 
         <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
           <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
-            <ReportSection
-              title="今日报告"
-              icon={<FileTextOutlined />}
-              reports={personalReports}
-              summaryReports={summaryReports}
-              coverage={data.coverage}
+	          <ReportSection
+	              title="今日报告"
+	              icon={<FileTextOutlined />}
+	              reports={personalReports}
+	              summaryReports={summaryReports}
+	              coverage={effectiveCoverage}
               variant="personal"
               onOpen={openReportModal}
               onViewReports={() => navigate("/reports")}
-              onSend={(reportItem) => {
-                setActiveReportId(reportItem.id);
-                updateReport(reportItem.id, { status: "已发送", updatedAt: "刚刚" });
-              }}
             />
           </Col>
           <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
@@ -1185,10 +1283,11 @@ export function DashboardPage() {
           step: reportModalStep,
           report: activeReport,
           selectedCount: effectiveSelectedSessionIds.length,
+          departmentSubmittedCount: departmentSourcesQuery.data?.submitted_team_count ?? 0,
           modifiedTaskCount,
           isSessionLoading: reportSessionsQuery.isLoading,
-          isGenerating: draftMutation.isPending,
-          isSaving: saveReportMutation.isPending,
+          isGenerating: draftMutation.isPending || departmentGenerateMutation.isPending,
+          isSaving: saveReportMutation.isPending || saveDepartmentMutation.isPending,
           onCancel: () => setIsReportModalOpen(false),
           onNext: startGenerateDraft,
           onGenerate: startGenerateDraft,
@@ -1201,7 +1300,10 @@ export function DashboardPage() {
         <ReportModalContent
           step={reportModalStep}
           report={activeReport}
-          coverage={data.coverage}
+          coverage={effectiveCoverage}
+          departmentSources={departmentSourcesQuery.data ?? null}
+          departmentSourcesLoading={departmentSourcesQuery.isLoading}
+          departmentSourcesError={departmentSourcesQuery.isError ? "小组日报收集情况加载失败" : null}
           selectedSessionIds={effectiveSelectedSessionIds}
           selectedSkill={reportSkillDraft}
           skillOptions={reportSkillOptions}
@@ -1255,8 +1357,7 @@ function ReportSection({
   coverage,
   variant,
   onOpen,
-  onViewReports,
-  onSend
+  onViewReports
 }: {
   title: string;
   icon: ReactNode;
@@ -1266,7 +1367,6 @@ function ReportSection({
   variant: "personal" | "summary";
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
   onViewReports: () => void;
-  onSend: (report: ReportItem) => void;
 }) {
   if (variant === "personal") {
     const dailyReport = reports.find((report) => report.kind === "personal_daily") ?? reports[0];
@@ -1287,7 +1387,6 @@ function ReportSection({
             report={dailyReport}
             description={getDailyReportCopy(dailyReport)}
             onOpen={onOpen}
-            onSend={onSend}
           />
           {summaryDailyReport ? (
             <ReportTaskRow
@@ -1297,7 +1396,6 @@ function ReportSection({
               meta={coverage ? getCoverageSummary(summaryDailyReport, coverage) : undefined}
               emphasized
               onOpen={onOpen}
-              onSend={onSend}
             />
           ) : null}
           {weeklyReport ? (
@@ -1314,7 +1412,7 @@ function ReportSection({
                 <FileTextOutlined />
                 <strong>日报记录</strong>
               </span>
-              <em>确认与发送记录</em>
+              <em>确认与归档记录</em>
               <RightOutlined />
             </button>
             <button type="button" className="console-report-shortcut" onClick={onViewReports}>
@@ -1342,7 +1440,7 @@ function ReportSection({
               <ReportStatusTag status={report.status} />
             </Space>
             <p>{report.description}</p>
-            <div className="console-report-actions">{renderReportActions(report, onOpen, onSend)}</div>
+            <div className="console-report-actions">{renderReportActions(report, onOpen)}</div>
           </div>
         ))}
       </div>
@@ -1356,8 +1454,7 @@ function ReportTaskRow({
   description,
   meta,
   emphasized,
-  onOpen,
-  onSend
+  onOpen
 }: {
   label: string;
   report: ReportItem;
@@ -1365,7 +1462,6 @@ function ReportTaskRow({
   meta?: string;
   emphasized?: boolean;
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
-  onSend: (report: ReportItem) => void;
 }) {
   return (
     <section className={`console-report-task${emphasized ? " console-report-task--summary" : ""}`}>
@@ -1375,7 +1471,7 @@ function ReportTaskRow({
           <ReportStatusTag status={report.status} />
         </Space>
         <div className="console-report-actions console-report-actions--head">
-          {renderPrimaryReportAction(report, onOpen, onSend)}
+          {renderPrimaryReportAction(report, onOpen)}
         </div>
       </div>
       <p>{description}</p>
@@ -1386,13 +1482,12 @@ function ReportTaskRow({
 
 function renderReportActions(
   report: ReportItem,
-  onOpen: (report: ReportItem, step?: ReportModalStep) => void,
-  onSend: (report: ReportItem) => void
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void
 ) {
   if (report.status === "待生成") {
     return (
       <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-        生成报告
+        查看并生成
       </Button>
     );
   }
@@ -1404,7 +1499,7 @@ function renderReportActions(
   if (report.status === "生成失败") {
     return (
       <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-        重新生成
+        查看并生成
       </Button>
     );
   }
@@ -1415,14 +1510,11 @@ function renderReportActions(
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
           确认{getReportActionNoun(report)}
         </Button>
-        <Button icon={<SendOutlined />} onClick={() => onSend(report)}>
-          发送{getReportActionNoun(report)}
-        </Button>
       </>
     );
   }
 
-  if (report.status === "已发送") {
+  if (report.status === "已归档") {
     return (
       <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
         编辑{getReportActionNoun(report)}
@@ -1431,21 +1523,15 @@ function renderReportActions(
   }
 
   return (
-    <>
-      <Button type="primary" icon={<SendOutlined />} onClick={() => onSend(report)}>
-        重试发送
-      </Button>
-      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        查看{getReportActionNoun(report)}
-      </Button>
-    </>
+    <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
+      查看{getReportActionNoun(report)}
+    </Button>
   );
 }
 
 function renderPrimaryReportAction(
   report: ReportItem,
-  onOpen: (report: ReportItem, step?: ReportModalStep) => void,
-  onSend: (report: ReportItem) => void
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void
 ) {
   if (report.status === "生成中") {
     return (
@@ -1463,32 +1549,19 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        确认{getReportActionNoun(report)}
+        {report.scope === "department" ? "编辑部门日报" : `确认${getReportActionNoun(report)}`}
       </Button>
     );
   }
 
-  if (report.status === "已发送") {
+  if (report.status === "已归档") {
     return (
       <Button
         className="console-report-primary-action console-report-primary-action--quiet"
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        编辑{getReportActionNoun(report)}
-      </Button>
-    );
-  }
-
-  if (report.status === "发送失败") {
-    return (
-      <Button
-        className="console-report-primary-action console-report-primary-action--retry"
-        type="primary"
-        icon={<SendOutlined />}
-        onClick={() => onSend(report)}
-      >
-        重试发送
+        {report.scope === "department" ? "编辑部门日报" : `编辑${getReportActionNoun(report)}`}
       </Button>
     );
   }
@@ -1504,7 +1577,11 @@ function renderPrimaryReportAction(
       icon={<FileDoneOutlined />}
       onClick={() => onOpen(report, getGenerateStepForReport(report))}
     >
-      {report.status === "生成失败" ? `重新生成${getReportActionNoun(report)}` : `生成${getReportActionNoun(report)}`}
+      {report.scope === "department"
+        ? "查看收集情况"
+        : report.status === "生成失败"
+          ? `查看并生成${getReportActionNoun(report)}`
+          : `查看并生成${getReportActionNoun(report)}`}
     </Button>
   );
 }
@@ -1520,12 +1597,8 @@ function getDailyReportCopy(report: ReportItem) {
     return "已根据今日 AI 工作记录生成日报，确认内容后即可发送。";
   }
 
-  if (report.status === "已发送") {
-    return "今日日报已发送，可回看内容和关联的工作记录。";
-  }
-
-  if (report.status === "发送失败") {
-    return "日报发送失败，请检查内容后重试发送。";
+  if (report.status === "已归档") {
+    return "今日日报已归档，可回看内容和关联的工作记录。";
   }
 
   if (report.status === "生成中") {
@@ -1545,15 +1618,13 @@ function getSummaryRecordLabel(report: ReportItem) {
 
 function getSummaryDailyReportCopy(report: ReportItem) {
   if (report.status === "草稿待确认") {
-    return `${getReportActionNoun(report)}已生成，确认后即可发送。`;
+    return report.scope === "department"
+      ? "部门日报草稿已生成，内容基于已提交的小组日报。"
+      : `${getReportActionNoun(report)}已生成，确认后即可归档。`;
   }
 
-  if (report.status === "已发送") {
-    return `${getReportActionNoun(report)}已发送，可回看汇总内容和来源记录。`;
-  }
-
-  if (report.status === "发送失败") {
-    return `${getReportActionNoun(report)}发送失败，请检查发送目标后重试。`;
+  if (report.status === "已归档") {
+    return `${getReportActionNoun(report)}已归档，可回看按组来源和汇总内容。`;
   }
 
   if (report.status === "生成中") {
@@ -1565,20 +1636,16 @@ function getSummaryDailyReportCopy(report: ReportItem) {
   }
 
   return report.scope === "department"
-    ? "基于各组报告、部门风险和重点需求生成部门报告。"
-    : "基于组内成员日报、任务风险和阻塞情况生成组报。";
+    ? "先查看各小组已提交日报和未提交小组，再生成部门日报草稿。"
+    : "查看组内成员日报收集情况后生成组报。";
 }
 
 function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
   if (report.scope === "department") {
-    return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 组未提交${
-      coverage.failed > 0 ? ` · ${coverage.failed} 组发送失败` : ""
-    }`;
+    return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 组未提交`;
   }
 
-  return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 人未提交${
-    coverage.failed > 0 ? ` · ${coverage.failed} 人发送失败` : ""
-  }`;
+  return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 人未提交`;
 }
 
 function getSummaryWeeklyRecordCopy(report: ReportItem) {
@@ -1590,7 +1657,7 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
     return null;
   }
 
-  if (report.status === "草稿待确认" || report.status === "发送失败") {
+  if (report.status === "草稿待确认") {
     return (
       <Button type="link" onClick={() => onOpen(report, "editor")}>
         确认周报
@@ -1598,7 +1665,7 @@ function renderWeeklyReportAction(report: ReportItem, onOpen: (report: ReportIte
     );
   }
 
-  if (report.status === "已发送") {
+  if (report.status === "已归档") {
     return (
       <Button type="link" onClick={() => onOpen(report, "editor")}>
         编辑周报
@@ -1630,7 +1697,7 @@ function isWeeklyPendingAutoGenerate(report: ReportItem) {
 }
 
 function getInitialReportModalStep(report: ReportItem): ReportModalStep {
-  if (report.status === "草稿待确认" || report.status === "已发送" || report.status === "发送失败") {
+  if (report.status === "草稿待确认" || report.status === "已归档") {
     return "editor";
   }
 
@@ -1642,6 +1709,9 @@ function getGenerateStepForReport(report: ReportItem): ReportModalStep {
 }
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
+  if (report.kind === "department_daily") {
+    return step === "editor" ? "编辑部门日报" : "生成部门日报";
+  }
   if (step === "editor") {
     return `编辑${report.name}`;
   }
@@ -1990,7 +2060,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 各组日报已完成汇总。
 
 ## 重点风险
-* 部门日报发送失败，需要重试发送。
+* 部门日报需要基于已提交小组日报确认后归档。
 
 ## 明日重点
 * 跟进高优先级风险和跨组依赖。`;
@@ -2008,21 +2078,21 @@ function getReportSourceSteps(report: ReportItem) {
 }
 
 function getReportSourceTitle(report: ReportItem) {
-  if (report.scope === "team") return "生成组报告";
-  if (report.scope === "department") return "生成部门报告";
+  if (report.scope === "team") return "查看成员日报收集情况";
+  if (report.scope === "department") return "查看小组日报收集情况";
   return "生成个人周报";
 }
 
 function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
   if (report.scope === "team" && coverage) {
-    return `成员提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}，发送失败 ${coverage.failed}`;
+    return `成员提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}`;
   }
 
   if (report.scope === "department" && coverage) {
-    return `各组提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}，发送失败 ${coverage.failed}`;
+    return `各组提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}`;
   }
 
-  return "系统将读取本周个人日报、任务、风险与阻塞生成报告。";
+  return "系统将读取本周个人日报、任务、风险与阻塞生成草稿。";
 }
 
 function getEditorMeta(report: ReportItem) {
@@ -2030,19 +2100,24 @@ function getEditorMeta(report: ReportItem) {
     return [`已选 ${report.sessionCount} 个 session`, report.skill];
   }
 
+  if (report.kind === "department_daily") {
+    return [`本草稿基于 ${report.sessionCount} 个已提交小组日报生成`, "来源：小组日报"];
+  }
+
   return [report.sourceSummary, report.skill];
 }
 
 function getSendButtonText(report: ReportItem) {
-  if (report.scope === "team") return report.kind.includes("weekly") ? "发送组周报" : "发送组报";
-  if (report.scope === "department") return report.kind.includes("weekly") ? "发送部门周报" : "发送部门报告";
-  return report.kind.includes("weekly") ? "发送周报" : "发送日报";
+  if (report.scope === "team") return report.kind.includes("weekly") ? "归档组周报" : "提交给总监";
+  if (report.scope === "department") return "保存归档";
+  return report.kind.includes("weekly") ? "归档周报" : "保存日报";
 }
 
 function renderReportModalFooter({
   step,
   report,
   selectedCount,
+  departmentSubmittedCount,
   modifiedTaskCount,
   isSessionLoading,
   isGenerating,
@@ -2057,6 +2132,7 @@ function renderReportModalFooter({
   step: ReportModalStep;
   report: ReportItem;
   selectedCount: number;
+  departmentSubmittedCount: number;
   modifiedTaskCount: number;
   isSessionLoading: boolean;
   isGenerating: boolean;
@@ -2088,8 +2164,13 @@ function renderReportModalFooter({
     return (
       <Space>
         <Button onClick={onCancel}>稍后处理</Button>
-        <Button type="primary" loading={isGenerating} onClick={onGenerate}>
-          生成报告
+        <Button
+          type="primary"
+          loading={isGenerating}
+          disabled={report.kind === "department_daily" && departmentSubmittedCount === 0}
+          onClick={onGenerate}
+        >
+          {report.kind === "department_daily" ? "基于已提交组日报生成草稿" : "生成草稿"}
         </Button>
       </Space>
     );
@@ -2099,12 +2180,12 @@ function renderReportModalFooter({
     <Space>
       {modifiedTaskCount > 0 ? (
         <span className="console-report-footer-note">
-          已修改 {modifiedTaskCount} 个任务，发送日报后同步任务进展。
+          已修改 {modifiedTaskCount} 个任务，保存日报后同步任务进展。
         </span>
       ) : null}
       <Button onClick={onBack} disabled={isSaving}>上一步</Button>
       <Button onClick={onSave} loading={isSaving}>保存修改</Button>
-      <Button type="primary" icon={<SendOutlined />} loading={isSaving} onClick={onSend}>
+      <Button type="primary" icon={<FileDoneOutlined />} loading={isSaving} onClick={onSend}>
         {getSendButtonText(report)}
       </Button>
     </Space>
@@ -2323,6 +2404,9 @@ function ReportModalContent({
   step,
   report,
   coverage,
+  departmentSources,
+  departmentSourcesLoading,
+  departmentSourcesError,
   selectedSessionIds,
   selectedSkill,
   skillOptions,
@@ -2338,11 +2422,14 @@ function ReportModalContent({
   onSkillUpload,
   onEditTask,
   onDraftMarkdownChange
-}: {
-  step: ReportModalStep;
-  report: ReportItem;
-  coverage: ReportCoverage;
-  selectedSessionIds: string[];
+	}: {
+	  step: ReportModalStep;
+	  report: ReportItem;
+	  coverage: ReportCoverage;
+  departmentSources: DepartmentReportSources | null;
+  departmentSourcesLoading: boolean;
+  departmentSourcesError: string | null;
+	  selectedSessionIds: string[];
   selectedSkill: string;
   skillOptions: ReportSkillOption[];
   uploadedSkills: ReportSkillOption[];
@@ -2355,9 +2442,11 @@ function ReportModalContent({
   onSelectedSessionIdsChange: (value: string[]) => void;
   onSelectedSkillChange: (value: string) => void;
   onSkillUpload: (file: File) => boolean;
-  onEditTask: (task: TaskProgressSuggestion) => void;
-  onDraftMarkdownChange: (value: string) => void;
-}) {
+	  onEditTask: (task: TaskProgressSuggestion) => void;
+	  onDraftMarkdownChange: (value: string) => void;
+	}) {
+  const [expandedDepartmentReportId, setExpandedDepartmentReportId] = useState<string | null>(null);
+
   if (step === "sessions") {
     return (
       <div className="console-report-modal">
@@ -2411,8 +2500,30 @@ function ReportModalContent({
     );
   }
 
-  if (step === "source") {
-    return (
+	  if (step === "source") {
+    if (report.kind === "department_daily") {
+      return (
+        <div className="console-report-modal">
+          <Steps
+            size="small"
+            current={0}
+            items={getReportSourceSteps(report)}
+          />
+          <DepartmentSourceReview
+            sources={departmentSources}
+            loading={departmentSourcesLoading}
+            error={departmentSourcesError}
+            expandedReportId={expandedDepartmentReportId}
+            onExpandedReportIdChange={setExpandedDepartmentReportId}
+          />
+          {draftError ? (
+            <Alert type="error" showIcon message="部门日报草稿生成失败" description={draftError} />
+          ) : null}
+        </div>
+      );
+    }
+
+	    return (
       <div className="console-report-modal">
         <Steps
           size="small"
@@ -2467,6 +2578,102 @@ function ReportModalContent({
           />
         ) : null}
       </div>
+    </div>
+  );
+	}
+
+function DepartmentSourceReview({
+  sources,
+  loading,
+  error,
+  expandedReportId,
+  onExpandedReportIdChange
+}: {
+  sources: DepartmentReportSources | null;
+  loading: boolean;
+  error: string | null;
+  expandedReportId: string | null;
+  onExpandedReportIdChange: (id: string | null) => void;
+}) {
+  if (loading) {
+    return <div className="console-session-empty">正在加载小组日报收集情况...</div>;
+  }
+
+  if (error) {
+    return <Alert type="error" showIcon message={error} />;
+  }
+
+  if (!sources) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无小组日报收集数据" />;
+  }
+
+  const submitted = sources.submitted_team_reports;
+  const missing = sources.missing_teams;
+
+  return (
+    <div className="console-department-source">
+      <div className="console-session-modal__section">
+        <strong>确认小组日报来源</strong>
+        <span>
+          已收集 {sources.submitted_team_count}/{sources.total_team_count} 个小组日报，
+          {missing.length} 个小组未提交。
+        </span>
+      </div>
+
+      <section className="console-department-source__block">
+        <div className="console-department-source__head">
+          <strong>已提交小组</strong>
+          <Tag color="blue">{submitted.length} 组</Tag>
+        </div>
+        {submitted.length === 0 ? (
+          <div className="console-session-empty">暂无已提交小组日报</div>
+        ) : (
+          <div className="console-department-source__list">
+            {submitted.map((item) => {
+              const reportId = item.team_report_id ?? item.report_id ?? item.team_id;
+              const expanded = expandedReportId === reportId;
+              return (
+                <article key={reportId} className="console-department-source__item">
+                  <div className="console-department-source__row">
+                    <span>
+                      <strong>{item.team_name}</strong>
+                      <em>{item.team_leader_name || item.leader_name || "未记录 TL"}</em>
+                    </span>
+                    <span>
+                      <time>{item.submitted_at ? formatDateTime(item.submitted_at, "HH:mm") : "-"}</time>
+                      <Button
+                        size="small"
+                        onClick={() => onExpandedReportIdChange(expanded ? null : reportId)}
+                      >
+                        {expanded ? "收起原文" : "查看原文"}
+                      </Button>
+                    </span>
+                  </div>
+                  {expanded ? (
+                    <pre className="console-department-source__content">{item.content || "暂无内容"}</pre>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="console-department-source__block">
+        <div className="console-department-source__head">
+          <strong>未提交小组</strong>
+          <Tag color={missing.length > 0 ? "gold" : "green"}>{missing.length} 组</Tag>
+        </div>
+        {missing.length === 0 ? (
+          <div className="console-session-empty">所有小组均已提交</div>
+        ) : (
+          <div className="console-department-source__missing">
+            {missing.map((team) => (
+              <Tag key={team.team_id} color="gold">{team.team_name}</Tag>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -2536,9 +2743,9 @@ function GenerationSettingsPanel({
 
 function ReportStatusTag({ status }: { status: ReportStatus }) {
   const color =
-    status === "已发送"
+    status === "已归档"
       ? "green"
-      : status === "发送失败" || status === "生成失败"
+      : status === "生成失败"
         ? "red"
         : status === "草稿待确认" || status === "生成中"
           ? "blue"

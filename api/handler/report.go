@@ -525,7 +525,7 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 
 	rows, err := h.db.Query(`
 		SELECT u.id, u.name,
-			dr.id, dr.content,
+			dr.id, dr.content, dr.updated_at,
 			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
 		FROM users u
 		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1
@@ -541,11 +541,13 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 	for rows.Next() {
 		var tmr model.TeamMemberReport
 		var reportID, content sql.NullString
-		rows.Scan(&tmr.UserID, &tmr.UserName, &reportID, &content, &tmr.HasReport)
+		var submittedAt sql.NullTime
+		rows.Scan(&tmr.UserID, &tmr.UserName, &reportID, &content, &submittedAt, &tmr.HasReport)
 		tmr.ReportID = nullStringPtr(reportID)
 		if content.Valid {
 			tmr.Content = content.String
 		}
+		tmr.SubmittedAt = nullTimePtr(submittedAt)
 		reports = append(reports, tmr)
 	}
 	if err := rows.Err(); err != nil {
@@ -553,6 +555,81 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, reports)
+}
+
+func (h *ReportHandler) GetTeamReportSources(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
+		return
+	}
+
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	teamID := u.TeamID
+	if u.Role == "director" || u.Role == "admin" {
+		if tid := r.URL.Query().Get("team_id"); tid != "" {
+			teamID = &tid
+		}
+	}
+	if teamID == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no team specified"})
+		return
+	}
+
+	var teamName string
+	if err := h.db.QueryRow("SELECT name FROM teams WHERE id = $1", *teamID).Scan(&teamName); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "team not found"})
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT u.id, u.name, dr.id, dr.content, dr.updated_at,
+			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
+		FROM users u
+		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1
+		WHERE u.team_id = $2 AND u.role = 'employee'
+		ORDER BY u.name`, date, *teamID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	sources := model.TeamReportSources{
+		TeamID:     *teamID,
+		TeamName:   teamName,
+		ReportDate: date,
+		Members:    []model.TeamMemberReport{},
+	}
+	for rows.Next() {
+		var item model.TeamMemberReport
+		var reportID, content sql.NullString
+		var submittedAt sql.NullTime
+		if err := rows.Scan(&item.UserID, &item.UserName, &reportID, &content, &submittedAt, &item.HasReport); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		item.ReportID = nullStringPtr(reportID)
+		item.SubmittedAt = nullTimePtr(submittedAt)
+		if content.Valid {
+			item.Content = content.String
+		}
+		if item.HasReport {
+			sources.Submitted++
+		} else {
+			sources.Missing++
+		}
+		sources.Members = append(sources.Members, item)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, sources)
 }
 
 func (h *ReportHandler) GetTeamReportToday(w http.ResponseWriter, r *http.Request) {
@@ -623,6 +700,33 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, tr)
 }
 
+func (h *ReportHandler) SubmitTeamReport(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u.Role != "team_leader" || u.TeamID == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can submit team reports"})
+		return
+	}
+	res, err := h.db.Exec(`
+		UPDATE team_reports
+		SET submitted_at = now(), updated_at = now()
+		WHERE id = $1 AND team_id = $2`, id, *u.TeamID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	tr, err := h.getTeamReportByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, tr)
+}
+
 func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	if u.Role != "team_leader" && u.Role != "pm" && u.Role != "director" && u.Role != "admin" {
@@ -633,7 +737,8 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 	query := `
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
 			tr.report_date, tr.content, tr.feishu_doc_url,
-			tr.member_report_ids, tr.session_ids, tr.created_at, tr.updated_at
+			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
+			tr.submitted_at, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
@@ -675,13 +780,17 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 	for rows.Next() {
 		var tr model.TeamReport
 		var feishuURL sql.NullString
-		var memberIDsStr, sessionIDsStr string
+		var submittedAt sql.NullTime
+		var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 		rows.Scan(&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 			&tr.ReportDate, &tr.Content, &feishuURL,
-			&memberIDsStr, &sessionIDsStr, &tr.CreatedAt, &tr.UpdatedAt)
+			&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
+			&submittedAt, &tr.CreatedAt, &tr.UpdatedAt)
 		tr.FeishuDocURL = nullStringPtr(feishuURL)
 		tr.MemberReportIDs = parseUUIDArray(memberIDsStr)
+		tr.SourceDailyReportIDs = parseUUIDArray(sourceDailyIDsStr)
 		tr.SessionIDs = parseUUIDArray(sessionIDsStr)
+		tr.SubmittedAt = nullTimePtr(submittedAt)
 		reports = append(reports, tr)
 	}
 	if err := rows.Err(); err != nil {
@@ -694,7 +803,7 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u.Role != "team_leader" {
+	if u.Role != "team_leader" || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can update team reports"})
 		return
 	}
@@ -721,7 +830,11 @@ func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request)
 	}
 
 	args = append(args, id)
-	query := fmt.Sprintf("UPDATE team_reports SET %s WHERE id = $%d", joinWithCommas(sets), argIdx)
+	where := fmt.Sprintf("id = $%d", argIdx)
+	argIdx++
+	args = append(args, *u.TeamID)
+	where += fmt.Sprintf(" AND team_id = $%d", argIdx)
+	query := fmt.Sprintf("UPDATE team_reports SET %s WHERE %s", joinWithCommas(sets), where)
 
 	res, err := h.db.Exec(query, args...)
 	if err != nil {
@@ -744,51 +857,266 @@ func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request)
 func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*model.TeamReport, error) {
 	var tr model.TeamReport
 	var feishuURL sql.NullString
-	var memberIDsStr, sessionIDsStr string
+	var submittedAt sql.NullTime
+	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
 			tr.report_date, tr.content, tr.feishu_doc_url,
-			tr.member_report_ids, tr.session_ids, tr.created_at, tr.updated_at
+			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
+			tr.submitted_at, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
 		WHERE tr.team_id = $1 AND tr.report_date = $2`, teamID, reportDate).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 		&tr.ReportDate, &tr.Content, &feishuURL,
-		&memberIDsStr, &sessionIDsStr, &tr.CreatedAt, &tr.UpdatedAt,
+		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
+		&submittedAt, &tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	tr.FeishuDocURL = nullStringPtr(feishuURL)
 	tr.MemberReportIDs = parseUUIDArray(memberIDsStr)
+	tr.SourceDailyReportIDs = parseUUIDArray(sourceDailyIDsStr)
 	tr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	tr.SubmittedAt = nullTimePtr(submittedAt)
 	return &tr, nil
 }
 
 func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) {
 	var tr model.TeamReport
 	var feishuURL sql.NullString
-	var memberIDsStr, sessionIDsStr string
+	var submittedAt sql.NullTime
+	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
 			tr.report_date, tr.content, tr.feishu_doc_url,
-			tr.member_report_ids, tr.session_ids, tr.created_at, tr.updated_at
+			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
+			tr.submitted_at, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
 		WHERE tr.id = $1`, id).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 		&tr.ReportDate, &tr.Content, &feishuURL,
-		&memberIDsStr, &sessionIDsStr, &tr.CreatedAt, &tr.UpdatedAt,
+		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
+		&submittedAt, &tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	tr.FeishuDocURL = nullStringPtr(feishuURL)
 	tr.MemberReportIDs = parseUUIDArray(memberIDsStr)
+	tr.SourceDailyReportIDs = parseUUIDArray(sourceDailyIDsStr)
 	tr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	tr.SubmittedAt = nullTimePtr(submittedAt)
 	return &tr, nil
+}
+
+func (h *ReportHandler) GetDepartmentReportSources(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
+		return
+	}
+
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	rows, err := h.db.Query(`
+		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(u.name, ''),
+			tr.id::text, COALESCE(tr.content, ''), tr.submitted_at,
+			CASE WHEN tr.id IS NOT NULL THEN true ELSE false END
+		FROM teams t
+		LEFT JOIN team_reports tr ON tr.team_id = t.id AND tr.report_date = $1 AND tr.submitted_at IS NOT NULL
+		LEFT JOIN users u ON u.id = tr.leader_id
+		ORDER BY t.name`, date)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	sources := model.DepartmentReportSources{
+		ReportDate:           date,
+		SubmittedTeamReports: []model.DepartmentTeamReportSource{},
+		MissingTeams:         []model.DepartmentMissingTeam{},
+	}
+	for rows.Next() {
+		var item model.DepartmentTeamReportSource
+		var leaderID, reportID, content sql.NullString
+		var submittedAt sql.NullTime
+		if err := rows.Scan(&item.TeamID, &item.TeamName, &leaderID, &item.LeaderName, &reportID, &content, &submittedAt, &item.HasReport); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		item.LeaderID = nullStringPtr(leaderID)
+		item.ReportID = nullStringPtr(reportID)
+		item.TeamReportID = item.ReportID
+		item.TeamLeaderName = item.LeaderName
+		item.SubmittedAt = nullTimePtr(submittedAt)
+		if content.Valid {
+			item.Content = content.String
+		}
+		sources.TotalTeamCount++
+		if item.HasReport {
+			sources.SubmittedTeamCount++
+			sources.SubmittedTeamReports = append(sources.SubmittedTeamReports, item)
+		} else {
+			sources.MissingTeams = append(sources.MissingTeams, model.DepartmentMissingTeam{
+				TeamID:   item.TeamID,
+				TeamName: item.TeamName,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, sources)
+}
+
+func (h *ReportHandler) GetDepartmentReportToday(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
+		return
+	}
+	today := time.Now().Format("2006-01-02")
+	dr, err := h.getDepartmentReportByDate(today)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, dr)
+}
+
+func (h *ReportHandler) GenerateDepartmentReport(w http.ResponseWriter, r *http.Request) {
+	if h.reportGeneratorURL == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "report generator is not configured"})
+		return
+	}
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can generate department reports"})
+		return
+	}
+	today := time.Now().Format("2006-01-02")
+	body, _ := json.Marshal(map[string]string{"report_date": today})
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.reportGeneratorURL+"/reports/department/generate", bytes.NewReader(body))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator request failed: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("report generator returned HTTP %d: %s", resp.StatusCode, truncateForError(string(respBody), 200))})
+		return
+	}
+
+	var genResp struct {
+		ReportID string `json:"report_id"`
+	}
+	if err := json.Unmarshal(respBody, &genResp); err != nil || genResp.ReportID == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator returned invalid response"})
+		return
+	}
+	dr, err := h.getDepartmentReportByID(genResp.ReportID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, dr)
+}
+
+func (h *ReportHandler) UpdateDepartmentReport(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can update department reports"})
+		return
+	}
+	var req model.UpdateDepartmentReportRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	sets := []string{"updated_at = now()"}
+	args := []any{}
+	argIdx := 1
+	if req.Content != nil {
+		sets = append(sets, fmt.Sprintf("content = $%d", argIdx))
+		args = append(args, *req.Content)
+		argIdx++
+	}
+	if req.Archive {
+		sets = append(sets, "archived_at = COALESCE(archived_at, now())")
+	}
+	args = append(args, id)
+	query := fmt.Sprintf("UPDATE department_reports SET %s WHERE id = $%d", joinWithCommas(sets), argIdx)
+	res, err := h.db.Exec(query, args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	dr, err := h.getDepartmentReportByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, dr)
+}
+
+func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.DepartmentReport, error) {
+	var dr model.DepartmentReport
+	var archivedAt sql.NullTime
+	var sourceIDsStr string
+	err := h.db.QueryRow(`
+		SELECT id::text, report_date, content, source_team_report_ids, archived_at, created_at, updated_at
+		FROM department_reports
+		WHERE report_date = $1`, reportDate).Scan(
+		&dr.ID, &dr.ReportDate, &dr.Content, &sourceIDsStr, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
+	dr.ArchivedAt = nullTimePtr(archivedAt)
+	return &dr, nil
+}
+
+func (h *ReportHandler) getDepartmentReportByID(id string) (*model.DepartmentReport, error) {
+	var dr model.DepartmentReport
+	var archivedAt sql.NullTime
+	var sourceIDsStr string
+	err := h.db.QueryRow(`
+		SELECT id::text, report_date, content, source_team_report_ids, archived_at, created_at, updated_at
+		FROM department_reports
+		WHERE id = $1`, id).Scan(
+		&dr.ID, &dr.ReportDate, &dr.Content, &sourceIDsStr, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
+	dr.ArchivedAt = nullTimePtr(archivedAt)
+	return &dr, nil
 }
 
 func parseUUIDArray(pgArray string) []string {

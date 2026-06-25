@@ -9,6 +9,8 @@ import type {
   DashboardFollowItemDTO,
   DashboardRiskItemDTO,
   DailyReport,
+  DepartmentReport,
+  DepartmentReportSources,
   Document,
   GenerateReportDraftPayload,
   GenerateReportDraftResponse,
@@ -21,6 +23,7 @@ import type {
   TeamActivity,
   TeamMemberReport,
   TeamReport,
+  TeamReportSources,
   TokenAggregation,
   TokenGroupBy,
   TokenPeriod,
@@ -204,6 +207,8 @@ export const updateReport = (
 
 export const fetchTeamMemberReports = (date: string) =>
   unwrap(api.get<TeamMemberReport[]>(`/reports/team/members`, { date }));
+export const fetchTeamReportSources = (date: string) =>
+  unwrap(api.get<TeamReportSources>("/reports/team/sources", { date }));
 export const fetchTeamReportToday = () => unwrap(api.get<TeamReport>("/reports/team/today"));
 export async function fetchTeamReportTodayOrNull() {
   try {
@@ -223,6 +228,28 @@ export const fetchTeamReports = (params?: Record<string, string>) =>
   unwrap(api.get<TeamReport[]>("/reports/team", params));
 export const updateTeamReport = (id: string, data: { content?: string; feishu_doc_url?: string }) =>
   unwrap(api.put<TeamReport>(`/reports/team/${id}`, data));
+export const submitTeamReport = (id: string) =>
+  unwrap(api.post<TeamReport>(`/reports/team/${id}/submit`));
+export const fetchDepartmentReportSources = (date: string) =>
+  unwrap(api.get<DepartmentReportSources>("/reports/department/sources", { date }));
+export const fetchDepartmentReportToday = () =>
+  unwrap(api.get<DepartmentReport>("/reports/department/today"));
+export async function fetchDepartmentReportTodayOrNull() {
+  try {
+    return await unwrap(
+      api.get<DepartmentReport>("/reports/department/today", undefined, { skipErrorHandler: true })
+    );
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+export const generateDepartmentReport = () =>
+  unwrap(api.post<DepartmentReport>("/reports/department/today/generate"));
+export const updateDepartmentReport = (id: string, data: { content?: string; archive?: boolean }) =>
+  unwrap(api.put<DepartmentReport>(`/reports/department/${id}`, data));
 
 // ───────────────────────── Tokens ─────────────────────────
 

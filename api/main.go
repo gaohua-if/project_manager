@@ -125,10 +125,16 @@ func main() {
 		r.Put("/reports/{id}", reportH.Update)
 
 		r.Get("/reports/team/members", reportH.ListTeamMemberReports)
+		r.Get("/reports/team/sources", reportH.GetTeamReportSources)
 		r.Get("/reports/team/today", reportH.GetTeamReportToday)
 		r.Post("/reports/team/today/generate", reportH.GenerateTeamReport)
 		r.Get("/reports/team", reportH.ListTeamReports)
 		r.Put("/reports/team/{id}", reportH.UpdateTeamReport)
+		r.Post("/reports/team/{id}/submit", reportH.SubmitTeamReport)
+		r.Get("/reports/department/sources", reportH.GetDepartmentReportSources)
+		r.Get("/reports/department/today", reportH.GetDepartmentReportToday)
+		r.Post("/reports/department/today/generate", reportH.GenerateDepartmentReport)
+		r.Put("/reports/department/{id}", reportH.UpdateDepartmentReport)
 
 		r.Get("/tokens", tokenH.Aggregate)
 		r.Get("/tokens/sessions", tokenH.ListSessionTokens)

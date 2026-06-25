@@ -70,10 +70,10 @@ type reportDraftTaskCandidate struct {
 }
 
 type reportDraftResponse struct {
-	ReportMarkdown          string                         `json:"report_markdown"`
-	SelectedSessionIDs      []string                       `json:"selected_session_ids"`
-	SkillName               string                         `json:"skill_name"`
-	TaskProgressSuggestions []reportDraftTaskProgressItem  `json:"task_progress_suggestions"`
+	ReportMarkdown          string                        `json:"report_markdown"`
+	SelectedSessionIDs      []string                      `json:"selected_session_ids"`
+	SkillName               string                        `json:"skill_name"`
+	TaskProgressSuggestions []reportDraftTaskProgressItem `json:"task_progress_suggestions"`
 }
 
 type reportDraftTaskProgressItem struct {
@@ -94,9 +94,20 @@ type teamReportGenerateRequest struct {
 	ReportDate string `json:"report_date"`
 }
 
+type departmentReportGenerateRequest struct {
+	ReportDate string `json:"report_date"`
+}
+
 type teamMemberDailyReport struct {
 	UserName string
 	Content  string
+}
+
+type departmentTeamReport struct {
+	ID         string
+	TeamName   string
+	LeaderName string
+	Content    string
 }
 
 type reportSession struct {
@@ -218,6 +229,28 @@ func cmdServeReports(args []string) {
 			req.ReportDate = time.Now().Format("2006-01-02")
 		}
 		reportID, err := generateServerTeamReport(db, cfg, req.TeamID, req.LeaderID, req.ReportDate)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, map[string]any{
+			"report_id": reportID,
+		})
+	})
+	mux.HandleFunc("/reports/department/generate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req departmentReportGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.ReportDate == "" {
+			req.ReportDate = time.Now().Format("2006-01-02")
+		}
+		reportID, err := generateServerDepartmentReport(db, cfg, req.ReportDate)
 		if err != nil {
 			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -420,16 +453,18 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 
 	var reportID string
 	err = db.QueryRow(`
-		INSERT INTO team_reports (team_id, leader_id, report_date, content, member_report_ids, session_ids)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO team_reports (team_id, leader_id, report_date, content, member_report_ids, source_daily_report_ids, session_ids)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (team_id, report_date)
 		DO UPDATE SET content = EXCLUDED.content,
 			member_report_ids = EXCLUDED.member_report_ids,
+			source_daily_report_ids = EXCLUDED.source_daily_report_ids,
 			session_ids = EXCLUDED.session_ids,
+			submitted_at = NULL,
 			updated_at = now()
 		RETURNING id::text`,
 		teamID, leaderID, targetDate, content,
-		pq.Array(memberReportIDs), pq.Array(sessionIDs)).Scan(&reportID)
+		pq.Array(memberReportIDs), pq.Array(memberReportIDs), pq.Array(sessionIDs)).Scan(&reportID)
 	if err != nil {
 		return "", fmt.Errorf("upsert team_reports: %w", err)
 	}
@@ -498,6 +533,113 @@ func buildTeamReportFallback(reportDate, teamName string, leader reportUser, ses
 
 	b.WriteString("## 问题与风险\n\n暂无。\n\n")
 	b.WriteString("## 明日计划\n\n暂无。\n")
+	return b.String()
+}
+
+func generateServerDepartmentReport(db *sql.DB, cfg ConsumerConfig, targetDate string) (string, error) {
+	fmt.Printf("[report-generator] generating department report date=%s\n", targetDate)
+	rows, err := db.Query(`
+		SELECT tr.id::text, t.name, COALESCE(u.name, ''), tr.content
+		FROM team_reports tr
+		JOIN teams t ON t.id = tr.team_id
+		JOIN users u ON u.id = tr.leader_id
+		WHERE tr.report_date = $1 AND tr.submitted_at IS NOT NULL
+		ORDER BY t.name`, targetDate)
+	if err != nil {
+		return "", fmt.Errorf("query submitted team reports: %w", err)
+	}
+	defer rows.Close()
+
+	var teamReports []departmentTeamReport
+	for rows.Next() {
+		var tr departmentTeamReport
+		if err := rows.Scan(&tr.ID, &tr.TeamName, &tr.LeaderName, &tr.Content); err != nil {
+			return "", err
+		}
+		teamReports = append(teamReports, tr)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	prompt := buildDepartmentReportPrompt(targetDate, teamReports)
+	departmentCfg := cfg
+	if departmentCfg.ClaudeTimeout > 20*time.Second {
+		departmentCfg.ClaudeTimeout = 20 * time.Second
+	}
+	content, err := generateDailyReportWithClaude(departmentCfg, prompt)
+	if err != nil {
+		fmt.Printf("[report-generator] claude department report generation failed, using fallback: %v\n", err)
+		content = buildDepartmentReportFallback(targetDate, teamReports)
+	}
+	if strings.TrimSpace(content) == "" {
+		content = buildDepartmentReportFallback(targetDate, teamReports)
+	}
+
+	sourceIDs := make([]string, 0, len(teamReports))
+	for _, tr := range teamReports {
+		sourceIDs = append(sourceIDs, tr.ID)
+	}
+
+	var reportID string
+	err = db.QueryRow(`
+		INSERT INTO department_reports (report_date, content, source_team_report_ids)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (report_date)
+		DO UPDATE SET content = EXCLUDED.content,
+			source_team_report_ids = EXCLUDED.source_team_report_ids,
+			archived_at = NULL,
+			updated_at = now()
+		RETURNING id::text`,
+		targetDate, content, pq.Array(sourceIDs)).Scan(&reportID)
+	if err != nil {
+		return "", fmt.Errorf("upsert department_reports: %w", err)
+	}
+	return reportID, nil
+}
+
+func buildDepartmentReportFallback(reportDate string, teamReports []departmentTeamReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s 部门日报\n\n", reportDate)
+	fmt.Fprintf(&b, "## 部门总结\n\n今日共汇总 %d 份已提交小组日报。", len(teamReports))
+	if len(teamReports) == 0 {
+		b.WriteString("当前没有已提交的小组日报。")
+	}
+	b.WriteString("\n\n")
+	b.WriteString("## 各组进展\n\n")
+	if len(teamReports) == 0 {
+		b.WriteString("暂无。\n\n")
+	} else {
+		for _, tr := range teamReports {
+			fmt.Fprintf(&b, "### %s\n\n负责人：%s\n\n%s\n\n", tr.TeamName, tr.LeaderName, strings.TrimSpace(tr.Content))
+		}
+	}
+	b.WriteString("## 重点风险\n\n暂无。\n\n")
+	b.WriteString("## 明日重点\n\n暂无。\n")
+	return b.String()
+}
+
+func buildDepartmentReportPrompt(reportDate string, teamReports []departmentTeamReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "你是部门日报生成助手。请根据下面已由 TL 提交的小组日报，生成 %s 的部门日报。\n", reportDate)
+	b.WriteString("要求：只输出 Markdown；使用中文；不要直接展开员工个人日报；只基于已提交的小组日报归纳。\n")
+	b.WriteString("结构必须包含：\n")
+	b.WriteString("1. 部门总结 — 一段话概述部门今日整体进展\n")
+	b.WriteString("2. 各组进展 — 按小组汇总核心进展\n")
+	b.WriteString("3. 重点风险 — 归纳跨组风险、阻塞和需总监关注事项\n")
+	b.WriteString("4. 明日重点 — 给出部门层面的下一步重点\n")
+	b.WriteString("缺少信息时写 暂无。\n\n")
+	b.WriteString("## 已提交小组日报\n\n")
+	if len(teamReports) == 0 {
+		b.WriteString("暂无已提交小组日报。\n")
+		return b.String()
+	}
+	for i, tr := range teamReports {
+		fmt.Fprintf(&b, "### 小组 %d: %s\n", i+1, tr.TeamName)
+		fmt.Fprintf(&b, "- TL: %s\n", tr.LeaderName)
+		fmt.Fprintf(&b, "- Team Report ID: %s\n\n", tr.ID)
+		fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(tr.Content))
+	}
 	return b.String()
 }
 

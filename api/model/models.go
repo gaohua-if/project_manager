@@ -51,33 +51,33 @@ type Requirement struct {
 }
 
 type Task struct {
-	ID                    string     `json:"id"`
-	RequirementID         string     `json:"requirement_id"`
-	RequirementTitle      string     `json:"requirement_title,omitempty"`
-	Title                 string     `json:"title"`
-	AcceptanceCriteria    []string   `json:"acceptance_criteria"`
-	AssigneeID            *string    `json:"assignee_id,omitempty"`
-	AssigneeName          *string    `json:"assignee_name,omitempty"`
-	CreatorTLID           string     `json:"creator_tl_id"`
-	Status                string     `json:"status"`
-	DisplayStatus         string     `json:"display_status"`
-	Priority              string     `json:"priority"`
-	Progress              int        `json:"progress"`
-	DueDate               *string    `json:"due_date,omitempty"`
-	Dependencies          []TaskDep  `json:"dependencies,omitempty"`
-	Blocking              []TaskDep  `json:"blocking,omitempty"`
-	RiskTypes             []string   `json:"risk_types"`
-	TokenSourceIDs        []string   `json:"token_source_ids"`
-	IsFollowed            bool       `json:"is_followed"`
-	CanUpdateMeta         bool       `json:"can_update_meta"`
-	CanReassign           bool       `json:"can_reassign"`
-	CanUpdateStatus       bool       `json:"can_update_status"`
-	CanUpdateProgress     bool       `json:"can_update_progress"`
-	CanManageDependencies bool       `json:"can_manage_dependencies"`
-	CanDelete             bool       `json:"can_delete"`
-	CompletedAt           *time.Time `json:"completed_at,omitempty"`
-	CreatedAt             time.Time  `json:"created_at"`
-	UpdatedAt             time.Time  `json:"updated_at"`
+	ID                 string     `json:"id"`
+	RequirementID      string     `json:"requirement_id"`
+	RequirementTitle   string     `json:"requirement_title,omitempty"`
+	Title              string     `json:"title"`
+	AcceptanceCriteria []string   `json:"acceptance_criteria"`
+	AssigneeID         *string    `json:"assignee_id,omitempty"`
+	AssigneeName       *string    `json:"assignee_name,omitempty"`
+	CreatorTLID        string     `json:"creator_tl_id"`
+	Status             string     `json:"status"`
+	DisplayStatus      string     `json:"display_status"`
+	Priority           string     `json:"priority"`
+	Progress           int        `json:"progress"`
+	DueDate            *string    `json:"due_date,omitempty"`
+	Dependencies       []TaskDep  `json:"dependencies,omitempty"`
+	Blocking           []TaskDep  `json:"blocking,omitempty"`
+	RiskTypes          []string   `json:"risk_types"`
+	TokenSourceIDs     []string   `json:"token_source_ids"`
+	IsFollowed         bool       `json:"is_followed"`
+	CanUpdateMeta      bool       `json:"can_update_meta"`
+	CanReassign        bool       `json:"can_reassign"`
+	CanUpdateStatus    bool       `json:"can_update_status"`
+	CanUpdateProgress  bool       `json:"can_update_progress"`
+	CanManageDependencies bool    `json:"can_manage_dependencies"`
+	CanDelete          bool       `json:"can_delete"`
+	CompletedAt        *time.Time `json:"completed_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type TaskDep struct {
@@ -408,31 +408,84 @@ type GenerateReportDraftResponse struct {
 }
 
 type TeamReport struct {
-	ID              string    `json:"id"`
-	TeamID          string    `json:"team_id"`
-	TeamName        string    `json:"team_name"`
-	LeaderID        string    `json:"leader_id"`
-	LeaderName      string    `json:"leader_name"`
-	ReportDate      string    `json:"report_date"`
-	Content         string    `json:"content"`
-	FeishuDocURL    *string   `json:"feishu_doc_url,omitempty"`
-	MemberReportIDs []string  `json:"member_report_ids"`
-	SessionIDs      []string  `json:"session_ids"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                   string     `json:"id"`
+	TeamID               string     `json:"team_id"`
+	TeamName             string     `json:"team_name"`
+	LeaderID             string     `json:"leader_id"`
+	LeaderName           string     `json:"leader_name"`
+	ReportDate           string     `json:"report_date"`
+	Content              string     `json:"content"`
+	FeishuDocURL         *string    `json:"feishu_doc_url,omitempty"`
+	MemberReportIDs      []string   `json:"member_report_ids"`
+	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
+	SessionIDs           []string   `json:"session_ids"`
+	SubmittedAt          *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 type TeamMemberReport struct {
-	UserID    string  `json:"user_id"`
-	UserName  string  `json:"user_name"`
-	ReportID  *string `json:"report_id,omitempty"`
-	Content   string  `json:"content"`
-	HasReport bool    `json:"has_report"`
+	UserID      string     `json:"user_id"`
+	UserName    string     `json:"user_name"`
+	ReportID    *string    `json:"report_id,omitempty"`
+	Content     string     `json:"content"`
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+	HasReport   bool       `json:"has_report"`
 }
 
 type UpdateTeamReportRequest struct {
 	Content      *string `json:"content,omitempty"`
 	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
+}
+
+type TeamReportSources struct {
+	TeamID     string             `json:"team_id"`
+	TeamName   string             `json:"team_name"`
+	ReportDate string             `json:"report_date"`
+	Members    []TeamMemberReport `json:"members"`
+	Submitted  int                `json:"submitted"`
+	Missing    int                `json:"missing"`
+}
+
+type DepartmentTeamReportSource struct {
+	TeamID      string     `json:"team_id"`
+	TeamName    string     `json:"team_name"`
+	LeaderID    *string    `json:"leader_id,omitempty"`
+	LeaderName  string     `json:"leader_name"`
+	TeamLeaderName string  `json:"team_leader_name"`
+	ReportID    *string    `json:"report_id,omitempty"`
+	TeamReportID *string   `json:"team_report_id,omitempty"`
+	Content     string     `json:"content"`
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+	HasReport   bool       `json:"has_report"`
+}
+
+type DepartmentMissingTeam struct {
+	TeamID   string `json:"team_id"`
+	TeamName string `json:"team_name"`
+}
+
+type DepartmentReportSources struct {
+	ReportDate           string                       `json:"report_date"`
+	SubmittedTeamCount   int                          `json:"submitted_team_count"`
+	TotalTeamCount       int                          `json:"total_team_count"`
+	SubmittedTeamReports []DepartmentTeamReportSource `json:"submitted_team_reports"`
+	MissingTeams         []DepartmentMissingTeam       `json:"missing_teams"`
+}
+
+type DepartmentReport struct {
+	ID                  string     `json:"id"`
+	ReportDate          string     `json:"report_date"`
+	Content             string     `json:"content"`
+	SourceTeamReportIDs []string   `json:"source_team_report_ids"`
+	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+type UpdateDepartmentReportRequest struct {
+	Content *string `json:"content,omitempty"`
+	Archive bool    `json:"archive,omitempty"`
 }
 
 type ACStatus struct {

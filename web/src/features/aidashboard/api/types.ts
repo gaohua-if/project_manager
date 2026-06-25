@@ -229,7 +229,9 @@ export interface TeamReport {
   content: string;
   feishu_doc_url?: string;
   member_report_ids: string[];
+  source_daily_report_ids: string[];
   session_ids: string[];
+  submitted_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -239,7 +241,53 @@ export interface TeamMemberReport {
   user_name: string;
   report_id?: string;
   content: string;
+  submitted_at?: string;
   has_report: boolean;
+}
+
+export interface TeamReportSources {
+  team_id: string;
+  team_name: string;
+  report_date: string;
+  members: TeamMemberReport[];
+  submitted: number;
+  missing: number;
+}
+
+export interface DepartmentTeamReportSource {
+  team_id: string;
+  team_name: string;
+  leader_id?: string;
+  leader_name: string;
+  team_leader_name: string;
+  report_id?: string;
+  team_report_id?: string;
+  content: string;
+  submitted_at?: string;
+  has_report: boolean;
+}
+
+export interface DepartmentMissingTeam {
+  team_id: string;
+  team_name: string;
+}
+
+export interface DepartmentReportSources {
+  report_date: string;
+  submitted_team_count: number;
+  total_team_count: number;
+  submitted_team_reports: DepartmentTeamReportSource[];
+  missing_teams: DepartmentMissingTeam[];
+}
+
+export interface DepartmentReport {
+  id: string;
+  report_date: string;
+  content: string;
+  source_team_report_ids: string[];
+  archived_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Document {

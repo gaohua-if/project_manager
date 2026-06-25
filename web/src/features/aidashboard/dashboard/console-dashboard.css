@@ -731,6 +731,81 @@
   font-size: 13px;
 }
 
+.console-department-source {
+  display: grid;
+  gap: 14px;
+}
+
+.console-department-source__block {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.console-department-source__head,
+.console-department-source__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.console-department-source__head {
+  margin-bottom: 10px;
+}
+
+.console-department-source__list {
+  display: grid;
+  gap: 10px;
+}
+
+.console-department-source__item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.console-department-source__row > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.console-department-source__row strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.console-department-source__row em,
+.console-department-source__row time {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.console-department-source__content {
+  margin: 10px 0 0;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.console-department-source__missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .console-session-list {
   display: grid;
   gap: 8px;
