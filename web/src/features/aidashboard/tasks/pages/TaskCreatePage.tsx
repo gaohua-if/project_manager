@@ -20,6 +20,8 @@ import { useFormLeaveConfirm } from "@/shared/hooks/useFormLeaveConfirm";
 import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
+import { AcceptanceCriteriaEditor } from "../../requirements/components/AcceptanceCriteriaEditor";
+import { normalizeAcceptanceCriteria } from "../../requirements/components/acceptanceCriteriaUtils";
 import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
 import type { MockTaskPriority } from "../../requirements/types";
 
@@ -30,7 +32,7 @@ interface CreateTaskFormValues {
   priority: MockTaskPriority;
   due_date?: dayjs.Dayjs;
   dependency_task_ids?: string[];
-  acceptance_criteria?: string;
+  acceptance_criteria?: string[];
 }
 
 export function TaskCreatePage() {
@@ -79,10 +81,7 @@ export function TaskCreatePage() {
       requirementsBoardApi.createTask({
         requirement_id: values.requirement_id,
         title: values.title.trim(),
-        acceptance_criteria: values.acceptance_criteria
-          ?.split("\n")
-          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
-          .filter(Boolean) ?? [],
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -249,13 +248,10 @@ export function TaskCreatePage() {
                 </Form.Item>
                 <Form.Item
                   className="aidashboard-form__full-row"
-                  label="任务验收标准（可选）"
+                  label="验收标准"
                   name="acceptance_criteria"
                 >
-                  <Input.TextArea
-                    rows={5}
-                    placeholder={"1. 接口返回字段符合前端展示需要\n2. 异常情况下返回明确错误信息"}
-                  />
+                  <AcceptanceCriteriaEditor placeholder="例如：接口返回字段符合前端展示需要" />
                 </Form.Item>
               </div>
             </section>

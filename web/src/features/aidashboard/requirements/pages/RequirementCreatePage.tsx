@@ -13,6 +13,8 @@ import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { requirementsBoardApi } from "../api/requirementsBoardApi";
+import { AcceptanceCriteriaEditor } from "../components/AcceptanceCriteriaEditor";
+import { normalizeAcceptanceCriteria } from "../components/acceptanceCriteriaUtils";
 import type { MockRequirement, RequirementPriority } from "../types";
 
 interface CreateFormValues {
@@ -22,7 +24,7 @@ interface CreateFormValues {
   deadline?: dayjs.Dayjs;
   team_ids: string[];
   feishu_doc_url?: string;
-  acceptance_criteria: string;
+  acceptance_criteria: string[];
 }
 
 export function RequirementCreatePage() {
@@ -49,10 +51,7 @@ export function RequirementCreatePage() {
         deadline: values.deadline?.format("YYYY-MM-DD"),
         team_ids: values.team_ids,
         feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
-        acceptance_criteria: values.acceptance_criteria
-          .split("\n")
-          .map((item) => item.replace(/^\s*\d+[.、]\s*/, "").trim())
-          .filter(Boolean)
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
       })
   });
   const submitting = createMutation.isPending;
@@ -61,7 +60,7 @@ export function RequirementCreatePage() {
   const handleCancel = () => handleNavigate(backTo);
 
   useEffect(() => {
-    form.setFieldsValue({ priority: "medium", acceptance_criteria: "" });
+    form.setFieldsValue({ priority: "medium", acceptance_criteria: [""] });
     markClean();
   }, [form, markClean]);
 
@@ -185,11 +184,8 @@ export function RequirementCreatePage() {
                 <h2>需求验收标准（可选）</h2>
                 <p>逐条定义需求级完成条件；P0 不要求任务关联或覆盖这些标准。</p>
               </div>
-              <Form.Item label="需求验收标准（可选）" name="acceptance_criteria">
-                <Input.TextArea
-                  rows={7}
-                  placeholder={"1. 用户可以完成日报生成并发送\n2. 已关联 Token 来源能正确进入任务证据\n3. 异常情况下有明确提示"}
-                />
+              <Form.Item label="标准列表" name="acceptance_criteria">
+                <AcceptanceCriteriaEditor placeholder="例如：用户可以完成日报生成并发送" />
               </Form.Item>
             </section>
 
