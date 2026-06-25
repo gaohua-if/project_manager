@@ -38,6 +38,7 @@ type Requirement struct {
 	TaskSummary        RequirementTaskSummary `json:"task_summary"`
 	RiskSummary        RequirementRiskSummary `json:"risk_summary"`
 	IsFollowed         bool                   `json:"is_followed"`
+	CanDelete          bool                   `json:"can_delete"`
 	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`
@@ -48,7 +49,7 @@ type Task struct {
 	RequirementID         string     `json:"requirement_id"`
 	RequirementTitle      string     `json:"requirement_title,omitempty"`
 	Title                 string     `json:"title"`
-	AcceptanceCriteriaIDs []int      `json:"acceptance_criteria_ids"`
+	AcceptanceCriteria    []string   `json:"acceptance_criteria"`
 	AssigneeID            *string    `json:"assignee_id,omitempty"`
 	AssigneeName          *string    `json:"assignee_name,omitempty"`
 	CreatorTLID           string     `json:"creator_tl_id"`
@@ -82,7 +83,6 @@ type RequirementTaskSummary struct {
 type RequirementRiskSummary struct {
 	Blocked int `json:"blocked"`
 	Overdue int `json:"overdue"`
-	DueSoon int `json:"due_soon"`
 }
 
 type RequirementFollowState struct {
@@ -173,6 +173,13 @@ type Session struct {
 	UploadedAt      time.Time  `json:"uploaded_at"`
 }
 
+type PaginatedSessions struct {
+	Items    []Session `json:"items"`
+	Total    int       `json:"total"`
+	Page     int       `json:"page"`
+	PageSize int       `json:"page_size"`
+}
+
 type TokenUsage struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"session_id"`
@@ -250,23 +257,23 @@ type UpdateRequirementRequest struct {
 }
 
 type CreateTaskRequest struct {
-	RequirementID         string   `json:"requirement_id"`
-	Title                 string   `json:"title"`
-	AcceptanceCriteriaIDs []int    `json:"acceptance_criteria_ids"`
-	AssigneeID            *string  `json:"assignee_id,omitempty"`
-	Priority              string   `json:"priority"`
-	DueDate               *string  `json:"due_date,omitempty"`
-	DependsOnIDs          []string `json:"depends_on_ids,omitempty"`
+	RequirementID      string   `json:"requirement_id"`
+	Title              string   `json:"title"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	AssigneeID         *string  `json:"assignee_id,omitempty"`
+	Priority           string   `json:"priority"`
+	DueDate            *string  `json:"due_date,omitempty"`
+	DependsOnIDs       []string `json:"depends_on_ids,omitempty"`
 }
 
 type UpdateTaskRequest struct {
-	Title                 *string `json:"title,omitempty"`
-	AcceptanceCriteriaIDs *[]int  `json:"acceptance_criteria_ids,omitempty"`
-	AssigneeID            *string `json:"assignee_id,omitempty"`
-	Status                *string `json:"status,omitempty"`
-	Priority              *string `json:"priority,omitempty"`
-	DueDate               *string `json:"due_date,omitempty"`
-	Progress              *int    `json:"progress,omitempty"`
+	Title              *string   `json:"title,omitempty"`
+	AcceptanceCriteria *[]string `json:"acceptance_criteria,omitempty"`
+	AssigneeID         *string   `json:"assignee_id,omitempty"`
+	Status             *string   `json:"status,omitempty"`
+	Priority           *string   `json:"priority,omitempty"`
+	DueDate            *string   `json:"due_date,omitempty"`
+	Progress           *int      `json:"progress,omitempty"`
 }
 
 type UpdateTaskStatusRequest struct {
@@ -316,8 +323,76 @@ type UpdateSessionTaskRequest struct {
 }
 
 type UpdateReportRequest struct {
-	Content      *string `json:"content,omitempty"`
-	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
+	Content      *string   `json:"content,omitempty"`
+	FeishuDocURL *string   `json:"feishu_doc_url,omitempty"`
+	SessionIDs   *[]string `json:"session_ids,omitempty"`
+}
+
+type GenerateReportDraftRequest struct {
+	ReportDate          string   `json:"report_date"`
+	SessionIDs          []string `json:"session_ids"`
+	SkillID             string   `json:"skill_id"`
+	SkillContent        string   `json:"skill_content,omitempty"`
+	IncludeTaskProgress bool     `json:"include_task_progress"`
+}
+
+type ReportDraftSession struct {
+	ID               string         `json:"id"`
+	SessionRef       string         `json:"session_ref"`
+	AgentType        string         `json:"agent_type"`
+	StartedAt        time.Time      `json:"started_at"`
+	EndedAt          *time.Time     `json:"ended_at,omitempty"`
+	DurationSecs     *int           `json:"duration_secs,omitempty"`
+	Model            string         `json:"model"`
+	Summary          string         `json:"summary,omitempty"`
+	ToolCallsJSON    map[string]int `json:"tool_calls_json,omitempty"`
+	TaskID           *string        `json:"task_id,omitempty"`
+	TaskTitle        string         `json:"task_title,omitempty"`
+	RequirementID    *string        `json:"requirement_id,omitempty"`
+	RequirementTitle string         `json:"requirement_title,omitempty"`
+	InputTokens      int64          `json:"input_tokens"`
+	OutputTokens     int64          `json:"output_tokens"`
+	TotalTokens      int64          `json:"total_tokens"`
+}
+
+type ReportDraftTaskCandidate struct {
+	TaskID           string `json:"task_id"`
+	TaskTitle        string `json:"task_title"`
+	RequirementID    string `json:"requirement_id"`
+	RequirementTitle string `json:"requirement_title"`
+	CurrentStatus    string `json:"current_status"`
+	CurrentProgress  int    `json:"current_progress"`
+	Owner            string `json:"owner"`
+}
+
+type ReportDraftGeneratorRequest struct {
+	UserID              string                     `json:"user_id"`
+	UserName            string                     `json:"user_name"`
+	ReportDate          string                     `json:"report_date"`
+	Sessions            []ReportDraftSession       `json:"sessions"`
+	TaskCandidates      []ReportDraftTaskCandidate `json:"task_candidates"`
+	SkillID             string                     `json:"skill_id"`
+	SkillContent        string                     `json:"skill_content,omitempty"`
+	IncludeTaskProgress bool                       `json:"include_task_progress"`
+}
+
+type TaskProgressSuggestion struct {
+	TaskID                string   `json:"task_id"`
+	TaskTitle             string   `json:"task_title"`
+	RequirementID         string   `json:"requirement_id,omitempty"`
+	RequirementTitle      string   `json:"requirement_title,omitempty"`
+	SuggestedStatus       string   `json:"suggested_status"`
+	SuggestedProgress     int      `json:"suggested_progress"`
+	EvidenceSessionIDs    []string `json:"evidence_session_ids"`
+	EvidenceSessionTitles []string `json:"evidence_session_titles"`
+	Reason                string   `json:"reason"`
+}
+
+type GenerateReportDraftResponse struct {
+	ReportMarkdown          string                   `json:"report_markdown"`
+	SelectedSessionIDs      []string                 `json:"selected_session_ids"`
+	SkillName               string                   `json:"skill_name"`
+	TaskProgressSuggestions []TaskProgressSuggestion `json:"task_progress_suggestions"`
 }
 
 type TeamReport struct {

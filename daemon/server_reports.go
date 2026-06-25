@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +16,9 @@ import (
 	"github.com/lib/pq"
 )
 
+//go:embed report_skills/default_daily.md
+var defaultDailyReportSkill string
+
 type reportUser struct {
 	ID   string
 	Name string
@@ -23,6 +27,65 @@ type reportUser struct {
 type reportGenerateRequest struct {
 	UserID     string `json:"user_id"`
 	ReportDate string `json:"report_date"`
+}
+
+type reportDraftGenerateRequest struct {
+	UserID              string                     `json:"user_id"`
+	UserName            string                     `json:"user_name"`
+	ReportDate          string                     `json:"report_date"`
+	Sessions            []reportDraftSession       `json:"sessions"`
+	TaskCandidates      []reportDraftTaskCandidate `json:"task_candidates"`
+	SkillID             string                     `json:"skill_id"`
+	SkillContent        string                     `json:"skill_content,omitempty"`
+	IncludeTaskProgress bool                       `json:"include_task_progress"`
+}
+
+type reportDraftSession struct {
+	ID               string         `json:"id"`
+	SessionRef       string         `json:"session_ref"`
+	AgentType        string         `json:"agent_type"`
+	StartedAt        time.Time      `json:"started_at"`
+	EndedAt          *time.Time     `json:"ended_at,omitempty"`
+	DurationSecs     *int           `json:"duration_secs,omitempty"`
+	Model            string         `json:"model"`
+	Summary          string         `json:"summary,omitempty"`
+	ToolCallsJSON    map[string]int `json:"tool_calls_json,omitempty"`
+	TaskID           *string        `json:"task_id,omitempty"`
+	TaskTitle        string         `json:"task_title,omitempty"`
+	RequirementID    *string        `json:"requirement_id,omitempty"`
+	RequirementTitle string         `json:"requirement_title,omitempty"`
+	InputTokens      int64          `json:"input_tokens"`
+	OutputTokens     int64          `json:"output_tokens"`
+	TotalTokens      int64          `json:"total_tokens"`
+}
+
+type reportDraftTaskCandidate struct {
+	TaskID           string `json:"task_id"`
+	TaskTitle        string `json:"task_title"`
+	RequirementID    string `json:"requirement_id"`
+	RequirementTitle string `json:"requirement_title"`
+	CurrentStatus    string `json:"current_status"`
+	CurrentProgress  int    `json:"current_progress"`
+	Owner            string `json:"owner"`
+}
+
+type reportDraftResponse struct {
+	ReportMarkdown          string                         `json:"report_markdown"`
+	SelectedSessionIDs      []string                       `json:"selected_session_ids"`
+	SkillName               string                         `json:"skill_name"`
+	TaskProgressSuggestions []reportDraftTaskProgressItem  `json:"task_progress_suggestions"`
+}
+
+type reportDraftTaskProgressItem struct {
+	TaskID                string   `json:"task_id"`
+	TaskTitle             string   `json:"task_title"`
+	RequirementID         string   `json:"requirement_id,omitempty"`
+	RequirementTitle      string   `json:"requirement_title,omitempty"`
+	SuggestedStatus       string   `json:"suggested_status"`
+	SuggestedProgress     int      `json:"suggested_progress"`
+	EvidenceSessionIDs    []string `json:"evidence_session_ids"`
+	EvidenceSessionTitles []string `json:"evidence_session_titles"`
+	Reason                string   `json:"reason"`
 }
 
 type teamReportGenerateRequest struct {
@@ -102,6 +165,39 @@ func cmdServeReports(args []string) {
 			"report_id":     reportID,
 			"session_count": sessionCount,
 		})
+	})
+
+	mux.HandleFunc("/reports/draft", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req reportDraftGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.UserID == "" {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+			return
+		}
+		if len(req.Sessions) == 0 {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "sessions is required"})
+			return
+		}
+		if req.SkillID != "" && req.SkillID != "default_daily" {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported skill_id: " + req.SkillID})
+			return
+		}
+		if req.ReportDate == "" {
+			req.ReportDate = time.Now().Format("2006-01-02")
+		}
+		draft, err := generateServerDraftReport(cfg, req)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, draft)
 	})
 
 	mux.HandleFunc("/reports/team/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -186,6 +282,70 @@ func generateServerReportForUser(db *sql.DB, cfg ConsumerConfig, userID, targetD
 		return "", len(sessions), err
 	}
 	return reportID, len(sessions), nil
+}
+
+func generateServerDraftReport(cfg ConsumerConfig, req reportDraftGenerateRequest) (*reportDraftResponse, error) {
+	prompt, err := buildServerDraftReportPrompt(req)
+	if err != nil {
+		return nil, err
+	}
+	content, err := generateDailyReportWithClaude(cfg, prompt)
+	if err != nil {
+		return nil, err
+	}
+	draft, err := parseReportDraftOutput(content, req)
+	if err != nil {
+		return nil, err
+	}
+	return draft, nil
+}
+
+func buildServerDraftReportPrompt(req reportDraftGenerateRequest) (string, error) {
+	if len(req.Sessions) == 0 {
+		return "", fmt.Errorf("sessions is required")
+	}
+
+	sessionIDs := make([]string, 0, len(req.Sessions))
+	for _, session := range req.Sessions {
+		sessionIDs = append(sessionIDs, session.ID)
+	}
+	sessionsJSON, _ := json.MarshalIndent(req.Sessions, "", "  ")
+	tasksJSON, _ := json.MarshalIndent(req.TaskCandidates, "", "  ")
+
+	var b strings.Builder
+	b.WriteString(defaultDailyReportSkill)
+	b.WriteString("\n\n")
+	if strings.TrimSpace(req.SkillContent) != "" {
+		b.WriteString("## 本次上传 Skill 补充约束\n\n")
+		b.WriteString(req.SkillContent)
+		b.WriteString("\n\n")
+	}
+	fmt.Fprintf(&b, "请为用户“%s”生成 %s 的个人日报草稿。\n", req.UserName, req.ReportDate)
+	b.WriteString("你只能使用下面 JSON 数据中的 session 和任务候选。\n")
+	b.WriteString("输出必须是一个 JSON object，不要 markdown code fence，不要解释文本。\n")
+	b.WriteString("如果 include_task_progress=false 或没有明确任务证据，task_progress_suggestions 必须是空数组。\n")
+	b.WriteString("任务建议只能引用 task_candidates 中的 task_id。\n")
+	b.WriteString("证据 session 只能引用 selected_session_ids 中的 id。\n\n")
+	fmt.Fprintf(&b, "selected_session_ids: %s\n", mustJSON(sessionIDs))
+	fmt.Fprintf(&b, "include_task_progress: %t\n\n", req.IncludeTaskProgress)
+	b.WriteString("sessions:\n")
+	b.WriteString(string(sessionsJSON))
+	b.WriteString("\n\n")
+	b.WriteString("task_candidates:\n")
+	b.WriteString(string(tasksJSON))
+	b.WriteString("\n\n")
+	b.WriteString(`只输出如下结构:
+{
+  "report_markdown": "# M 月 D 日日报\n\n## 今日完成\n...\n\n## 风险与阻塞\n...\n\n## 明日计划\n...",
+  "task_progress_suggestions": []
+}
+`)
+	return b.String(), nil
+}
+
+func mustJSON(v any) string {
+	data, _ := json.Marshal(v)
+	return string(data)
 }
 
 func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, targetDate string) (string, error) {
@@ -518,6 +678,143 @@ func nullStringValue(v sql.NullString, fallback string) string {
 		return v.String
 	}
 	return fallback
+}
+
+func parseReportDraftOutput(raw string, req reportDraftGenerateRequest) (*reportDraftResponse, error) {
+	clean := strings.TrimSpace(raw)
+	var draft reportDraftResponse
+	if err := json.Unmarshal([]byte(clean), &draft); err != nil {
+		extracted, extractErr := extractFirstJSONObject(clean)
+		if extractErr != nil {
+			return nil, fmt.Errorf("parse report draft json: %w", err)
+		}
+		if err := json.Unmarshal([]byte(extracted), &draft); err != nil {
+			return nil, fmt.Errorf("parse report draft json: %w", err)
+		}
+	}
+	if strings.TrimSpace(draft.ReportMarkdown) == "" {
+		return nil, fmt.Errorf("report_markdown is required")
+	}
+
+	selectedIDs := make([]string, 0, len(req.Sessions))
+	sessionTitleByID := make(map[string]string, len(req.Sessions))
+	for _, session := range req.Sessions {
+		selectedIDs = append(selectedIDs, session.ID)
+		sessionTitleByID[session.ID] = draftSessionTitle(session)
+	}
+	draft.SelectedSessionIDs = selectedIDs
+	draft.SkillName = "默认日报 Skill"
+	if !req.IncludeTaskProgress {
+		draft.TaskProgressSuggestions = []reportDraftTaskProgressItem{}
+		return &draft, nil
+	}
+
+	taskByID := make(map[string]reportDraftTaskCandidate, len(req.TaskCandidates))
+	for _, task := range req.TaskCandidates {
+		taskByID[task.TaskID] = task
+	}
+	normalized := make([]reportDraftTaskProgressItem, 0, len(draft.TaskProgressSuggestions))
+	for _, suggestion := range draft.TaskProgressSuggestions {
+		task, ok := taskByID[suggestion.TaskID]
+		if !ok {
+			continue
+		}
+		if !isDraftTaskStatus(suggestion.SuggestedStatus) {
+			continue
+		}
+		evidenceIDs := make([]string, 0, len(suggestion.EvidenceSessionIDs))
+		evidenceTitles := make([]string, 0, len(suggestion.EvidenceSessionIDs))
+		seen := map[string]bool{}
+		for _, sessionID := range suggestion.EvidenceSessionIDs {
+			title, ok := sessionTitleByID[sessionID]
+			if !ok || seen[sessionID] {
+				continue
+			}
+			seen[sessionID] = true
+			evidenceIDs = append(evidenceIDs, sessionID)
+			evidenceTitles = append(evidenceTitles, title)
+		}
+		if len(evidenceIDs) == 0 {
+			continue
+		}
+		suggestion.TaskTitle = task.TaskTitle
+		suggestion.RequirementID = task.RequirementID
+		suggestion.RequirementTitle = task.RequirementTitle
+		suggestion.SuggestedProgress = clampDraftProgress(suggestion.SuggestedProgress)
+		suggestion.EvidenceSessionIDs = evidenceIDs
+		suggestion.EvidenceSessionTitles = evidenceTitles
+		normalized = append(normalized, suggestion)
+	}
+	draft.TaskProgressSuggestions = normalized
+	return &draft, nil
+}
+
+func extractFirstJSONObject(raw string) (string, error) {
+	start := strings.Index(raw, "{")
+	if start < 0 {
+		return "", fmt.Errorf("json object not found")
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(raw); i++ {
+		ch := raw[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return raw[start : i+1], nil
+			}
+		}
+	}
+	return "", fmt.Errorf("json object is incomplete")
+}
+
+func draftSessionTitle(session reportDraftSession) string {
+	agent := session.AgentType
+	if agent == "" {
+		agent = "session"
+	}
+	start := session.StartedAt.Format("15:04")
+	if session.StartedAt.IsZero() {
+		return agent
+	}
+	if session.EndedAt != nil {
+		return fmt.Sprintf("%s %s - %s", agent, start, session.EndedAt.Format("15:04"))
+	}
+	return fmt.Sprintf("%s %s", agent, start)
+}
+
+func isDraftTaskStatus(status string) bool {
+	return status == "todo" || status == "in_progress" || status == "done"
+}
+
+func clampDraftProgress(progress int) int {
+	if progress < 0 {
+		return 0
+	}
+	if progress > 100 {
+		return 100
+	}
+	return progress
 }
 
 func generateDailyReportWithClaude(cfg ConsumerConfig, prompt string) (string, error) {

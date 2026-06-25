@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/aidashboard/api/model"
+	"github.com/aidashboard/api/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/lib/pq"
 )
 
 type ReportHandler struct {
@@ -192,6 +194,175 @@ func (h *ReportHandler) GenerateToday(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dr)
 }
 
+func (h *ReportHandler) GenerateTodayDraft(w http.ResponseWriter, r *http.Request) {
+	var req model.GenerateReportDraftRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	sessionIDs := uniqueStringsPreserveOrder(req.SessionIDs)
+	if len(sessionIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_ids is required"})
+		return
+	}
+	if err := service.ValidateDraftSkillID(req.SkillID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if h.reportGeneratorURL == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "report generator is not configured"})
+		return
+	}
+
+	u := getUser(r)
+	reportDate := req.ReportDate
+	if reportDate == "" {
+		reportDate = service.TodayInLocalDate()
+	}
+	skillID := req.SkillID
+	if skillID == "" {
+		skillID = service.DefaultDailyReportSkillID
+	}
+
+	sessions, err := h.loadDraftSessions(u.ID, sessionIDs)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(sessions) != len(sessionIDs) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "one or more sessions are not accessible"})
+		return
+	}
+
+	tasks, err := h.loadDraftTaskCandidates(u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	generatorReq := model.ReportDraftGeneratorRequest{
+		UserID:              u.ID,
+		UserName:            u.Name,
+		ReportDate:          reportDate,
+		Sessions:            orderDraftSessions(sessions, sessionIDs),
+		TaskCandidates:      tasks,
+		SkillID:             skillID,
+		SkillContent:        req.SkillContent,
+		IncludeTaskProgress: req.IncludeTaskProgress,
+	}
+
+	body, _ := json.Marshal(generatorReq)
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.reportGeneratorURL+"/reports/draft", bytes.NewReader(body))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator request failed: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("report generator returned HTTP %d: %s", resp.StatusCode, truncateForError(string(respBody), 300))})
+		return
+	}
+
+	var draftResp model.GenerateReportDraftResponse
+	if err := json.Unmarshal(respBody, &draftResp); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator returned invalid response"})
+		return
+	}
+	if draftResp.ReportMarkdown == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator returned empty report_markdown"})
+		return
+	}
+
+	draftResp = service.NormalizeDraftResponse(draftResp, generatorReq.Sessions, tasks, req.IncludeTaskProgress)
+	writeJSON(w, http.StatusOK, draftResp)
+}
+
+func (h *ReportHandler) loadDraftSessions(userID string, sessionIDs []string) ([]model.ReportDraftSession, error) {
+	rows, err := h.db.Query(`
+		SELECT s.id::text, s.session_ref, s.agent_type, s.started_at, s.ended_at, s.duration_secs,
+			COALESCE(s.model, ''), COALESCE(s.summary, ''), COALESCE(s.tool_calls_json::text, '{}'),
+			s.task_id::text, COALESCE(t.title, ''), s.requirement_id::text, COALESCE(r.title, ''),
+			COALESCE(tu.input_tokens, 0), COALESCE(tu.output_tokens, 0), COALESCE(tu.total_tokens, 0)
+		FROM sessions s
+		LEFT JOIN tasks t ON t.id = s.task_id
+		LEFT JOIN requirements r ON r.id = s.requirement_id
+		LEFT JOIN (
+			SELECT session_id, SUM(input_tokens) input_tokens, SUM(output_tokens) output_tokens, SUM(total_tokens) total_tokens
+			FROM token_usage
+			GROUP BY session_id
+		) tu ON tu.session_id = s.id
+		WHERE s.user_id = $1 AND s.id::text = ANY($2)
+		ORDER BY s.started_at`, userID, pq.Array(sessionIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sessions := []model.ReportDraftSession{}
+	for rows.Next() {
+		var s model.ReportDraftSession
+		var endedAt sql.NullTime
+		var durationSecs sql.NullInt64
+		var toolCallsRaw string
+		var taskID, requirementID sql.NullString
+		if err := rows.Scan(&s.ID, &s.SessionRef, &s.AgentType, &s.StartedAt, &endedAt, &durationSecs,
+			&s.Model, &s.Summary, &toolCallsRaw,
+			&taskID, &s.TaskTitle, &requirementID, &s.RequirementTitle,
+			&s.InputTokens, &s.OutputTokens, &s.TotalTokens); err != nil {
+			return nil, err
+		}
+		if endedAt.Valid {
+			s.EndedAt = &endedAt.Time
+		}
+		if durationSecs.Valid {
+			v := int(durationSecs.Int64)
+			s.DurationSecs = &v
+		}
+		if toolCallsRaw != "" {
+			_ = json.Unmarshal([]byte(toolCallsRaw), &s.ToolCallsJSON)
+		}
+		s.TaskID = nullStringPtr(taskID)
+		s.RequirementID = nullStringPtr(requirementID)
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+func (h *ReportHandler) loadDraftTaskCandidates(userID string) ([]model.ReportDraftTaskCandidate, error) {
+	rows, err := h.db.Query(`
+		SELECT t.id::text, t.title, r.id::text, r.title, t.status, t.progress, COALESCE(u.name, '')
+		FROM tasks t
+		JOIN requirements r ON r.id = t.requirement_id
+		LEFT JOIN users u ON u.id = t.assignee_id
+		WHERE t.assignee_id = $1 AND t.status IN ('todo', 'in_progress')
+		ORDER BY t.updated_at DESC, t.created_at DESC
+		LIMIT 50`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tasks := []model.ReportDraftTaskCandidate{}
+	for rows.Next() {
+		var task model.ReportDraftTaskCandidate
+		if err := rows.Scan(&task.TaskID, &task.TaskTitle, &task.RequirementID, &task.RequirementTitle,
+			&task.CurrentStatus, &task.CurrentProgress, &task.Owner); err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
 func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.DailyReport, error) {
 	var dr model.DailyReport
 	var feishuURL sql.NullString
@@ -215,10 +386,20 @@ func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.D
 
 func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	u := getUser(r)
 	var req model.UpdateReportRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
 		return
+	}
+
+	if req.SessionIDs != nil {
+		sessionIDs := uniqueStringsPreserveOrder(*req.SessionIDs)
+		if err := h.validateReportSessionIDs(u.ID, sessionIDs); err != nil {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+			return
+		}
+		req.SessionIDs = &sessionIDs
 	}
 
 	sets := []string{"updated_at = now()"}
@@ -233,6 +414,11 @@ func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.FeishuDocURL != nil {
 		sets = append(sets, fmt.Sprintf("feishu_doc_url = $%d", argIdx))
 		args = append(args, *req.FeishuDocURL)
+		argIdx++
+	}
+	if req.SessionIDs != nil {
+		sets = append(sets, fmt.Sprintf("session_ids = $%d", argIdx))
+		args = append(args, pq.Array(*req.SessionIDs))
 		argIdx++
 	}
 
@@ -250,6 +436,23 @@ func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Get(w, r)
+}
+
+func (h *ReportHandler) validateReportSessionIDs(userID string, sessionIDs []string) error {
+	if len(sessionIDs) == 0 {
+		return nil
+	}
+	var count int
+	if err := h.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM sessions
+		WHERE user_id = $1 AND id::text = ANY($2)`, userID, pq.Array(sessionIDs)).Scan(&count); err != nil {
+		return err
+	}
+	if count != len(sessionIDs) {
+		return fmt.Errorf("one or more sessions are not accessible")
+	}
+	return nil
 }
 
 func (h *ReportHandler) generateReportContent(userID, date string) string {
@@ -601,4 +804,31 @@ func joinWithCommas(items []string) string {
 		result += item
 	}
 	return result
+}
+
+func uniqueStringsPreserveOrder(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
+}
+
+func orderDraftSessions(sessions []model.ReportDraftSession, orderedIDs []string) []model.ReportDraftSession {
+	byID := make(map[string]model.ReportDraftSession, len(sessions))
+	for _, session := range sessions {
+		byID[session.ID] = session
+	}
+	ordered := make([]model.ReportDraftSession, 0, len(sessions))
+	for _, id := range orderedIDs {
+		if session, ok := byID[id]; ok {
+			ordered = append(ordered, session)
+		}
+	}
+	return ordered
 }

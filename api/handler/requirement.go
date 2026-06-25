@@ -10,6 +10,7 @@ import (
 	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/lib/pq"
 )
 
 type RequirementHandler struct {
@@ -145,18 +146,6 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ac := req.AcceptanceCriteria
-	if len(ac) == 0 && h.ai != nil {
-		generated, err := h.ai.GenerateAcceptanceCriteria(r.Context(), req.Title, req.Description)
-		if err != nil {
-			log.Printf("AI generate AC failed (will use fallback): %v", err)
-		}
-		if len(generated) > 0 {
-			ac = generated
-		}
-	}
-	if len(ac) == 0 {
-		ac = []string{"验收标准待补充"}
-	}
 
 	var reqID string
 	err := h.db.QueryRow(`
@@ -280,6 +269,99 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	h.Get(w, r)
 }
 
+func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to restore requirements"})
+		return
+	}
+
+	res, err := h.db.Exec(`
+		UPDATE requirements
+		SET status = 'todo', completed_at = NULL, updated_at = now()
+		WHERE id = $1 AND status = 'cancelled'`, id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		var exists bool
+		_ = h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)`, id).Scan(&exists)
+		if !exists {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "requirement is not cancelled",
+			"code":  "not_cancelled",
+		})
+		return
+	}
+
+	h.Get(w, r)
+}
+
+func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to delete requirements"})
+		return
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	var existing string
+	if err := tx.QueryRow("SELECT id FROM requirements WHERE id = $1 FOR UPDATE", id).Scan(&existing); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var hasAssociations bool
+	if err := tx.QueryRow(`
+		SELECT EXISTS(SELECT 1 FROM tasks WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM sessions WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM token_usage WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM documents WHERE requirement_id = $1)`, id).Scan(&hasAssociations); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if hasAssociations {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "requirement has associated tasks/sessions/tokens/documents — cancel instead of delete",
+			"code":  "has_associations",
+		})
+		return
+	}
+
+	if _, err := tx.Exec(`DELETE FROM user_follows WHERE target_type = 'requirement' AND target_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM requirement_teams WHERE requirement_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM requirements WHERE id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var acStr string
@@ -293,41 +375,11 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 	statuses := []model.ACStatus{}
 
 	for i, text := range acItems {
-		rows, err := h.db.Query(`
-			SELECT t.id, t.title, t.status
-			FROM tasks t
-			WHERE t.requirement_id = $1 AND $2 = ANY(t.acceptance_criteria_ids)
-			ORDER BY t.created_at`, id, i)
-		if err != nil {
-			statuses = append(statuses, model.ACStatus{Index: i, Text: text, Completed: false})
-			continue
-		}
-
-		allDone := true
-		hasTasks := false
-		var taskIDs []string
-		for rows.Next() {
-			var tid, title, status string
-			rows.Scan(&tid, &title, &status)
-			taskIDs = append(taskIDs, title)
-			hasTasks = true
-			if status != "done" {
-				allDone = false
-			}
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			statuses = append(statuses, model.ACStatus{Index: i, Text: text, Completed: false})
-			continue
-		}
-		rows.Close()
-
-		completed := hasTasks && allDone
 		statuses = append(statuses, model.ACStatus{
 			Index:       i,
 			Text:        text,
-			Completed:   completed,
-			LinkedTasks: taskIDs,
+			Completed:   false,
+			LinkedTasks: []string{},
 		})
 	}
 
@@ -398,7 +450,7 @@ func (h *RequirementHandler) loadTeams(req *model.Requirement) {
 func (h *RequirementHandler) loadProjection(req *model.Requirement, userID string) {
 	rows, err := h.db.Query(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at
 		FROM tasks t
@@ -412,18 +464,18 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 		taskHandler := NewTaskHandler(h.db)
 		for rows.Next() {
 			var task model.Task
-			var acStr string
+			var ac pq.StringArray
 			var assigneeID, assigneeName, dueDate sql.NullString
 			var completedAt sql.NullTime
 			if rows.Scan(
 				&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
-				&acStr, &assigneeID, &assigneeName, &task.CreatorTLID,
+				&ac, &assigneeID, &assigneeName, &task.CreatorTLID,
 				&task.Status, &task.Priority, &task.Progress, &dueDate,
 				&completedAt, &task.CreatedAt, &task.UpdatedAt,
 			) != nil {
 				continue
 			}
-			task.AcceptanceCriteriaIDs = parseIntArray(acStr)
+			task.AcceptanceCriteria = []string(ac)
 			task.AssigneeID = nullStringPtr(assigneeID)
 			task.AssigneeName = nullStringPtr(assigneeName)
 			task.DueDate = nullStringPtr(dueDate)
@@ -439,6 +491,14 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 			SELECT 1 FROM user_follows
 			WHERE user_id = $1 AND target_type = 'requirement' AND target_id = $2
 		)`, userID, req.ID).Scan(&req.IsFollowed)
+
+	var hasAssociations bool
+	_ = h.db.QueryRow(`
+		SELECT EXISTS(SELECT 1 FROM tasks WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM sessions WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM token_usage WHERE requirement_id = $1)
+		    OR EXISTS(SELECT 1 FROM documents WHERE requirement_id = $1)`, req.ID).Scan(&hasAssociations)
+	req.CanDelete = !hasAssociations
 
 	tokenRows, tokenErr := h.db.Query(`
 		SELECT DISTINCT s.id

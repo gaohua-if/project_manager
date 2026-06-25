@@ -12,7 +12,7 @@ func TestDeriveTaskRisks(t *testing.T) {
 	now := time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 	overdue := "2026-06-23"
 	overdueFromDatabase := "2026-06-23T00:00:00Z"
-	dueSoon := "2026-06-26"
+	notDueSoon := "2026-06-26"
 
 	tests := []struct {
 		name string
@@ -34,9 +34,9 @@ func TestDeriveTaskRisks(t *testing.T) {
 			want: []string{TaskRiskOverdue},
 		},
 		{
-			name: "due soon is derived within 48 hours",
-			task: model.Task{Status: "todo", DueDate: &dueSoon},
-			want: []string{TaskRiskDueSoon},
+			name: "future deadline does not create risk",
+			task: model.Task{Status: "todo", DueDate: &notDueSoon},
+			want: []string{},
 		},
 		{
 			name: "done task has no risks",

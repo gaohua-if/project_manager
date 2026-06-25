@@ -29,6 +29,47 @@ func NewSessionHandler(db *sql.DB, store *storage.MinioStorage, ai *service.AICl
 
 func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
+	page, pageSize := parsePagination(r, 20, 100)
+
+	where := " WHERE 1=1"
+	args := []any{}
+	argIdx := 1
+
+	if date := r.URL.Query().Get("date"); date != "" {
+		where += fmt.Sprintf(" AND DATE(s.uploaded_at) = $%d", argIdx)
+		args = append(args, date)
+		argIdx++
+	}
+	if startedFrom := r.URL.Query().Get("started_from"); startedFrom != "" {
+		where += fmt.Sprintf(" AND s.started_at >= $%d", argIdx)
+		args = append(args, startedFrom)
+		argIdx++
+	}
+	if startedTo := r.URL.Query().Get("started_to"); startedTo != "" {
+		where += fmt.Sprintf(" AND s.started_at <= $%d", argIdx)
+		args = append(args, startedTo)
+		argIdx++
+	}
+
+	switch u.Role {
+	case "employee":
+		where += fmt.Sprintf(" AND s.user_id = $%d", argIdx)
+		args = append(args, u.ID)
+		argIdx++
+	case "team_leader", "pm":
+		if u.TeamID != nil {
+			where += fmt.Sprintf(" AND s.user_id IN (SELECT id FROM users WHERE team_id = $%d)", argIdx)
+			args = append(args, *u.TeamID)
+			argIdx++
+		}
+	}
+
+	var total int
+	if err := h.db.QueryRow("SELECT COUNT(*) FROM sessions s"+where, args...).Scan(&total); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	query := `
 		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name,''), s.agent_type, s.started_at, s.ended_at,
 			s.duration_secs, s.model, s.summary, s.tool_calls_json, s.git_commits,
@@ -36,31 +77,9 @@ func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
 			s.raw_log_url, s.uploaded_at
 		FROM sessions s
 		LEFT JOIN users u ON u.id = s.user_id
-		LEFT JOIN tasks t ON t.id = s.task_id
-		WHERE 1=1`
-	args := []any{}
-	argIdx := 1
-
-	if date := r.URL.Query().Get("date"); date != "" {
-		query += fmt.Sprintf(" AND DATE(s.uploaded_at) = $%d", argIdx)
-		args = append(args, date)
-		argIdx++
-	}
-
-	switch u.Role {
-	case "employee":
-		query += fmt.Sprintf(" AND s.user_id = $%d", argIdx)
-		args = append(args, u.ID)
-		argIdx++
-	case "team_leader", "pm":
-		if u.TeamID != nil {
-			query += fmt.Sprintf(" AND s.user_id IN (SELECT id FROM users WHERE team_id = $%d)", argIdx)
-			args = append(args, *u.TeamID)
-			argIdx++
-		}
-	}
-
-	query += " ORDER BY s.uploaded_at DESC"
+		LEFT JOIN tasks t ON t.id = s.task_id` + where
+	query += fmt.Sprintf(" ORDER BY s.uploaded_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, pageSize, (page-1)*pageSize)
 
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
@@ -117,7 +136,12 @@ func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, sessions)
+	writeJSON(w, http.StatusOK, model.PaginatedSessions{
+		Items:    sessions,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	})
 }
 
 func (h *SessionHandler) Get(w http.ResponseWriter, r *http.Request) {

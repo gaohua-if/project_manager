@@ -222,19 +222,19 @@ func (h *TokenHandler) queryGroups(where string, args []any, groupBy string, tot
 	switch groupBy {
 	case "team":
 		extraJoins = "LEFT JOIN users u ON u.id = tu.user_id LEFT JOIN teams tm ON tm.id = u.team_id"
-		groupExpr = "COALESCE(tm.id, 'none')"
+		groupExpr = "COALESCE(tm.id::text, 'none')"
 		labelExpr = "COALESCE(tm.name, '未分配团队')"
 	case "user":
 		extraJoins = "LEFT JOIN users u ON u.id = tu.user_id"
-		groupExpr = "tu.user_id"
+		groupExpr = "tu.user_id::text"
 		labelExpr = "COALESCE(u.name, '未知')"
 	case "requirement":
 		extraJoins = "LEFT JOIN requirements r ON r.id = tu.requirement_id"
-		groupExpr = "COALESCE(tu.requirement_id, 'none')"
+		groupExpr = "COALESCE(tu.requirement_id::text, 'none')"
 		labelExpr = "COALESCE(r.title, '未关联需求')"
 	case "task":
 		extraJoins = "LEFT JOIN tasks t ON t.id = tu.task_id"
-		groupExpr = "COALESCE(tu.task_id, 'none')"
+		groupExpr = "COALESCE(tu.task_id::text, 'none')"
 		labelExpr = "COALESCE(t.title, '未关联任务')"
 	case "model":
 		fallthrough

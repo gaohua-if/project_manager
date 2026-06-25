@@ -9,6 +9,7 @@ import (
 
 	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
+	"github.com/lib/pq"
 )
 
 type DashboardHandler struct {
@@ -63,7 +64,7 @@ func (h *DashboardHandler) Risks(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	query := `
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at
 		FROM tasks t
@@ -151,6 +152,13 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 	if err != nil || task.Status == "done" {
 		return model.DashboardFollowItem{}, false
 	}
+	var parentStatus string
+	if err := h.db.QueryRow(`SELECT status FROM requirements WHERE id = $1`, task.RequirementID).Scan(&parentStatus); err != nil {
+		return model.DashboardFollowItem{}, false
+	}
+	if parentStatus == "cancelled" || parentStatus == "completed" {
+		return model.DashboardFollowItem{}, false
+	}
 	url := fmt.Sprintf("/requirements?requirementId=%s&taskId=%s", task.RequirementID, task.ID)
 	dependency := ""
 	if task.DisplayStatus == "blocked" {
@@ -180,7 +188,7 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 func (h *DashboardHandler) loadTask(id, userID string) (model.Task, error) {
 	row := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at
 		FROM tasks t
@@ -201,19 +209,19 @@ type rowScanner interface {
 
 func scanProjectionTask(row rowScanner) (model.Task, error) {
 	var task model.Task
-	var acStr string
+	var ac pq.StringArray
 	var assigneeID, assigneeName, dueDate sql.NullString
 	var completedAt sql.NullTime
 	err := row.Scan(
 		&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
-		&acStr, &assigneeID, &assigneeName, &task.CreatorTLID,
+		&ac, &assigneeID, &assigneeName, &task.CreatorTLID,
 		&task.Status, &task.Priority, &task.Progress, &dueDate,
 		&completedAt, &task.CreatedAt, &task.UpdatedAt,
 	)
 	if err != nil {
 		return model.Task{}, err
 	}
-	task.AcceptanceCriteriaIDs = parseIntArray(acStr)
+	task.AcceptanceCriteria = []string(ac)
 	task.AssigneeID = nullStringPtr(assigneeID)
 	task.AssigneeName = nullStringPtr(assigneeName)
 	task.DueDate = nullStringPtr(dueDate)
@@ -253,13 +261,6 @@ func dashboardRiskItem(task model.Task, riskType string) model.DashboardRiskItem
 		item.Reason = "任务尚未完成，需要更新计划或推进状态"
 		item.Level = "高"
 		item.Tone = "red"
-	default:
-		item.RiskType = "deadline"
-		item.Title = "任务将在 48 小时内到期"
-		item.Source = "临期"
-		item.Reason = "请确认剩余工作和交付时间"
-		item.Level = "中"
-		item.Tone = "orange"
 	}
 	return item
 }
@@ -284,9 +285,6 @@ func requirementRiskLabel(risk model.RequirementRiskSummary) string {
 	if risk.Blocked > 0 {
 		return fmt.Sprintf("%d 个依赖阻塞", risk.Blocked)
 	}
-	if risk.DueSoon > 0 {
-		return fmt.Sprintf("%d 个任务临期", risk.DueSoon)
-	}
 	return "正常推进"
 }
 
@@ -299,11 +297,6 @@ func taskRiskLabel(risks []string) string {
 	for _, risk := range risks {
 		if risk == service.TaskRiskBlocked {
 			return "依赖阻塞"
-		}
-	}
-	for _, risk := range risks {
-		if risk == service.TaskRiskDueSoon {
-			return "临期"
 		}
 	}
 	return "正常推进"

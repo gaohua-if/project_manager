@@ -82,6 +82,8 @@ func main() {
 		r.Post("/requirements", reqH.Create)
 		r.Get("/requirements/{id}", reqH.Get)
 		r.Put("/requirements/{id}", reqH.Update)
+		r.Delete("/requirements/{id}", reqH.Delete)
+		r.Put("/requirements/{id}/restore", reqH.Restore)
 		r.Get("/requirements/{id}/ac", reqH.GetAC)
 		r.Post("/requirements/{id}/regenerate-ac", reqH.RegenerateAC)
 
@@ -89,6 +91,7 @@ func main() {
 		r.Post("/tasks", taskH.Create)
 		r.Get("/tasks/{id}", taskH.Get)
 		r.Put("/tasks/{id}", taskH.Update)
+		r.Delete("/tasks/{id}", taskH.Delete)
 		r.Put("/tasks/{id}/status", taskH.UpdateStatus)
 		r.Put("/tasks/{id}/progress", taskH.UpdateProgress)
 		r.Post("/tasks/{id}/dependencies", taskH.AddDependency)
@@ -115,6 +118,7 @@ func main() {
 
 		r.Get("/reports", reportH.List)
 		r.Get("/reports/today", reportH.GetOrCreateToday)
+		r.Post("/reports/today/draft", reportH.GenerateTodayDraft)
 		r.Post("/reports/today/generate", reportH.GenerateToday)
 		r.Get("/reports/{id}", reportH.Get)
 		r.Put("/reports/{id}", reportH.Update)

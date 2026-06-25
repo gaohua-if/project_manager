@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -57,4 +58,23 @@ func truncateForError(s string, n int) string {
 		return s[:n]
 	}
 	return s[:n-3] + "..."
+}
+
+func parsePagination(r *http.Request, defaultSize, maxSize int) (page, pageSize int) {
+	page = 1
+	pageSize = defaultSize
+	if v := r.URL.Query().Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := r.URL.Query().Get("page_size"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > maxSize {
+				n = maxSize
+			}
+			pageSize = n
+		}
+	}
+	return
 }

@@ -9,7 +9,6 @@ import (
 const (
 	TaskRiskBlocked = "blocked"
 	TaskRiskOverdue = "overdue"
-	TaskRiskDueSoon = "due_soon"
 )
 
 // DeriveTaskRisks is the single P0 source of truth for task risks.
@@ -19,7 +18,7 @@ func DeriveTaskRisks(task model.Task, now time.Time) []string {
 		return []string{}
 	}
 
-	risks := make([]string, 0, 3)
+	risks := make([]string, 0, 2)
 	for _, dependency := range task.Dependencies {
 		if dependency.Status != "done" {
 			risks = append(risks, TaskRiskBlocked)
@@ -38,9 +37,6 @@ func DeriveTaskRisks(task model.Task, now time.Time) []string {
 	today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
 	if due.Before(today) {
 		return append(risks, TaskRiskOverdue)
-	}
-	if !due.After(today.Add(48 * time.Hour)) {
-		return append(risks, TaskRiskDueSoon)
 	}
 	return risks
 }
@@ -92,8 +88,6 @@ func SummarizeRequirementTasks(tasks []model.Task) (model.RequirementTaskSummary
 				riskSummary.Blocked++
 			case TaskRiskOverdue:
 				riskSummary.Overdue++
-			case TaskRiskDueSoon:
-				riskSummary.DueSoon++
 			}
 		}
 	}

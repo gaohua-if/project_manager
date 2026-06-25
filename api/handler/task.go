@@ -10,6 +10,7 @@ import (
 	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/lib/pq"
 )
 
 type TaskHandler struct {
@@ -24,7 +25,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	query := `
 		SELECT t.id, t.requirement_id, r.title as req_title, t.title,
-			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name,''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name,''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at
 		FROM tasks t
@@ -78,19 +79,19 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	tasks := []model.Task{}
 	for rows.Next() {
 		var t model.Task
-		var acStr string
+		var ac pq.StringArray
 		var dueDate sql.NullString
 		var assigneeID sql.NullString
 		var assigneeName sql.NullString
 		var completedAt sql.NullTime
 		if err := rows.Scan(&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
-			&acStr, &assigneeID, &assigneeName,
+			&ac, &assigneeID, &assigneeName,
 			&t.CreatorTLID, &t.Status, &t.Priority, &t.Progress, &dueDate, &completedAt,
 			&t.CreatedAt, &t.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		t.AcceptanceCriteriaIDs = parseIntArray(acStr)
+		t.AcceptanceCriteria = []string(ac)
 		t.AssigneeID = nullStringPtr(assigneeID)
 		t.AssigneeName = nullStringPtr(assigneeName)
 		t.DueDate = nullStringPtr(dueDate)
@@ -109,7 +110,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var t model.Task
-	var acStr string
+	var ac pq.StringArray
 	var dueDate sql.NullString
 	var assigneeID sql.NullString
 	var assigneeName sql.NullString
@@ -117,7 +118,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	err := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			t.acceptance_criteria_ids, t.assignee_id, COALESCE(a.name,''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name,''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at
 		FROM tasks t
@@ -125,7 +126,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN users a ON a.id = t.assignee_id
 		WHERE t.id = $1`, id).Scan(
 		&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
-		&acStr, &assigneeID, &assigneeName,
+		&ac, &assigneeID, &assigneeName,
 		&t.CreatorTLID, &t.Status, &t.Priority, &t.Progress, &dueDate, &completedAt,
 		&t.CreatedAt, &t.UpdatedAt,
 	)
@@ -134,7 +135,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t.AcceptanceCriteriaIDs = parseIntArray(acStr)
+	t.AcceptanceCriteria = []string(ac)
 	t.AssigneeID = nullStringPtr(assigneeID)
 	t.AssigneeName = nullStringPtr(assigneeName)
 	t.DueDate = nullStringPtr(dueDate)
@@ -219,9 +220,9 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var taskID string
 	err = h.db.QueryRow(`
-		INSERT INTO tasks (requirement_id, title, acceptance_criteria_ids, assignee_id, creator_tl_id, priority, due_date)
+		INSERT INTO tasks (requirement_id, title, acceptance_criteria, assignee_id, creator_tl_id, priority, due_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-		req.RequirementID, req.Title, intArrayToPG(req.AcceptanceCriteriaIDs),
+		req.RequirementID, req.Title, pq.Array(req.AcceptanceCriteria),
 		nullString(req.AssigneeID), u.ID, req.Priority, nullString(req.DueDate),
 	).Scan(&taskID)
 	if err != nil {
@@ -290,9 +291,9 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		args = append(args, nullString(req.DueDate))
 		argIdx++
 	}
-	if req.AcceptanceCriteriaIDs != nil {
-		sets = append(sets, fmt.Sprintf("acceptance_criteria_ids = $%d", argIdx))
-		args = append(args, intArrayToPG(*req.AcceptanceCriteriaIDs))
+	if req.AcceptanceCriteria != nil {
+		sets = append(sets, fmt.Sprintf("acceptance_criteria = $%d", argIdx))
+		args = append(args, pq.Array(*req.AcceptanceCriteria))
 		argIdx++
 	}
 	if req.Progress != nil && (req.Status == nil || *req.Status != "done") {
@@ -425,6 +426,96 @@ func (h *TaskHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
 	h.Get(w, r)
 }
 
+func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	u := getUser(r)
+	if u == nil || (u.Role != "admin" && u.Role != "director" && u.Role != "pm" && u.Role != "team_leader") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to delete tasks"})
+		return
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	var requirementID string
+	var creatorTL string
+	var assigneeID sql.NullString
+	err = tx.QueryRow(`SELECT requirement_id, creator_tl_id, assignee_id FROM tasks WHERE id = $1 FOR UPDATE`, id).
+		Scan(&requirementID, &creatorTL, &assigneeID)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if u.Role == "team_leader" {
+		if u.TeamID == nil {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "team leader must belong to a team"})
+			return
+		}
+		var allowed bool
+		if err := tx.QueryRow(`
+			SELECT (
+				$1 = $2
+				OR EXISTS(SELECT 1 FROM users WHERE id = $3 AND team_id = $4)
+			)`, creatorTL, u.ID, assigneeID, *u.TeamID).Scan(&allowed); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if !allowed {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "task is not within your team"})
+			return
+		}
+	}
+
+	if _, err := tx.Exec(`SELECT id FROM requirements WHERE id = $1 FOR UPDATE`, requirementID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if _, err := tx.Exec(`UPDATE sessions SET task_id = NULL WHERE task_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`UPDATE token_usage SET task_id = NULL WHERE task_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`UPDATE documents SET task_id = NULL WHERE task_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM user_follows WHERE target_type = 'task' AND target_id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM tasks WHERE id = $1`, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`
+		UPDATE requirements
+		SET progress = COALESCE((
+			SELECT FLOOR(AVG(progress))::int FROM tasks WHERE requirement_id = $1
+		), 0), updated_at = now()
+		WHERE id = $1`, requirementID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (h *TaskHandler) loadDeps(t *model.Task) {
 	rows, _ := h.db.Query(`
 		SELECT td.depends_on_id, t.title, t.status
@@ -544,36 +635,4 @@ func nullTimePtr(value sql.NullTime) *time.Time {
 		return nil
 	}
 	return &value.Time
-}
-
-func parseIntArray(pgArray string) []int {
-	if pgArray == "" || pgArray == "{}" || pgArray == "NULL" {
-		return nil
-	}
-	s := strings.Trim(pgArray, "{}")
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	result := make([]int, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" && p != "NULL" {
-			var v int
-			fmt.Sscanf(p, "%d", &v)
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
-func intArrayToPG(ids []int) string {
-	if len(ids) == 0 {
-		return "{}"
-	}
-	parts := make([]string, len(ids))
-	for i, v := range ids {
-		parts[i] = fmt.Sprintf("%d", v)
-	}
-	return "{" + strings.Join(parts, ",") + "}"
 }
