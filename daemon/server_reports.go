@@ -94,8 +94,18 @@ type teamReportGenerateRequest struct {
 	ReportDate string `json:"report_date"`
 }
 
+type teamWeeklyReportGenerateRequest struct {
+	TeamID    string `json:"team_id"`
+	LeaderID  string `json:"leader_id"`
+	WeekStart string `json:"week_start"`
+}
+
 type departmentReportGenerateRequest struct {
 	ReportDate string `json:"report_date"`
+}
+
+type departmentWeeklyReportGenerateRequest struct {
+	WeekStart string `json:"week_start"`
 }
 
 type teamMemberDailyReport struct {
@@ -108,6 +118,28 @@ type departmentTeamReport struct {
 	TeamName   string
 	LeaderName string
 	Content    string
+}
+
+type weeklyDailyReport struct {
+	ID         string
+	UserName   string
+	ReportDate string
+	Content    string
+}
+
+type weeklyTeamDailyReport struct {
+	ID         string
+	ReportDate string
+	Content    string
+}
+
+type weeklyTaskSummary struct {
+	ID               string
+	Title            string
+	RequirementTitle string
+	AssigneeName     string
+	Status           string
+	Priority         string
 }
 
 type reportSession struct {
@@ -259,6 +291,54 @@ func cmdServeReports(args []string) {
 			"report_id": reportID,
 		})
 	})
+	mux.HandleFunc("/reports/team/weekly/generate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req teamWeeklyReportGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.TeamID == "" || req.LeaderID == "" {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "team_id and leader_id are required"})
+			return
+		}
+		if req.WeekStart == "" {
+			req.WeekStart = currentWeekStart().Format("2006-01-02")
+		}
+		reportID, err := generateServerTeamWeeklyReport(db, cfg, req.TeamID, req.LeaderID, req.WeekStart)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, map[string]any{
+			"report_id": reportID,
+		})
+	})
+	mux.HandleFunc("/reports/department/weekly/generate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req departmentWeeklyReportGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.WeekStart == "" {
+			req.WeekStart = currentWeekStart().Format("2006-01-02")
+		}
+		reportID, err := generateServerDepartmentWeeklyReport(db, cfg, req.WeekStart)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, map[string]any{
+			"report_id": reportID,
+		})
+	})
 	fmt.Printf("[report-generator] listening on :%s tz=%s\n", cfg.Port, cfg.TimeZone)
 	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
 		fmt.Printf("Report generator failed: %v\n", err)
@@ -393,9 +473,9 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 	}
 
 	rows, err := db.Query(`
-		SELECT u.name, COALESCE(dr.content, '')
+		SELECT u.name, COALESCE(dr.submitted_content, '')
 		FROM users u
-		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1
+		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1 AND dr.status = 'submitted'
 		WHERE u.team_id = $2 AND u.role = 'employee'
 		ORDER BY u.name`, targetDate, teamID)
 	if err != nil {
@@ -443,7 +523,7 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 		if mr.Content != "" {
 			var rid string
 			if err := db.QueryRow(
-				"SELECT id::text FROM daily_reports WHERE user_id = (SELECT id FROM users WHERE name = $1 AND team_id = $2 LIMIT 1) AND report_date = $3",
+				"SELECT id::text FROM daily_reports WHERE user_id = (SELECT id FROM users WHERE name = $1 AND team_id = $2 LIMIT 1) AND report_date = $3 AND status = 'submitted' AND submitted_content IS NOT NULL",
 				mr.UserName, teamID, targetDate,
 			).Scan(&rid); err == nil {
 				memberReportIDs = append(memberReportIDs, rid)
@@ -534,6 +614,342 @@ func buildTeamReportFallback(reportDate, teamName string, leader reportUser, ses
 	b.WriteString("## 问题与风险\n\n暂无。\n\n")
 	b.WriteString("## 明日计划\n\n暂无。\n")
 	return b.String()
+}
+
+func generateServerTeamWeeklyReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, weekStart string) (string, error) {
+	start, err := time.Parse("2006-01-02", weekStart)
+	if err != nil {
+		return "", fmt.Errorf("invalid week_start: %w", err)
+	}
+	weekEnd := start.AddDate(0, 0, 6).Format("2006-01-02")
+	leader, err := getReportUser(db, leaderID)
+	if err != nil {
+		return "", err
+	}
+	var teamName string
+	if err := db.QueryRow("SELECT name FROM teams WHERE id = $1", teamID).Scan(&teamName); err != nil {
+		return "", err
+	}
+	sessions, err := listUserReportSessionsRange(db, leaderID, weekStart, weekEnd, cfg.TimeZone)
+	if err != nil {
+		return "", err
+	}
+	dailyReports, dailyIDs, err := listWeeklyDailyReports(db, teamID, weekStart, weekEnd)
+	if err != nil {
+		return "", err
+	}
+	teamReports, teamReportIDs, err := listWeeklyTeamDailyReports(db, teamID, weekStart, weekEnd)
+	if err != nil {
+		return "", err
+	}
+	tasks, taskIDs, err := listWeeklyTaskSummaries(db, teamID, weekStart, weekEnd)
+	if err != nil {
+		return "", err
+	}
+	prompt := buildTeamWeeklyReportPrompt(teamName, *leader, weekStart, weekEnd, sessions, dailyReports, teamReports, tasks)
+	weeklyCfg := cfg
+	if weeklyCfg.ClaudeTimeout > 30*time.Second {
+		weeklyCfg.ClaudeTimeout = 30 * time.Second
+	}
+	content, err := generateDailyReportWithClaude(weeklyCfg, prompt)
+	if err != nil {
+		fmt.Printf("[report-generator] claude team weekly generation failed, using fallback: %v\n", err)
+		content = buildTeamWeeklyReportFallback(teamName, *leader, weekStart, weekEnd, dailyReports, teamReports, tasks)
+	}
+	if strings.TrimSpace(content) == "" {
+		content = buildTeamWeeklyReportFallback(teamName, *leader, weekStart, weekEnd, dailyReports, teamReports, tasks)
+	}
+	return upsertTeamWeeklyReport(db, teamID, leaderID, weekStart, content, dailyIDs, teamReportIDs, taskIDs)
+}
+
+func generateServerDepartmentWeeklyReport(db *sql.DB, cfg ConsumerConfig, weekStart string) (string, error) {
+	start, err := time.Parse("2006-01-02", weekStart)
+	if err != nil {
+		return "", fmt.Errorf("invalid week_start: %w", err)
+	}
+	weekEnd := start.AddDate(0, 0, 6).Format("2006-01-02")
+	teamReports, sourceIDs, err := listSubmittedTeamWeeklyReports(db, weekStart)
+	if err != nil {
+		return "", err
+	}
+	prompt := buildDepartmentWeeklyReportPrompt(weekStart, weekEnd, teamReports)
+	weeklyCfg := cfg
+	if weeklyCfg.ClaudeTimeout > 30*time.Second {
+		weeklyCfg.ClaudeTimeout = 30 * time.Second
+	}
+	content, err := generateDailyReportWithClaude(weeklyCfg, prompt)
+	if err != nil {
+		fmt.Printf("[report-generator] claude department weekly generation failed, using fallback: %v\n", err)
+		content = buildDepartmentWeeklyReportFallback(weekStart, weekEnd, teamReports)
+	}
+	if strings.TrimSpace(content) == "" {
+		content = buildDepartmentWeeklyReportFallback(weekStart, weekEnd, teamReports)
+	}
+	return upsertDepartmentWeeklyReport(db, weekStart, content, sourceIDs)
+}
+
+func listUserReportSessionsRange(db *sql.DB, userID, fromDate, toDate, timeZone string) ([]reportSession, error) {
+	rows, err := db.Query(`
+		SELECT s.id::text, s.session_ref, s.started_at, s.ended_at, s.duration_secs,
+			s.model, s.summary, COALESCE(s.tool_calls_json::text, '{}'),
+			COALESCE(t.title, ''), COALESCE(r.title, ''),
+			COALESCE(tu.input_tokens, 0), COALESCE(tu.output_tokens, 0), COALESCE(tu.total_tokens, 0)
+		FROM sessions s
+		LEFT JOIN tasks t ON t.id = s.task_id
+		LEFT JOIN requirements r ON r.id = s.requirement_id
+		LEFT JOIN (
+			SELECT session_id, SUM(input_tokens) input_tokens, SUM(output_tokens) output_tokens, SUM(total_tokens) total_tokens
+			FROM token_usage
+			GROUP BY session_id
+		) tu ON tu.session_id = s.id
+		WHERE s.user_id = $1 AND DATE(s.started_at AT TIME ZONE $2) BETWEEN $3 AND $4
+		ORDER BY s.started_at`, userID, timeZone, fromDate, toDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sessions []reportSession
+	for rows.Next() {
+		var s reportSession
+		if err := rows.Scan(&s.ID, &s.SessionRef, &s.StartedAt, &s.EndedAt, &s.DurationSecs,
+			&s.Model, &s.Summary, &s.ToolCallsJSON, &s.TaskTitle, &s.RequirementTitle,
+			&s.InputTokens, &s.OutputTokens, &s.TotalTokens); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+func listWeeklyDailyReports(db *sql.DB, teamID, weekStart, weekEnd string) ([]weeklyDailyReport, []string, error) {
+	rows, err := db.Query(`
+		SELECT dr.id::text, u.name, dr.report_date, dr.content
+		FROM daily_reports dr
+		JOIN users u ON u.id = dr.user_id
+		WHERE u.team_id = $1 AND dr.report_date BETWEEN $2 AND $3
+		ORDER BY dr.report_date, u.name`, teamID, weekStart, weekEnd)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	items := []weeklyDailyReport{}
+	ids := []string{}
+	for rows.Next() {
+		var item weeklyDailyReport
+		if err := rows.Scan(&item.ID, &item.UserName, &item.ReportDate, &item.Content); err != nil {
+			return nil, nil, err
+		}
+		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	return items, ids, rows.Err()
+}
+
+func listWeeklyTeamDailyReports(db *sql.DB, teamID, weekStart, weekEnd string) ([]weeklyTeamDailyReport, []string, error) {
+	rows, err := db.Query(`
+		SELECT id::text, report_date, content
+		FROM team_reports
+		WHERE team_id = $1 AND report_date BETWEEN $2 AND $3
+		ORDER BY report_date`, teamID, weekStart, weekEnd)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	items := []weeklyTeamDailyReport{}
+	ids := []string{}
+	for rows.Next() {
+		var item weeklyTeamDailyReport
+		if err := rows.Scan(&item.ID, &item.ReportDate, &item.Content); err != nil {
+			return nil, nil, err
+		}
+		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	return items, ids, rows.Err()
+}
+
+func listWeeklyTaskSummaries(db *sql.DB, teamID, weekStart, weekEnd string) ([]weeklyTaskSummary, []string, error) {
+	rows, err := db.Query(`
+		SELECT DISTINCT task.id::text, task.title, req.title, COALESCE(assignee.name, ''), task.status, task.priority
+		FROM tasks task
+		JOIN requirements req ON req.id = task.requirement_id
+		LEFT JOIN users assignee ON assignee.id = task.assignee_id
+		WHERE (assignee.team_id = $1 OR task.creator_tl_id IN (SELECT id FROM users WHERE team_id = $1))
+		  AND (DATE(task.updated_at) BETWEEN $2 AND $3 OR task.status = 'blocked' OR task.priority = 'high')
+		ORDER BY task.status, task.priority DESC, task.title`, teamID, weekStart, weekEnd)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	items := []weeklyTaskSummary{}
+	ids := []string{}
+	for rows.Next() {
+		var item weeklyTaskSummary
+		if err := rows.Scan(&item.ID, &item.Title, &item.RequirementTitle, &item.AssigneeName, &item.Status, &item.Priority); err != nil {
+			return nil, nil, err
+		}
+		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	return items, ids, rows.Err()
+}
+
+func listSubmittedTeamWeeklyReports(db *sql.DB, weekStart string) ([]departmentTeamReport, []string, error) {
+	rows, err := db.Query(`
+		SELECT twr.id::text, t.name, COALESCE(u.name, ''), twr.content
+		FROM team_weekly_reports twr
+		JOIN teams t ON t.id = twr.team_id
+		JOIN users u ON u.id = twr.leader_id
+		WHERE twr.week_start = $1 AND twr.submitted_at IS NOT NULL
+		ORDER BY t.name`, weekStart)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	items := []departmentTeamReport{}
+	ids := []string{}
+	for rows.Next() {
+		var item departmentTeamReport
+		if err := rows.Scan(&item.ID, &item.TeamName, &item.LeaderName, &item.Content); err != nil {
+			return nil, nil, err
+		}
+		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	return items, ids, rows.Err()
+}
+
+func upsertTeamWeeklyReport(db *sql.DB, teamID, leaderID, weekStart, content string, dailyIDs, teamReportIDs, taskIDs []string) (string, error) {
+	var reportID string
+	err := db.QueryRow(`
+		INSERT INTO team_weekly_reports (team_id, leader_id, week_start, content, source_daily_report_ids, source_team_report_ids, source_task_ids)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (team_id, week_start)
+		DO UPDATE SET content = EXCLUDED.content,
+			leader_id = EXCLUDED.leader_id,
+			source_daily_report_ids = EXCLUDED.source_daily_report_ids,
+			source_team_report_ids = EXCLUDED.source_team_report_ids,
+			source_task_ids = EXCLUDED.source_task_ids,
+			submitted_at = NULL,
+			updated_at = now()
+		RETURNING id::text`,
+		teamID, leaderID, weekStart, content, pq.Array(dailyIDs), pq.Array(teamReportIDs), pq.Array(taskIDs)).Scan(&reportID)
+	return reportID, err
+}
+
+func upsertDepartmentWeeklyReport(db *sql.DB, weekStart, content string, sourceIDs []string) (string, error) {
+	var reportID string
+	err := db.QueryRow(`
+		INSERT INTO department_weekly_reports (week_start, content, source_team_weekly_report_ids)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (week_start)
+		DO UPDATE SET content = EXCLUDED.content,
+			source_team_weekly_report_ids = EXCLUDED.source_team_weekly_report_ids,
+			archived_at = NULL,
+			updated_at = now()
+		RETURNING id::text`, weekStart, content, pq.Array(sourceIDs)).Scan(&reportID)
+	return reportID, err
+}
+
+func buildTeamWeeklyReportPrompt(teamName string, leader reportUser, weekStart, weekEnd string, sessions []reportSession, dailyReports []weeklyDailyReport, teamReports []weeklyTeamDailyReport, tasks []weeklyTaskSummary) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "你是小组周报生成助手。请为小组 %s（TL：%s）生成 %s 至 %s 的小组周报。\n", teamName, leader.Name, weekStart, weekEnd)
+	b.WriteString("要求：只输出 Markdown；使用中文；先基于来源归纳，不要编造。结构包含：本周概览、主要进展、成员贡献、风险与阻塞、下周计划、数据覆盖情况。\n\n")
+	b.WriteString("## TL Session\n\n")
+	for _, s := range sessions {
+		fmt.Fprintf(&b, "- %s %s tokens=%d summary=%s\n", s.SessionRef, s.StartedAt.Format(time.RFC3339), s.TotalTokens, nullStringValue(s.Summary, ""))
+	}
+	b.WriteString("\n## 成员个人日报\n\n")
+	for _, report := range dailyReports {
+		fmt.Fprintf(&b, "### %s %s\n\n%s\n\n", report.ReportDate, report.UserName, strings.TrimSpace(report.Content))
+	}
+	b.WriteString("## 小组日报\n\n")
+	for _, report := range teamReports {
+		fmt.Fprintf(&b, "### %s\n\n%s\n\n", report.ReportDate, strings.TrimSpace(report.Content))
+	}
+	b.WriteString("## 任务/风险\n\n")
+	for _, task := range tasks {
+		fmt.Fprintf(&b, "- [%s/%s] %s（需求：%s，负责人：%s）\n", task.Status, task.Priority, task.Title, task.RequirementTitle, task.AssigneeName)
+	}
+	return b.String()
+}
+
+func buildTeamWeeklyReportFallback(teamName string, leader reportUser, weekStart, weekEnd string, dailyReports []weeklyDailyReport, teamReports []weeklyTeamDailyReport, tasks []weeklyTaskSummary) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s 小组周报（%s 至 %s）\n\n", teamName, weekStart, weekEnd)
+	fmt.Fprintf(&b, "## 本周概览\n\n本周共收集 %d 份个人日报、%d 份小组日报。\n\n", len(dailyReports), len(teamReports))
+	b.WriteString("## 主要进展\n\n")
+	if len(teamReports) == 0 {
+		b.WriteString("暂无小组日报。\n\n")
+	} else {
+		for _, report := range teamReports {
+			fmt.Fprintf(&b, "### %s\n\n%s\n\n", report.ReportDate, strings.TrimSpace(report.Content))
+		}
+	}
+	b.WriteString("## 成员贡献\n\n")
+	if len(dailyReports) == 0 {
+		b.WriteString("暂无成员个人日报。\n\n")
+	} else {
+		for _, report := range dailyReports {
+			fmt.Fprintf(&b, "- %s（%s）：%s\n", report.UserName, report.ReportDate, firstLine(report.Content))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("## 风险与阻塞\n\n")
+	if len(tasks) == 0 {
+		b.WriteString("暂无。\n\n")
+	} else {
+		for _, task := range tasks {
+			fmt.Fprintf(&b, "- [%s/%s] %s\n", task.Status, task.Priority, task.Title)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "## 下周计划\n\n由 TL %s 结合本周进展继续补充。\n", leader.Name)
+	return b.String()
+}
+
+func buildDepartmentWeeklyReportPrompt(weekStart, weekEnd string, teamReports []departmentTeamReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "你是部门周报生成助手。请根据各 TL 已提交的小组周报，生成 %s 至 %s 的部门周报。\n", weekStart, weekEnd)
+	b.WriteString("要求：只输出 Markdown；使用中文；主来源只能是已提交小组周报。结构包含：部门概览、各团队进展、跨团队风险、下周重点。缺少信息时写 暂无。\n\n")
+	b.WriteString("## 已提交小组周报\n\n")
+	for _, report := range teamReports {
+		fmt.Fprintf(&b, "### %s（TL：%s）\n\n%s\n\n", report.TeamName, report.LeaderName, strings.TrimSpace(report.Content))
+	}
+	return b.String()
+}
+
+func buildDepartmentWeeklyReportFallback(weekStart, weekEnd string, teamReports []departmentTeamReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# 部门周报（%s 至 %s）\n\n", weekStart, weekEnd)
+	fmt.Fprintf(&b, "## 部门概览\n\n本周共汇总 %d 份已提交小组周报。\n\n", len(teamReports))
+	b.WriteString("## 各团队进展\n\n")
+	if len(teamReports) == 0 {
+		b.WriteString("暂无已提交小组周报。\n\n")
+	} else {
+		for _, report := range teamReports {
+			fmt.Fprintf(&b, "### %s\n\n负责人：%s\n\n%s\n\n", report.TeamName, report.LeaderName, strings.TrimSpace(report.Content))
+		}
+	}
+	b.WriteString("## 跨团队风险\n\n暂无。\n\n")
+	b.WriteString("## 下周重点\n\n暂无。\n")
+	return b.String()
+}
+
+func currentWeekStart() time.Time {
+	now := time.Now()
+	daysFromMonday := (int(now.Weekday()) + 6) % 7
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -daysFromMonday)
+}
+
+func firstLine(content string) string {
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return "暂无"
 }
 
 func generateServerDepartmentReport(db *sql.DB, cfg ConsumerConfig, targetDate string) (string, error) {

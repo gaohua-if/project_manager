@@ -163,12 +163,12 @@ func TestUpdateReportPersistsSessionIDsOnSave(t *testing.T) {
 		WithArgs("user-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 	mock.ExpectExec("UPDATE daily_reports SET").
-		WithArgs("最终日报", sqlmock.AnyArg(), "report-1").
+		WithArgs("最终日报", sqlmock.AnyArg(), "report-1", "user-1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("SELECT dr.id").
 		WithArgs("report-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "report_date", "content", "edited", "feishu_doc_url", "session_ids", "created_at", "updated_at"}).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", now, now))
+		WillReturnRows(sqlmock.NewRows(dailyReportGetColumns()).
+			AddRow("report-1", "user-1", "张三", nil, "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", "saved", nil, now, nil, nil, now, now))
 
 	h := NewReportHandler(db, "http://generator")
 	req := httptest.NewRequest(http.MethodPut, "/reports/report-1", bytes.NewBufferString(`{"content":"最终日报","session_ids":["session-1","session-2"]}`))
@@ -176,6 +176,42 @@ func TestUpdateReportPersistsSessionIDsOnSave(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	h.Update(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestSubmitReportSavesAndPublishesSubmittedContent(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Date(2026, 6, 24, 19, 0, 0, 0, time.UTC)
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("user-1", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE daily_reports SET").
+		WithArgs("发送版本", sqlmock.AnyArg(), "team_leader", "report-1", "user-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SELECT dr.id").
+		WithArgs("report-1").
+		WillReturnRows(sqlmock.NewRows(dailyReportGetColumns()).
+			AddRow("report-1", "user-1", "张三", nil, "2026-06-24", "发送版本", true, nil, "{session-1,session-2}", "submitted", "发送版本", now, now, "team_leader", now, now))
+
+	h := NewReportHandler(db, "http://generator")
+	req := httptest.NewRequest(http.MethodPost, "/reports/report-1/submit", bytes.NewBufferString(`{"content":"发送版本","session_ids":["session-1","session-2"]}`))
+	req = requestWithUser(requestWithReportID(req, "report-1"), &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	rec := httptest.NewRecorder()
+
+	h.SubmitReport(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
@@ -203,8 +239,8 @@ func TestGenerateTodayKeepsLegacyGeneratorEndpoint(t *testing.T) {
 
 	mock.ExpectQuery("SELECT dr.id").
 		WithArgs("user-1", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "report_date", "content", "edited", "feishu_doc_url", "session_ids", "created_at", "updated_at"}).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "日报", false, nil, "{session-1}", now, now))
+		WillReturnRows(sqlmock.NewRows(dailyReportByUserDateColumns()).
+			AddRow("report-1", "user-1", "张三", "2026-06-24", "日报", false, nil, "{session-1}", nil, nil, nil, nil, nil, now, now))
 
 	h := NewReportHandler(db, generator.URL)
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/generate", nil)
@@ -227,5 +263,21 @@ func draftSessionColumns() []string {
 		"model", "summary", "tool_calls_json",
 		"task_id", "task_title", "requirement_id", "requirement_title",
 		"input_tokens", "output_tokens", "total_tokens",
+	}
+}
+
+func dailyReportGetColumns() []string {
+	return []string{
+		"id", "user_id", "name", "team_id", "report_date", "content", "edited",
+		"feishu_doc_url", "session_ids", "status", "submitted_content", "saved_at", "submitted_at", "submitted_to",
+		"created_at", "updated_at",
+	}
+}
+
+func dailyReportByUserDateColumns() []string {
+	return []string{
+		"id", "user_id", "name", "report_date", "content", "edited",
+		"feishu_doc_url", "session_ids", "status", "submitted_content", "saved_at", "submitted_at", "submitted_to",
+		"created_at", "updated_at",
 	}
 }
