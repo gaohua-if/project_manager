@@ -448,11 +448,15 @@ type TeamReport struct {
 	LeaderName           string     `json:"leader_name"`
 	ReportDate           string     `json:"report_date"`
 	Content              string     `json:"content"`
+	SubmittedContent     *string    `json:"submitted_content,omitempty"`
+	Status               *string    `json:"status,omitempty"`
 	FeishuDocURL         *string    `json:"feishu_doc_url,omitempty"`
 	MemberReportIDs      []string   `json:"member_report_ids"`
 	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
 	SessionIDs           []string   `json:"session_ids"`
+	SavedAt              *time.Time `json:"saved_at,omitempty"`
 	SubmittedAt          *time.Time `json:"submitted_at,omitempty"`
+	SubmittedTo          *string    `json:"submitted_to,omitempty"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
@@ -467,7 +471,10 @@ type TeamReportListItem struct {
 	MemberCount    int        `json:"member_count"`
 	SubmittedCount int        `json:"submitted_count"`
 	MissingCount   int        `json:"missing_count"`
+	Status         *string    `json:"status,omitempty"`
+	SavedAt        *time.Time `json:"saved_at,omitempty"`
 	SubmittedAt    *time.Time `json:"submitted_at,omitempty"`
+	SubmittedTo    *string    `json:"submitted_to,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
@@ -493,13 +500,22 @@ type UpdateTeamReportRequest struct {
 	FeishuDocURL *string `json:"feishu_doc_url,omitempty"`
 }
 
+type SubmitTeamReportRequest struct {
+	Content *string `json:"content,omitempty"`
+}
+
 type TeamReportSources struct {
-	TeamID     string             `json:"team_id"`
-	TeamName   string             `json:"team_name"`
-	ReportDate string             `json:"report_date"`
-	Members    []TeamMemberReport `json:"members"`
-	Submitted  int                `json:"submitted"`
-	Missing    int                `json:"missing"`
+	TeamID           string             `json:"team_id"`
+	TeamName         string             `json:"team_name"`
+	ReportDate       string             `json:"report_date"`
+	Members          []TeamMemberReport `json:"members"`
+	SubmittedReports []TeamMemberReport `json:"submitted_reports"`
+	MissingMembers   []TeamMemberReport `json:"missing_members"`
+	TotalMemberCount int                `json:"total_member_count"`
+	Submitted        int                `json:"submitted"`
+	SubmittedCount   int                `json:"submitted_count"`
+	Missing          int                `json:"missing"`
+	MissingCount     int                `json:"missing_count"`
 }
 
 type DepartmentTeamReportSource struct {
@@ -524,6 +540,7 @@ type DepartmentReportSources struct {
 	ReportDate           string                       `json:"report_date"`
 	SubmittedTeamCount   int                          `json:"submitted_team_count"`
 	TotalTeamCount       int                          `json:"total_team_count"`
+	MissingTeamCount     int                          `json:"missing_team_count"`
 	SubmittedTeamReports []DepartmentTeamReportSource `json:"submitted_team_reports"`
 	MissingTeams         []DepartmentMissingTeam      `json:"missing_teams"`
 }
@@ -532,7 +549,9 @@ type DepartmentReport struct {
 	ID                  string     `json:"id"`
 	ReportDate          string     `json:"report_date"`
 	Content             string     `json:"content"`
+	Status              *string    `json:"status,omitempty"`
 	SourceTeamReportIDs []string   `json:"source_team_report_ids"`
+	SavedAt             *time.Time `json:"saved_at,omitempty"`
 	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
@@ -544,6 +563,8 @@ type DepartmentReportListItem struct {
 	TeamCount          int        `json:"team_count"`
 	SubmittedTeamCount int        `json:"submitted_team_count"`
 	MissingTeamCount   int        `json:"missing_team_count"`
+	Status             *string    `json:"status,omitempty"`
+	SavedAt            *time.Time `json:"saved_at,omitempty"`
 	ArchivedAt         *time.Time `json:"archived_at,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`

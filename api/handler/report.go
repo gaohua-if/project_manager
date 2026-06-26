@@ -753,9 +753,12 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 	rows, err := h.db.Query(`
 		SELECT u.id, u.name,
 			dr.id, dr.submitted_content, dr.submitted_at,
-			CASE WHEN dr.id IS NOT NULL AND dr.submitted_content IS NOT NULL THEN true ELSE false END
+			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
 		FROM users u
-		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1 AND dr.status = 'submitted'
+		LEFT JOIN daily_reports dr ON dr.user_id = u.id
+			AND dr.report_date = $1
+			AND dr.submitted_at IS NOT NULL
+			AND dr.submitted_content IS NOT NULL
 		WHERE u.team_id = $2 AND u.role = 'employee'
 		ORDER BY u.name`, date, *teamID)
 	if err != nil {
@@ -815,9 +818,12 @@ func (h *ReportHandler) GetTeamReportSources(w http.ResponseWriter, r *http.Requ
 
 	rows, err := h.db.Query(`
 		SELECT u.id, u.name, dr.id, dr.submitted_content, dr.submitted_at,
-			CASE WHEN dr.id IS NOT NULL AND dr.submitted_content IS NOT NULL THEN true ELSE false END
+			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
 		FROM users u
-		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1 AND dr.status = 'submitted'
+		LEFT JOIN daily_reports dr ON dr.user_id = u.id
+			AND dr.report_date = $1
+			AND dr.submitted_at IS NOT NULL
+			AND dr.submitted_content IS NOT NULL
 		WHERE u.team_id = $2 AND u.role = 'employee'
 		ORDER BY u.name`, date, *teamID)
 	if err != nil {
@@ -827,10 +833,12 @@ func (h *ReportHandler) GetTeamReportSources(w http.ResponseWriter, r *http.Requ
 	defer rows.Close()
 
 	sources := model.TeamReportSources{
-		TeamID:     *teamID,
-		TeamName:   teamName,
-		ReportDate: date,
-		Members:    []model.TeamMemberReport{},
+		TeamID:           *teamID,
+		TeamName:         teamName,
+		ReportDate:       date,
+		Members:          []model.TeamMemberReport{},
+		SubmittedReports: []model.TeamMemberReport{},
+		MissingMembers:   []model.TeamMemberReport{},
 	}
 	for rows.Next() {
 		var item model.TeamMemberReport
@@ -845,10 +853,15 @@ func (h *ReportHandler) GetTeamReportSources(w http.ResponseWriter, r *http.Requ
 		if content.Valid {
 			item.Content = content.String
 		}
+		sources.TotalMemberCount++
 		if item.HasReport {
 			sources.Submitted++
+			sources.SubmittedCount++
+			sources.SubmittedReports = append(sources.SubmittedReports, item)
 		} else {
 			sources.Missing++
+			sources.MissingCount++
+			sources.MissingMembers = append(sources.MissingMembers, item)
 		}
 		sources.Members = append(sources.Members, item)
 	}
@@ -865,8 +878,8 @@ func (h *ReportHandler) GetTeamReportToday(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no team"})
 		return
 	}
-	today := time.Now().Format("2006-01-02")
-	tr, err := h.getTeamReportByTeamDate(*u.TeamID, today)
+	reportDate := reportDateFromRequest(r)
+	tr, err := h.getTeamReportByTeamDate(*u.TeamID, reportDate)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -881,7 +894,7 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 	}
 
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can generate team reports"})
 		return
 	}
@@ -930,20 +943,61 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 func (h *ReportHandler) SubmitTeamReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can submit team reports"})
 		return
 	}
-	res, err := h.db.Exec(`
-		UPDATE team_reports
-		SET submitted_at = now(), updated_at = now()
-		WHERE id = $1 AND team_id = $2`, id, *u.TeamID)
+
+	var req model.SubmitTeamReportRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := readJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+	}
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	sets := []string{
+		"status = 'submitted'",
+		"saved_at = now()",
+		"submitted_at = now()",
+		"submitted_to = 'director'",
+		"updated_at = now()",
+	}
+	args := []any{}
+	argIdx := 1
+	if req.Content != nil {
+		sets = append(sets, fmt.Sprintf("content = $%d, submitted_content = $%d", argIdx, argIdx))
+		args = append(args, *req.Content)
+		argIdx++
+	} else {
+		sets = append(sets, "submitted_content = content")
+	}
+
+	args = append(args, id)
+	where := fmt.Sprintf("id = $%d", argIdx)
+	argIdx++
+	args = append(args, *u.TeamID)
+	where += fmt.Sprintf(" AND team_id = $%d", argIdx)
+	query := fmt.Sprintf("UPDATE team_reports SET %s WHERE %s", joinWithCommas(sets), where)
+
+	res, err := tx.ExecContext(r.Context(), query, args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	if rows, _ := res.RowsAffected(); rows == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	tr, err := h.getTeamReportByID(id)
@@ -1003,7 +1057,7 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 			(SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.role = 'employee') AS member_count,
 			COALESCE(cardinality(tr.source_daily_report_ids), 0) AS submitted_count,
 			GREATEST((SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.role = 'employee') - COALESCE(cardinality(tr.source_daily_report_ids), 0), 0) AS missing_count,
-			tr.submitted_at, tr.created_at, tr.updated_at
+			tr.status, tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id` + where + fmt.Sprintf(" ORDER BY tr.report_date DESC, t.name LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
@@ -1019,14 +1073,18 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 	reports := []model.TeamReportListItem{}
 	for rows.Next() {
 		var tr model.TeamReportListItem
-		var submittedAt sql.NullTime
+		var status, submittedTo sql.NullString
+		var savedAt, submittedAt sql.NullTime
 		if err := rows.Scan(&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 			&tr.ReportDate, &tr.MemberCount, &tr.SubmittedCount, &tr.MissingCount,
-			&submittedAt, &tr.CreatedAt, &tr.UpdatedAt); err != nil {
+			&status, &savedAt, &submittedAt, &submittedTo, &tr.CreatedAt, &tr.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		tr.Status = nullStringPtr(status)
+		tr.SavedAt = nullTimePtr(savedAt)
 		tr.SubmittedAt = nullTimePtr(submittedAt)
+		tr.SubmittedTo = nullStringPtr(submittedTo)
 		reports = append(reports, tr)
 	}
 	if err := rows.Err(); err != nil {
@@ -1068,7 +1126,7 @@ func (h *ReportHandler) GetTeamReport(w http.ResponseWriter, r *http.Request) {
 func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can update team reports"})
 		return
 	}
@@ -1079,7 +1137,7 @@ func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	sets := []string{"updated_at = now()"}
+	sets := []string{"status = 'saved'", "saved_at = now()", "updated_at = now()"}
 	args := []any{}
 	argIdx := 1
 
@@ -1121,61 +1179,69 @@ func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request)
 
 func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*model.TeamReport, error) {
 	var tr model.TeamReport
-	var feishuURL sql.NullString
-	var submittedAt sql.NullTime
+	var feishuURL, submittedContent, status, submittedTo sql.NullString
+	var savedAt, submittedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
-			tr.report_date, tr.content, tr.feishu_doc_url,
+			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
-			tr.submitted_at, tr.created_at, tr.updated_at
+			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
 		WHERE tr.team_id = $1 AND tr.report_date = $2`, teamID, reportDate).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
-		&tr.ReportDate, &tr.Content, &feishuURL,
+		&tr.ReportDate, &tr.Content, &submittedContent, &status, &feishuURL,
 		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
-		&submittedAt, &tr.CreatedAt, &tr.UpdatedAt,
+		&savedAt, &submittedAt, &submittedTo, &tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	tr.FeishuDocURL = nullStringPtr(feishuURL)
+	tr.SubmittedContent = nullStringPtr(submittedContent)
+	tr.Status = nullStringPtr(status)
 	tr.MemberReportIDs = parseUUIDArray(memberIDsStr)
 	tr.SourceDailyReportIDs = parseUUIDArray(sourceDailyIDsStr)
 	tr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	tr.SavedAt = nullTimePtr(savedAt)
 	tr.SubmittedAt = nullTimePtr(submittedAt)
+	tr.SubmittedTo = nullStringPtr(submittedTo)
 	return &tr, nil
 }
 
 func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) {
 	var tr model.TeamReport
-	var feishuURL sql.NullString
-	var submittedAt sql.NullTime
+	var feishuURL, submittedContent, status, submittedTo sql.NullString
+	var savedAt, submittedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
-			tr.report_date, tr.content, tr.feishu_doc_url,
+			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
-			tr.submitted_at, tr.created_at, tr.updated_at
+			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
 		WHERE tr.id = $1`, id).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
-		&tr.ReportDate, &tr.Content, &feishuURL,
+		&tr.ReportDate, &tr.Content, &submittedContent, &status, &feishuURL,
 		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
-		&submittedAt, &tr.CreatedAt, &tr.UpdatedAt,
+		&savedAt, &submittedAt, &submittedTo, &tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	tr.FeishuDocURL = nullStringPtr(feishuURL)
+	tr.SubmittedContent = nullStringPtr(submittedContent)
+	tr.Status = nullStringPtr(status)
 	tr.MemberReportIDs = parseUUIDArray(memberIDsStr)
 	tr.SourceDailyReportIDs = parseUUIDArray(sourceDailyIDsStr)
 	tr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	tr.SavedAt = nullTimePtr(savedAt)
 	tr.SubmittedAt = nullTimePtr(submittedAt)
+	tr.SubmittedTo = nullStringPtr(submittedTo)
 	return &tr, nil
 }
 
@@ -1193,10 +1259,13 @@ func (h *ReportHandler) GetDepartmentReportSources(w http.ResponseWriter, r *htt
 
 	rows, err := h.db.Query(`
 		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(u.name, ''),
-			tr.id::text, COALESCE(tr.content, ''), tr.submitted_at,
+			tr.id::text, COALESCE(tr.submitted_content, ''), tr.submitted_at,
 			CASE WHEN tr.id IS NOT NULL THEN true ELSE false END
 		FROM teams t
-		LEFT JOIN team_reports tr ON tr.team_id = t.id AND tr.report_date = $1 AND tr.submitted_at IS NOT NULL
+		LEFT JOIN team_reports tr ON tr.team_id = t.id
+			AND tr.report_date = $1
+			AND tr.submitted_at IS NOT NULL
+			AND tr.submitted_content IS NOT NULL
 		LEFT JOIN users u ON u.id = tr.leader_id
 		ORDER BY t.name`, date)
 	if err != nil {
@@ -1237,6 +1306,7 @@ func (h *ReportHandler) GetDepartmentReportSources(w http.ResponseWriter, r *htt
 			})
 		}
 	}
+	sources.MissingTeamCount = len(sources.MissingTeams)
 	if err := rows.Err(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1250,8 +1320,8 @@ func (h *ReportHandler) GetDepartmentReportToday(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "access denied"})
 		return
 	}
-	today := time.Now().Format("2006-01-02")
-	dr, err := h.getDepartmentReportByDate(today)
+	reportDate := reportDateFromRequest(r)
+	dr, err := h.getDepartmentReportByDate(reportDate)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -1337,16 +1407,13 @@ func (h *ReportHandler) UpdateDepartmentReport(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	sets := []string{"updated_at = now()"}
+	sets := []string{"status = 'saved'", "saved_at = now()", "archived_at = now()", "updated_at = now()"}
 	args := []any{}
 	argIdx := 1
 	if req.Content != nil {
 		sets = append(sets, fmt.Sprintf("content = $%d", argIdx))
 		args = append(args, *req.Content)
 		argIdx++
-	}
-	if req.Archive {
-		sets = append(sets, "archived_at = COALESCE(archived_at, now())")
 	}
 	args = append(args, id)
 	query := fmt.Sprintf("UPDATE department_reports SET %s WHERE id = $%d", joinWithCommas(sets), argIdx)
@@ -1369,36 +1436,42 @@ func (h *ReportHandler) UpdateDepartmentReport(w http.ResponseWriter, r *http.Re
 
 func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.DepartmentReport, error) {
 	var dr model.DepartmentReport
-	var archivedAt sql.NullTime
+	var status sql.NullString
+	var savedAt, archivedAt sql.NullTime
 	var sourceIDsStr string
 	err := h.db.QueryRow(`
-		SELECT id::text, report_date, content, source_team_report_ids, archived_at, created_at, updated_at
+		SELECT id::text, report_date, content, status, source_team_report_ids, saved_at, archived_at, created_at, updated_at
 		FROM department_reports
 		WHERE report_date = $1`, reportDate).Scan(
-		&dr.ID, &dr.ReportDate, &dr.Content, &sourceIDsStr, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	dr.Status = nullStringPtr(status)
 	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
+	dr.SavedAt = nullTimePtr(savedAt)
 	dr.ArchivedAt = nullTimePtr(archivedAt)
 	return &dr, nil
 }
 
 func (h *ReportHandler) getDepartmentReportByID(id string) (*model.DepartmentReport, error) {
 	var dr model.DepartmentReport
-	var archivedAt sql.NullTime
+	var status sql.NullString
+	var savedAt, archivedAt sql.NullTime
 	var sourceIDsStr string
 	err := h.db.QueryRow(`
-		SELECT id::text, report_date, content, source_team_report_ids, archived_at, created_at, updated_at
+		SELECT id::text, report_date, content, status, source_team_report_ids, saved_at, archived_at, created_at, updated_at
 		FROM department_reports
 		WHERE id = $1`, id).Scan(
-		&dr.ID, &dr.ReportDate, &dr.Content, &sourceIDsStr, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	dr.Status = nullStringPtr(status)
 	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
+	dr.SavedAt = nullTimePtr(savedAt)
 	dr.ArchivedAt = nullTimePtr(archivedAt)
 	return &dr, nil
 }
@@ -1436,7 +1509,7 @@ func (h *ReportHandler) ListDepartmentReports(w http.ResponseWriter, r *http.Req
 			(SELECT COUNT(*) FROM teams) AS team_count,
 			COALESCE(cardinality(dr.source_team_report_ids), 0) AS submitted_team_count,
 			GREATEST((SELECT COUNT(*) FROM teams) - COALESCE(cardinality(dr.source_team_report_ids), 0), 0) AS missing_team_count,
-			dr.archived_at, dr.created_at, dr.updated_at
+			dr.status, dr.saved_at, dr.archived_at, dr.created_at, dr.updated_at
 		FROM department_reports dr` + where + fmt.Sprintf(" ORDER BY dr.report_date DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
 	args = append(args, pageSize, (page-1)*pageSize)
 
@@ -1450,11 +1523,14 @@ func (h *ReportHandler) ListDepartmentReports(w http.ResponseWriter, r *http.Req
 	reports := []model.DepartmentReportListItem{}
 	for rows.Next() {
 		var dr model.DepartmentReportListItem
-		var archivedAt sql.NullTime
-		if err := rows.Scan(&dr.ID, &dr.ReportDate, &dr.TeamCount, &dr.SubmittedTeamCount, &dr.MissingTeamCount, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt); err != nil {
+		var status sql.NullString
+		var savedAt, archivedAt sql.NullTime
+		if err := rows.Scan(&dr.ID, &dr.ReportDate, &dr.TeamCount, &dr.SubmittedTeamCount, &dr.MissingTeamCount, &status, &savedAt, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		dr.Status = nullStringPtr(status)
+		dr.SavedAt = nullTimePtr(savedAt)
 		dr.ArchivedAt = nullTimePtr(archivedAt)
 		reports = append(reports, dr)
 	}

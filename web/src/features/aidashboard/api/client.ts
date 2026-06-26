@@ -252,11 +252,12 @@ export const fetchTeamReportSources = (date: string, teamId?: string) =>
       teamId ? { date, team_id: teamId } : { date }
     )
   );
-export const fetchTeamReportToday = () => unwrap(api.get<TeamReport>("/reports/team/today"));
-export async function fetchTeamReportTodayOrNull() {
+export const fetchTeamReportToday = (reportDate?: string) =>
+  unwrap(api.get<TeamReport>("/reports/team/today", reportDate ? { report_date: reportDate } : undefined));
+export async function fetchTeamReportTodayOrNull(reportDate?: string) {
   try {
     return await unwrap(
-      api.get<TeamReport>("/reports/team/today", undefined, { skipErrorHandler: true })
+      api.get<TeamReport>("/reports/team/today", reportDate ? { report_date: reportDate } : undefined, { skipErrorHandler: true })
     );
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
@@ -278,16 +279,16 @@ export const fetchTeamReports = (params?: Record<string, string>) =>
 export const fetchTeamReport = (id: string) => unwrap(api.get<TeamReport>(`/reports/team/${id}`));
 export const updateTeamReport = (id: string, data: { content?: string; feishu_doc_url?: string }) =>
   unwrap(api.put<TeamReport>(`/reports/team/${id}`, data));
-export const submitTeamReport = (id: string) =>
-  unwrap(api.post<TeamReport>(`/reports/team/${id}/submit`));
+export const submitTeamReport = (id: string, data?: { content?: string }) =>
+  unwrap(api.post<TeamReport>(`/reports/team/${id}/submit`, data));
 export const fetchDepartmentReportSources = (date: string) =>
   unwrap(api.get<DepartmentReportSources>("/reports/department/sources", { date }));
-export const fetchDepartmentReportToday = () =>
-  unwrap(api.get<DepartmentReport>("/reports/department/today"));
-export async function fetchDepartmentReportTodayOrNull() {
+export const fetchDepartmentReportToday = (reportDate?: string) =>
+  unwrap(api.get<DepartmentReport>("/reports/department/today", reportDate ? { report_date: reportDate } : undefined));
+export async function fetchDepartmentReportTodayOrNull(reportDate?: string) {
   try {
     return await unwrap(
-      api.get<DepartmentReport>("/reports/department/today", undefined, { skipErrorHandler: true })
+      api.get<DepartmentReport>("/reports/department/today", reportDate ? { report_date: reportDate } : undefined, { skipErrorHandler: true })
     );
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {

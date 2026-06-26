@@ -262,7 +262,12 @@ function applyTeamDailyReportState(report: ReportItem, teamReport: TeamReport | 
 
   return {
     ...report,
-    status: teamReport.submitted_at ? "已归档" : "草稿待确认",
+    status:
+      teamReport.status === "submitted"
+        ? "已发送"
+        : teamReport.status === "saved" && teamReport.submitted_at
+          ? "已保存，未发送最新修改"
+          : "已保存",
     sessionCount: teamReport.source_daily_report_ids.length || teamReport.member_report_ids.length,
     generateMode: "系统自动生成",
     skill: "小组日报 Agent",
@@ -287,7 +292,7 @@ function applyDepartmentDailyReportState(
 
   return {
     ...report,
-    status: departmentReport.archived_at ? "已归档" : "草稿待确认",
+    status: departmentReport.status === "saved" || departmentReport.status === "archived" || departmentReport.archived_at ? "已归档" : "待生成",
     sessionCount: departmentReport.source_team_report_ids.length,
     generateMode: "系统自动生成",
     skill: "部门日报 Agent",
@@ -417,7 +422,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
   team_leader: {
     label: "TL",
     userLine: "李雷 · Aida 前端组 TL",
-    workCue: "组内 2 人日报未提交，1 个阻塞任务影响下游。",
+    workCue: "组内 2 人日报未发送，1 个阻塞任务影响下游。",
     personalReports: [
       createReport({
         id: "tl-personal-daily",
@@ -449,7 +454,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "team",
         name: "今日组日报",
         status: "待生成",
-        description: "先查看成员原始日报收集情况，再生成小组日报草稿。",
+        description: "先查看成员原始日报发送情况，再生成小组日报。",
         sourceSummary: "成员当天原始日报",
         updatedAt: "-"
       }),
@@ -586,8 +591,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "department",
         name: "今日部门日报",
         status: "待生成",
-        description: "先查看各组小组日报收集情况，再生成部门日报草稿。",
-        sourceSummary: "各组日报、各组提交情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
+        description: "先查看各组小组日报发送情况，再生成部门日报。",
+        sourceSummary: "各组日报、各组发送情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
       createReport({
@@ -853,13 +858,13 @@ export function DashboardPage() {
   });
   const teamReportQuery = useQuery({
     queryKey: ["team-report-today", reportDate],
-    queryFn: () => fetchTeamReportTodayOrNull(),
+    queryFn: () => fetchTeamReportTodayOrNull(reportDate),
     enabled: dashboardRole === "team_leader",
     staleTime: 30_000
   });
   const departmentReportQuery = useQuery({
     queryKey: ["department-report-today", reportDate],
-    queryFn: () => fetchDepartmentReportTodayOrNull(),
+    queryFn: () => fetchDepartmentReportTodayOrNull(reportDate),
     enabled: dashboardRole === "director",
     staleTime: 30_000
   });
@@ -1050,7 +1055,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
     },
     onError: (error: unknown) => {
-      const text = error instanceof Error ? error.message : "部门日报草稿生成失败";
+      const text = error instanceof Error ? error.message : "部门日报生成失败";
       setDraftError(text);
       message.error(text);
     }
@@ -1076,7 +1081,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["team-report-sources"] });
     },
     onError: (error: unknown) => {
-      const text = error instanceof Error ? error.message : "小组日报草稿生成失败";
+      const text = error instanceof Error ? error.message : "小组日报生成失败";
       setDraftError(text);
       message.error(text);
     }
@@ -1086,16 +1091,16 @@ export function DashboardPage() {
     mutationFn: async ({ submit }: { submit: boolean }) => {
       const current = teamDraft ?? teamReportQuery.data;
       if (!current) {
-        throw new Error("请先生成小组日报草稿");
+        throw new Error("请先生成小组日报");
       }
       const saved = await updateTeamReport(current.id, { content: effectiveDraftMarkdown });
-      return submit ? submitTeamReport(saved.id) : saved;
+      return submit ? submitTeamReport(saved.id, { content: effectiveDraftMarkdown }) : saved;
     },
     onSuccess: (report, variables) => {
       setTeamDraft(report);
       setDraftMarkdown(report.content);
       updateReport(activeReport.id, {
-        status: report.submitted_at ? "已归档" : "草稿待确认",
+        status: report.status === "submitted" ? "已发送" : report.status === "saved" && report.submitted_at ? "已保存，未发送最新修改" : "已保存",
         sessionCount: report.source_daily_report_ids.length || report.member_report_ids.length,
         generateMode: "系统自动生成",
         skill: "小组日报 Agent",
@@ -1106,7 +1111,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
       void queryClient.invalidateQueries({ queryKey: ["team-report-sources"] });
       void queryClient.invalidateQueries({ queryKey: ["department-report-sources"] });
-      message.success(variables.submit ? "已提交给总监" : "小组日报已保存");
+      message.success(variables.submit ? "已发送给总监" : "小组日报已保存");
       if (variables.submit) {
         setIsReportModalOpen(false);
       }
@@ -1120,7 +1125,7 @@ export function DashboardPage() {
     mutationFn: async ({ archive }: { archive: boolean }) => {
       const current = departmentDraft ?? departmentReportQuery.data;
       if (!current) {
-        throw new Error("请先生成部门日报草稿");
+        throw new Error("请先生成部门日报");
       }
       return updateDepartmentReport(current.id, { content: draftMarkdown, archive });
     },
@@ -1129,7 +1134,7 @@ export function DashboardPage() {
       setDraftMarkdown(report.content);
       setDraftMarkdownTouched(false);
       updateReport(activeReport.id, {
-        status: variables.archive ? "已归档" : "草稿待确认",
+        status: "已归档",
         sessionCount: report.source_team_report_ids.length,
         generateMode: "系统自动生成",
         skill: "部门日报 Agent",
@@ -1687,7 +1692,7 @@ function renderReportActions(
   if (report.status === "待生成") {
     return (
       <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-        查看并生成
+        {report.scope === "team" ? "查看并生成组日报" : report.scope === "department" ? "查看并生成部门日报" : "查看并生成"}
       </Button>
     );
   }
@@ -1708,7 +1713,7 @@ function renderReportActions(
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          {report.scope === "personal" ? "查看并编辑日报" : `确认${getReportActionNoun(report)}`}
+          {report.scope === "personal" ? "查看并编辑日报" : `编辑${getReportActionNoun(report)}`}
         </Button>
       </>
     );
@@ -1753,7 +1758,7 @@ function renderPrimaryReportAction(
           ? "查看并编辑日报"
           : report.scope === "department"
             ? "编辑部门日报"
-            : `确认${getReportActionNoun(report)}`}
+            : "编辑组日报"}
       </Button>
     );
   }
@@ -1782,7 +1787,7 @@ function renderPrimaryReportAction(
       onClick={() => onOpen(report, getGenerateStepForReport(report))}
     >
       {report.scope === "department"
-        ? "查看收集情况"
+        ? "查看并生成部门日报"
         : report.status === "生成失败"
           ? `查看并生成${getReportActionNoun(report)}`
           : `查看并生成${getReportActionNoun(report)}`}
@@ -1791,8 +1796,8 @@ function renderPrimaryReportAction(
 }
 
 function getReportActionNoun(report: ReportItem) {
-  if (report.scope === "team") return "组报";
-  if (report.scope === "department") return "部门报告";
+  if (report.scope === "team") return "组日报";
+  if (report.scope === "department") return "部门日报";
   return "日报";
 }
 
@@ -1825,22 +1830,34 @@ function getDailyReportCopy(report: ReportItem) {
 }
 
 function getSummaryReportLabel(report: ReportItem) {
-  return report.scope === "department" ? "部门报告" : "组报告";
+  return report.scope === "department" ? "部门日报" : "组日报";
 }
 
 function getSummaryRecordLabel(report: ReportItem) {
-  return report.scope === "department" ? "部门报告记录" : "组报记录";
+  return report.scope === "department" ? "部门日报记录" : "组日报记录";
 }
 
 function getSummaryDailyReportCopy(report: ReportItem) {
   if (report.status === "草稿待确认") {
     return report.scope === "department"
-      ? "部门日报草稿已生成，内容基于已提交的小组日报。"
-      : `${getReportActionNoun(report)}已生成，确认后即可归档。`;
+      ? "部门日报已生成，内容基于已发送的小组日报。"
+      : `${getReportActionNoun(report)}已生成，可继续编辑后保存或发送。`;
   }
 
   if (report.status === "已归档") {
     return `${getReportActionNoun(report)}已归档，可回看按组来源和汇总内容。`;
+  }
+
+  if (report.status === "已发送") {
+    return `${getReportActionNoun(report)}已发送给总监，可继续编辑并重新发送。`;
+  }
+
+  if (report.status === "已保存，未发送最新修改") {
+    return `${getReportActionNoun(report)}已保存，最新修改尚未发送给总监。`;
+  }
+
+  if (report.status === "已保存") {
+    return `${getReportActionNoun(report)}已保存，尚未发送给总监。`;
   }
 
   if (report.status === "生成中") {
@@ -1848,20 +1865,20 @@ function getSummaryDailyReportCopy(report: ReportItem) {
   }
 
   if (report.status === "生成失败") {
-    return `${getReportActionNoun(report)}生成失败，请根据提交覆盖情况重新生成。`;
+    return `${getReportActionNoun(report)}生成失败，请根据发送覆盖情况重新生成。`;
   }
 
   return report.scope === "department"
-    ? "先查看各小组已提交日报和未提交小组，再生成部门日报草稿。"
-    : "查看组内成员日报收集情况后生成组报。";
+    ? "先查看各小组已发送日报和未发送小组，再生成部门日报。"
+    : "查看组内成员日报发送情况后生成组日报。";
 }
 
 function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
   if (report.scope === "department") {
-    return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 组未提交`;
+    return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 组未发送`;
   }
 
-  return `${coverage.submitted}/${coverage.expected} 已提交 · ${coverage.missing} 人未提交`;
+  return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 人未发送`;
 }
 
 function getSummaryWeeklyRecordCopy(report: ReportItem) {
@@ -1869,7 +1886,7 @@ function getSummaryWeeklyRecordCopy(report: ReportItem) {
 }
 
 function getInitialReportModalStep(report: ReportItem): ReportModalStep {
-  if (report.status === "草稿待确认" || report.status === "已归档") {
+  if (report.status === "草稿待确认" || report.status === "已归档" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
     return "editor";
   }
 
@@ -2238,7 +2255,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 各组日报已完成汇总。
 
 ## 重点风险
-* 部门日报需要基于已提交小组日报确认后归档。
+* 部门日报需要基于已发送小组日报确认后归档。
 
 ## 明日重点
 * 跟进高优先级风险和跨组依赖。`;
@@ -2263,11 +2280,11 @@ function getReportSourceTitle(report: ReportItem) {
 
 function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
   if (report.scope === "team" && coverage) {
-    return `成员提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}`;
+    return `成员发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
   }
 
   if (report.scope === "department" && coverage) {
-    return `各组提交情况：应提交 ${coverage.expected}，已提交 ${coverage.submitted}，未提交 ${coverage.missing}`;
+    return `各组发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
   }
 
   return "系统将读取本周个人日报、任务、风险与阻塞生成草稿。";
@@ -2279,18 +2296,18 @@ function getEditorMeta(report: ReportItem) {
   }
 
   if (report.kind === "department_daily") {
-    return [`本草稿基于 ${report.sessionCount} 个已提交小组日报生成`, "来源：小组日报"];
+    return [`本日报基于 ${report.sessionCount} 个已发送小组日报生成`, "来源：小组日报"];
   }
 
   if (report.kind === "team_daily") {
-    return [`本草稿基于 ${report.sessionCount} 份已提交成员日报生成`, "来源：成员原始日报"];
+    return [`本日报基于 ${report.sessionCount} 份已发送成员日报生成`, "来源：成员原始日报"];
   }
 
   return [report.sourceSummary, report.skill];
 }
 
 function getSendButtonText(report: ReportItem) {
-  if (report.scope === "team") return report.kind.includes("weekly") ? "归档组周报" : "提交给总监";
+  if (report.scope === "team") return report.kind.includes("weekly") ? "归档组周报" : "保存并发送给总监";
   if (report.scope === "department") return "保存归档";
   return report.kind.includes("weekly") ? "归档周报" : "保存日报";
 }
@@ -2358,10 +2375,10 @@ function renderReportModalFooter({
           onClick={onGenerate}
         >
           {report.kind === "department_daily"
-            ? "基于已提交组日报生成草稿"
+            ? "基于已发送小组日报生成部门日报"
             : report.kind === "team_daily"
-              ? "基于已提交成员日报生成草稿"
-              : "生成草稿"}
+              ? "基于已发送成员日报生成组日报"
+              : "生成日报"}
         </Button>
       </Space>
     );
@@ -2375,7 +2392,11 @@ function renderReportModalFooter({
         </span>
       ) : null}
       <Button onClick={onBack} disabled={isSaving}>上一步</Button>
-      <Button onClick={onSave} loading={isSaving}>保存修改</Button>
+      {report.scope === "department" ? null : (
+        <Button onClick={onSave} loading={isSaving}>
+          {report.scope === "team" ? "保存组日报" : "保存日报"}
+        </Button>
+      )}
       <Button type="primary" icon={<FileDoneOutlined />} loading={isSaving} onClick={onSend}>
         {getSendButtonText(report)}
       </Button>
@@ -2715,7 +2736,7 @@ function ReportModalContent({
             onExpandedReportIdChange={setExpandedDepartmentReportId}
           />
           {draftError ? (
-            <Alert type="error" showIcon message="部门日报草稿生成失败" description={draftError} />
+            <Alert type="error" showIcon message="部门日报生成失败" description={draftError} />
           ) : null}
         </div>
       );
@@ -2748,7 +2769,7 @@ function ReportModalContent({
             />
           </details>
           {draftError ? (
-            <Alert type="error" showIcon message="小组日报草稿生成失败" description={draftError} />
+            <Alert type="error" showIcon message="小组日报生成失败" description={draftError} />
           ) : null}
         </div>
       );
@@ -2850,21 +2871,21 @@ function TeamSourceReview({
         <strong>确认成员原始日报来源</strong>
         <span>
           {sources.team_name} · {sources.report_date} · 已收集 {submitted}/{total} 份成员日报，
-          {missing} 人未提交。
+          {missing} 人未发送。
         </span>
       </div>
 
-      <div className="console-team-source__stats" aria-label="成员日报提交统计">
+      <div className="console-team-source__stats" aria-label="成员日报发送统计">
         <span><strong>{total}</strong><em>成员总数</em></span>
-        <span><strong>{submitted}</strong><em>今日已交</em></span>
-        <span><strong>{missing}</strong><em>今日未交</em></span>
+        <span><strong>{submitted}</strong><em>已发送</em></span>
+        <span><strong>{missing}</strong><em>未发送</em></span>
         <span><strong>{edited}</strong><em>已编辑</em></span>
       </div>
 
       <section className="console-department-source__block console-team-source__block">
         <div className="console-department-source__head">
           <strong>成员原始日报</strong>
-          <Tag color={missing > 0 ? "gold" : "green"}>{submitted}/{total} 已提交</Tag>
+          <Tag color={missing > 0 ? "gold" : "green"}>{submitted}/{total} 已发送</Tag>
         </div>
         {members.length === 0 ? (
           <div className="console-session-empty">暂无团队成员</div>
@@ -2882,11 +2903,11 @@ function TeamSourceReview({
                     <div className="console-team-source__member">
                       <strong title={member.user_name}>{member.user_name}</strong>
                       <Tag color={member.has_report ? "blue" : "gold"} bordered={false}>
-                        {member.has_report ? "已提交" : "未提交"}
+                        {member.has_report ? "已发送" : "未发送"}
                       </Tag>
                     </div>
                     <div className="console-team-source__actions">
-                      <time>{member.submitted_at ? formatDateTime(member.submitted_at, "HH:mm") : "未提交"}</time>
+                      <time>{member.submitted_at ? formatDateTime(member.submitted_at, "HH:mm") : "未发送"}</time>
                       {member.has_report ? (
                         <Button
                           size="small"
@@ -2902,7 +2923,7 @@ function TeamSourceReview({
                       {member.content || "暂无内容"}
                     </pre>
                   ) : !member.has_report ? (
-                    <p className="console-team-source__missing-note">成员今日尚未提交原始日报。</p>
+                    <p className="console-team-source__missing-note">成员今日尚未发送原始日报。</p>
                   ) : null}
                 </article>
               );
@@ -2948,17 +2969,17 @@ function DepartmentSourceReview({
         <strong>确认小组日报来源</strong>
         <span>
           已收集 {sources.submitted_team_count}/{sources.total_team_count} 个小组日报，
-          {missing.length} 个小组未提交。
+          {missing.length} 个小组未发送。
         </span>
       </div>
 
       <section className="console-department-source__block">
         <div className="console-department-source__head">
-          <strong>已提交小组</strong>
+          <strong>已发送小组</strong>
           <Tag color="blue">{submitted.length} 组</Tag>
         </div>
         {submitted.length === 0 ? (
-          <div className="console-session-empty">暂无已提交小组日报</div>
+          <div className="console-session-empty">暂无已发送小组日报</div>
         ) : (
           <div className="console-department-source__list">
             {submitted.map((item) => {
@@ -2993,11 +3014,11 @@ function DepartmentSourceReview({
 
       <section className="console-department-source__block">
         <div className="console-department-source__head">
-          <strong>未提交小组</strong>
+          <strong>未发送小组</strong>
           <Tag color={missing.length > 0 ? "gold" : "green"}>{missing.length} 组</Tag>
         </div>
         {missing.length === 0 ? (
-          <div className="console-session-empty">所有小组均已提交</div>
+          <div className="console-session-empty">所有小组均已发送</div>
         ) : (
           <div className="console-department-source__missing">
             {missing.map((team) => (

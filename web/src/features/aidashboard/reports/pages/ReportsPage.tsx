@@ -18,7 +18,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import dayjs from "dayjs";
 
 import { useAuth } from "@/shared/auth/authContext";
@@ -81,12 +81,17 @@ function personalStatus(record: DailyReportListItem, role?: string) {
   return <Tag>待生成</Tag>;
 }
 
-function teamStatus(submittedAt?: string) {
-  return submittedAt ? <Tag color="green">已提交总监</Tag> : <Tag color="orange">草稿</Tag>;
+function teamStatus(record: TeamReportListItem) {
+  if (record.status === "submitted") return <Tag color="green">已发送</Tag>;
+  if (record.status === "saved" && record.submitted_at) return <Tag color="gold">已保存，未发送最新修改</Tag>;
+  if (record.status === "saved") return <Tag color="blue">已保存</Tag>;
+  return <Tag>待生成</Tag>;
 }
 
-function departmentStatus(archivedAt?: string) {
-  return archivedAt ? <Tag color="green">已归档</Tag> : <Tag color="orange">草稿</Tag>;
+function departmentStatus(record: DepartmentReportListItem) {
+  return record.status === "saved" || record.status === "archived" || record.archived_at
+    ? <Tag color="green">已归档</Tag>
+    : <Tag>待生成</Tag>;
 }
 
 function useTablePagination() {
@@ -169,8 +174,20 @@ export function ReportsPage() {
           onEdit={(record) => setGenerateTarget({ scope: "personal", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
-      {activeTab === "team" ? <TeamDailyTable from={from} to={to} onGenerate={(reportDate) => setGenerateTarget({ scope: "team", reportDate })} /> : null}
-      {activeTab === "department" ? <DepartmentDailyTable from={from} to={to} onGenerate={(reportDate) => setGenerateTarget({ scope: "department", reportDate })} /> : null}
+      {activeTab === "team" ? (
+        <TeamDailyTable
+          from={from}
+          to={to}
+          onOpen={(record) => setGenerateTarget({ scope: "team", reportId: record.id, reportDate: record.report_date })}
+        />
+      ) : null}
+      {activeTab === "department" ? (
+        <DepartmentDailyTable
+          from={from}
+          to={to}
+          onOpen={(record) => setGenerateTarget({ scope: "department", reportId: record.id, reportDate: record.report_date })}
+        />
+      ) : null}
       {generateTarget ? (
         <DailyReportGenerateModal
           open
@@ -256,14 +273,13 @@ function TeamDailyTable({
   from,
   to,
   readonly,
-  onGenerate
+  onOpen
 }: {
   from?: string;
   to?: string;
   readonly?: boolean;
-  onGenerate: (reportDate?: string) => void;
+  onOpen: (record: TeamReportListItem) => void;
 }) {
-  const navigate = useNavigate();
   const { page, pageSize, tablePagination } = useTablePagination();
 
   const reportsQuery = useQuery({
@@ -281,10 +297,10 @@ function TeamDailyTable({
   const columns: ColumnsType<TeamReportListItem> = [
     { title: "日期", dataIndex: "report_date", width: 130, render: formatDate },
     { title: "成员数", dataIndex: "member_count", width: 100 },
-    { title: "已提交人数", dataIndex: "submitted_count", width: 120 },
-    { title: "未提交人数", dataIndex: "missing_count", width: 120 },
-    { title: "小组日报状态", dataIndex: "submitted_at", width: 140, render: teamStatus },
-    { title: "提交给总监时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "已发送人数", dataIndex: "submitted_count", width: 120 },
+    { title: "未发送人数", dataIndex: "missing_count", width: 120 },
+    { title: "小组日报状态", key: "status", width: 190, render: (_, record) => teamStatus(record) },
+    { title: "发送给总监时间", dataIndex: "submitted_at", render: formatDateTime },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
       title: "操作",
@@ -292,16 +308,11 @@ function TeamDailyTable({
       width: 220,
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => navigate(`/reports/daily/team/${record.id}`)}>
+          <Button size="small" onClick={() => onOpen(record)}>
             查看
           </Button>
           {!readonly ? (
-            <Button size="small" type="link" onClick={() => onGenerate(formatDate(record.report_date))}>
-              生成
-            </Button>
-          ) : null}
-          {!readonly && !record.submitted_at ? (
-            <Button size="small" type="link" onClick={() => navigate(`/reports/daily/team/${record.id}`)}>
+            <Button size="small" type="link" onClick={() => onOpen(record)}>
               编辑
             </Button>
           ) : null}
@@ -331,13 +342,12 @@ function TeamDailyTable({
 function DepartmentDailyTable({
   from,
   to,
-  onGenerate
+  onOpen
 }: {
   from?: string;
   to?: string;
-  onGenerate: (reportDate?: string) => void;
+  onOpen: (record: DepartmentReportListItem) => void;
 }) {
-  const navigate = useNavigate();
   const { page, pageSize, tablePagination } = useTablePagination();
 
   const reportsQuery = useQuery({
@@ -355,9 +365,9 @@ function DepartmentDailyTable({
   const columns: ColumnsType<DepartmentReportListItem> = [
     { title: "日期", dataIndex: "report_date", width: 140, render: formatDate },
     { title: "小组总数", dataIndex: "team_count", width: 120 },
-    { title: "已提交小组数", dataIndex: "submitted_team_count", width: 140 },
-    { title: "未提交小组数", dataIndex: "missing_team_count", width: 140 },
-    { title: "状态", dataIndex: "archived_at", width: 120, render: departmentStatus },
+    { title: "已发送小组数", dataIndex: "submitted_team_count", width: 140 },
+    { title: "未发送小组数", dataIndex: "missing_team_count", width: 140 },
+    { title: "状态", key: "status", width: 120, render: (_, record) => departmentStatus(record) },
     { title: "归档时间", dataIndex: "archived_at", render: formatDateTime },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
@@ -366,17 +376,12 @@ function DepartmentDailyTable({
       width: 160,
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => navigate(`/reports/daily/department/${record.id}`)}>
+          <Button size="small" onClick={() => onOpen(record)}>
             查看
           </Button>
-          <Button size="small" type="link" onClick={() => onGenerate(formatDate(record.report_date))}>
-            生成
+          <Button size="small" type="link" onClick={() => onOpen(record)}>
+            编辑
           </Button>
-          {!record.archived_at ? (
-            <Button size="small" type="link" onClick={() => navigate(`/reports/daily/department/${record.id}`)}>
-              编辑
-            </Button>
-          ) : null}
         </Space>
       )
     }
@@ -496,20 +501,20 @@ export function TeamDailyReportDetailPage() {
     staleTime: 30_000
   });
 
-  const canEdit = user?.role === "team_leader" && !report?.submitted_at;
+  const canEdit = user?.role === "team_leader" || user?.role === "pm";
   const saveMutation = useMutation({
     mutationFn: () => updateTeamReport(id ?? "", { content }),
     onSuccess: () => {
-      message.success("已保存");
+      message.success("组日报已保存");
       void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-detail", id] });
       void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-list"] });
     },
     onError: (error: unknown) => message.error(errorMessage(error))
   });
   const submitMutation = useMutation({
-    mutationFn: () => submitTeamReport(id ?? ""),
+    mutationFn: () => submitTeamReport(id ?? "", { content }),
     onSuccess: () => {
-      message.success("已提交给总监");
+      message.success("已发送给总监");
       void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-detail", id] });
       void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "team-list"] });
     },
@@ -528,9 +533,9 @@ export function TeamDailyReportDetailPage() {
             <Space size="large" wrap>
               <Text>日期：{report.report_date}</Text>
               <Text>小组：{report.team_name}</Text>
-              <Text>成员提交：{sourcesQuery.data ? `${sourcesQuery.data.submitted}/${sourcesQuery.data.members.length}` : "-"}</Text>
-              <Text>状态：{report.submitted_at ? "已提交总监" : "草稿"}</Text>
-              <Text>提交时间：{formatDateTime(report.submitted_at)}</Text>
+              <Text>成员发送：{sourcesQuery.data ? `${sourcesQuery.data.submitted}/${sourcesQuery.data.members.length}` : "-"}</Text>
+              <Text>状态：{report.status === "submitted" ? "已发送" : report.status === "saved" && report.submitted_at ? "已保存，未发送最新修改" : "已保存"}</Text>
+              <Text>发送时间：{formatDateTime(report.submitted_at)}</Text>
             </Space>
           </Card>
           <Tabs
@@ -555,17 +560,17 @@ export function TeamDailyReportDetailPage() {
                       <Space>
                         {canEdit ? (
                           <Button onClick={() => setGenerateOpen(true)}>
-                            生成草稿
+                            重新生成
                           </Button>
                         ) : null}
                         {canEdit ? (
                           <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                            保存
+                            保存组日报
                           </Button>
                         ) : null}
                         {canEdit ? (
                           <Button type="primary" loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>
-                            提交给总监
+                            保存并发送给总监
                           </Button>
                         ) : null}
                       </Space>
@@ -609,12 +614,12 @@ function TeamSources({ sources }: { sources?: TeamReportSources }) {
   const columns: ColumnsType<TeamMemberReport> = [
     { title: "成员", dataIndex: "user_name", width: 180 },
     {
-      title: "提交状态",
+      title: "发送状态",
       dataIndex: "has_report",
       width: 140,
-      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已提交</Tag> : <Tag>未提交</Tag>)
+      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已发送</Tag> : <Tag>未发送</Tag>)
     },
-    { title: "提交 / 更新时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
     {
       title: "操作",
       key: "actions",
@@ -627,8 +632,8 @@ function TeamSources({ sources }: { sources?: TeamReportSources }) {
       <Card>
         <Space size="large" wrap>
           <Text>成员数：{sources.members.length}</Text>
-          <Text>已提交：{sources.submitted}</Text>
-          <Text>未提交：{sources.missing}</Text>
+          <Text>已发送：{sources.submitted}</Text>
+          <Text>未发送：{sources.missing}</Text>
         </Space>
       </Card>
       <Table<TeamMemberReport>
@@ -669,15 +674,6 @@ export function DepartmentDailyReportDetailPage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: () => updateDepartmentReport(id ?? "", { content }),
-    onSuccess: () => {
-      message.success("已保存");
-      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-detail", id] });
-      void queryClient.invalidateQueries({ queryKey: ["reports", "daily", "department-list"] });
-    },
-    onError: (error: unknown) => message.error(errorMessage(error))
-  });
-  const archiveMutation = useMutation({
     mutationFn: () => updateDepartmentReport(id ?? "", { content, archive: true }),
     onSuccess: () => {
       message.success("已归档");
@@ -699,12 +695,12 @@ export function DepartmentDailyReportDetailPage() {
             <Space size="large" wrap>
               <Text>日期：{report.report_date}</Text>
               <Text>
-                小组提交：
+                小组发送：
                 {sourcesQuery.data
                   ? `${sourcesQuery.data.submitted_team_count}/${sourcesQuery.data.total_team_count}`
                   : "-"}
               </Text>
-              <Text>状态：{report.archived_at ? "已归档" : "草稿"}</Text>
+              <Text>状态：{report.status === "saved" || report.archived_at ? "已归档" : "待生成"}</Text>
               <Text>归档时间：{formatDateTime(report.archived_at)}</Text>
               <Text>来源小组日报数：{report.source_team_report_ids.length}</Text>
             </Space>
@@ -729,19 +725,12 @@ export function DepartmentDailyReportDetailPage() {
                   <Card
                     extra={
                       <Space>
-                        {!report.archived_at ? (
-                          <Button onClick={() => setGenerateOpen(true)}>
-                            生成草稿
-                          </Button>
-                        ) : null}
-                        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                          保存
+                        <Button onClick={() => setGenerateOpen(true)}>
+                          重新生成
                         </Button>
-                        {!report.archived_at ? (
-                          <Button type="primary" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
-                            归档
-                          </Button>
-                        ) : null}
+                        <Button type="primary" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                          保存归档
+                        </Button>
                       </Space>
                     }
                   >
@@ -790,12 +779,12 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
       render: (_, record) => ("team_leader_name" in record ? record.team_leader_name || record.leader_name : "-")
     },
     {
-      title: "提交状态",
+      title: "发送状态",
       dataIndex: "has_report",
       width: 140,
-      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已提交</Tag> : <Tag>未提交</Tag>)
+      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已发送</Tag> : <Tag>未发送</Tag>)
     },
-    { title: "提交时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
     {
       title: "操作",
       key: "actions",
@@ -808,8 +797,8 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
       <Card>
         <Space size="large" wrap>
           <Text>小组总数：{sources.total_team_count}</Text>
-          <Text>已提交：{sources.submitted_team_count}</Text>
-          <Text>未提交：{sources.missing_teams.length}</Text>
+          <Text>已发送：{sources.submitted_team_count}</Text>
+          <Text>未发送：{sources.missing_teams.length}</Text>
         </Space>
       </Card>
       <Table<DepartmentSourceRow>

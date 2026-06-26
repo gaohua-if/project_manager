@@ -109,6 +109,7 @@ type departmentWeeklyReportGenerateRequest struct {
 }
 
 type teamMemberDailyReport struct {
+	ID       string
 	UserName string
 	Content  string
 }
@@ -473,11 +474,15 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 	}
 
 	rows, err := db.Query(`
-		SELECT u.name, COALESCE(dr.submitted_content, '')
-		FROM users u
-		LEFT JOIN daily_reports dr ON dr.user_id = u.id AND dr.report_date = $1 AND dr.status = 'submitted'
-		WHERE u.team_id = $2 AND u.role = 'employee'
-		ORDER BY u.name`, targetDate, teamID)
+		SELECT dr.id::text, u.name, dr.submitted_content
+		FROM daily_reports dr
+		JOIN users u ON u.id = dr.user_id
+		WHERE u.team_id = $1
+			AND u.role = 'employee'
+			AND dr.report_date = $2
+			AND dr.submitted_at IS NOT NULL
+			AND dr.submitted_content IS NOT NULL
+		ORDER BY u.name`, teamID, targetDate)
 	if err != nil {
 		return "", fmt.Errorf("query member reports: %w", err)
 	}
@@ -486,7 +491,7 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 	var memberReports []teamMemberDailyReport
 	for rows.Next() {
 		var mr teamMemberDailyReport
-		if err := rows.Scan(&mr.UserName, &mr.Content); err != nil {
+		if err := rows.Scan(&mr.ID, &mr.UserName, &mr.Content); err != nil {
 			return "", err
 		}
 		memberReports = append(memberReports, mr)
@@ -520,27 +525,22 @@ func generateServerTeamReport(db *sql.DB, cfg ConsumerConfig, teamID, leaderID, 
 	}
 	memberReportIDs := make([]string, 0)
 	for _, mr := range memberReports {
-		if mr.Content != "" {
-			var rid string
-			if err := db.QueryRow(
-				"SELECT id::text FROM daily_reports WHERE user_id = (SELECT id FROM users WHERE name = $1 AND team_id = $2 LIMIT 1) AND report_date = $3 AND status = 'submitted' AND submitted_content IS NOT NULL",
-				mr.UserName, teamID, targetDate,
-			).Scan(&rid); err == nil {
-				memberReportIDs = append(memberReportIDs, rid)
-			}
+		if mr.ID != "" {
+			memberReportIDs = append(memberReportIDs, mr.ID)
 		}
 	}
 
 	var reportID string
 	err = db.QueryRow(`
-		INSERT INTO team_reports (team_id, leader_id, report_date, content, member_report_ids, source_daily_report_ids, session_ids)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO team_reports (team_id, leader_id, report_date, content, member_report_ids, source_daily_report_ids, session_ids, status, saved_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'saved', now())
 		ON CONFLICT (team_id, report_date)
 		DO UPDATE SET content = EXCLUDED.content,
 			member_report_ids = EXCLUDED.member_report_ids,
 			source_daily_report_ids = EXCLUDED.source_daily_report_ids,
 			session_ids = EXCLUDED.session_ids,
-			submitted_at = NULL,
+			status = 'saved',
+			saved_at = now(),
 			updated_at = now()
 		RETURNING id::text`,
 		teamID, leaderID, targetDate, content,
@@ -955,11 +955,13 @@ func firstLine(content string) string {
 func generateServerDepartmentReport(db *sql.DB, cfg ConsumerConfig, targetDate string) (string, error) {
 	fmt.Printf("[report-generator] generating department report date=%s\n", targetDate)
 	rows, err := db.Query(`
-		SELECT tr.id::text, t.name, COALESCE(u.name, ''), tr.content
+		SELECT tr.id::text, t.name, COALESCE(u.name, ''), tr.submitted_content
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
-		WHERE tr.report_date = $1 AND tr.submitted_at IS NOT NULL
+		WHERE tr.report_date = $1
+			AND tr.submitted_at IS NOT NULL
+			AND tr.submitted_content IS NOT NULL
 		ORDER BY t.name`, targetDate)
 	if err != nil {
 		return "", fmt.Errorf("query submitted team reports: %w", err)
@@ -1004,6 +1006,8 @@ func generateServerDepartmentReport(db *sql.DB, cfg ConsumerConfig, targetDate s
 		ON CONFLICT (report_date)
 		DO UPDATE SET content = EXCLUDED.content,
 			source_team_report_ids = EXCLUDED.source_team_report_ids,
+			status = NULL,
+			saved_at = NULL,
 			archived_at = NULL,
 			updated_at = now()
 		RETURNING id::text`,

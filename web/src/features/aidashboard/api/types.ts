@@ -255,11 +255,15 @@ export interface TeamReport {
   leader_name: string;
   report_date: string;
   content: string;
+  submitted_content?: string;
+  status?: "saved" | "submitted" | null;
   feishu_doc_url?: string;
   member_report_ids: string[];
   source_daily_report_ids: string[];
   session_ids: string[];
+  saved_at?: string;
   submitted_at?: string;
+  submitted_to?: "director" | null;
   created_at: string;
   updated_at: string;
 }
@@ -274,7 +278,10 @@ export interface TeamReportListItem {
   member_count: number;
   submitted_count: number;
   missing_count: number;
+  status?: "saved" | "submitted" | null;
+  saved_at?: string;
   submitted_at?: string;
+  submitted_to?: "director" | null;
   created_at: string;
   updated_at: string;
 }
@@ -300,8 +307,13 @@ export interface TeamReportSources {
   team_name: string;
   report_date: string;
   members: TeamMemberReport[];
+  submitted_reports?: TeamMemberReport[];
+  missing_members?: TeamMemberReport[];
+  total_member_count?: number;
   submitted: number;
+  submitted_count?: number;
   missing: number;
+  missing_count?: number;
 }
 
 export interface DepartmentTeamReportSource {
@@ -326,6 +338,7 @@ export interface DepartmentReportSources {
   report_date: string;
   submitted_team_count: number;
   total_team_count: number;
+  missing_team_count?: number;
   submitted_team_reports: DepartmentTeamReportSource[];
   missing_teams: DepartmentMissingTeam[];
 }
@@ -334,7 +347,9 @@ export interface DepartmentReport {
   id: string;
   report_date: string;
   content: string;
+  status?: "saved" | "archived" | null;
   source_team_report_ids: string[];
+  saved_at?: string;
   archived_at?: string;
   created_at: string;
   updated_at: string;
@@ -346,6 +361,8 @@ export interface DepartmentReportListItem {
   team_count: number;
   submitted_team_count: number;
   missing_team_count: number;
+  status?: "saved" | "archived" | null;
+  saved_at?: string;
   archived_at?: string;
   created_at: string;
   updated_at: string;
