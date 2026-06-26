@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -7,7 +8,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": "/src"
+      "@": "/src",
+      "@toast-ui/editor/viewer": fileURLToPath(
+        new URL("./node_modules/@toast-ui/editor/dist/esm/indexViewer.js", import.meta.url)
+      ),
+      "@toast-ui/editor/toastui-editor-viewer.css": fileURLToPath(
+        new URL("./node_modules/@toast-ui/editor/dist/toastui-editor-viewer.css", import.meta.url)
+      )
     }
   },
   server: {
