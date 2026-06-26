@@ -25,13 +25,13 @@ import type { UserRole } from "@/shared/auth/types";
 import { formatDateTime } from "@/shared/utils/dateTime";
 
 import {
+  fetchAllSessionTokens,
   fetchDepartmentReportSources,
   fetchDepartmentReportTodayOrNull,
 	fetchDashboardFollows,
 	fetchDashboardRisks,
   fetchReports,
 	fetchSessions,
-  fetchSessionTokens,
   fetchTeamReportSources,
   fetchTeamReportTodayOrNull,
 	fetchTodayReport,
@@ -909,12 +909,12 @@ export function DashboardPage() {
   const shouldLoadTeamTokenGroups = dashboardRole === "director";
   const tokenSessionsQuery = useQuery({
     queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, tokenScope],
-    queryFn: () => fetchSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: tokenScope }),
+    queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: tokenScope }),
     staleTime: 60_000
   });
   const mineTokenSessionsQuery = useQuery({
     queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, "mine"],
-    queryFn: () => fetchSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
+    queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
     enabled: shouldLoadMineTokens,
     staleTime: 60_000
   });
@@ -1420,31 +1420,6 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
-          <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
-	          <ReportSection
-	              title="今日报告"
-	              icon={<FileTextOutlined />}
-	              reports={personalReports}
-	              summaryReports={summaryReports}
-	              coverage={effectiveCoverage}
-              variant="personal"
-              onOpen={openReportModal}
-              onViewReports={() => navigate("/reports")}
-            />
-          </Col>
-          <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
-            <SessionUploadCard
-              range={tokenRange}
-              report={tokenReport}
-              loading={isTokenLoading}
-              error={isTokenError}
-              onRangeChange={setTokenRange}
-              onViewDetail={() => navigate("/tokens")}
-            />
-          </Col>
-        </Row>
-
         <div className="console-panel">
           <PanelHeader
             icon={<AlertOutlined />}
@@ -1463,6 +1438,31 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+
+        <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
+          <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
+	          <ReportSection
+	              title="今日报告"
+	              icon={<FileTextOutlined />}
+	              reports={personalReports}
+	              summaryReports={summaryReports}
+	              coverage={effectiveCoverage}
+              variant="personal"
+              onOpen={openReportModal}
+              onViewReports={(scope) => navigate(`/reports/daily?tab=${scope}`)}
+            />
+          </Col>
+          <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
+            <SessionUploadCard
+              range={tokenRange}
+              report={tokenReport}
+              loading={isTokenLoading}
+              error={isTokenError}
+              onRangeChange={setTokenRange}
+              onViewDetail={() => navigate("/tokens")}
+            />
+          </Col>
+        </Row>
       </section>
 
       {dailyGenerateTarget ? (
@@ -1578,7 +1578,7 @@ function ReportSection({
   coverage?: ReportCoverage;
   variant: "personal" | "summary";
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
-  onViewReports: () => void;
+  onViewReports: (scope: ReportScope) => void;
 }) {
   if (variant === "personal") {
     const dailyReport = reports.find((report) => report.kind === "personal_daily") ?? reports[0];
@@ -1610,7 +1610,7 @@ function ReportSection({
             />
           ) : null}
           <div className="console-report-shortcuts" aria-label="报告入口">
-            <button type="button" className="console-report-shortcut" onClick={onViewReports}>
+            <button type="button" className="console-report-shortcut" onClick={() => onViewReports("personal")}>
               <span>
                 <FileTextOutlined />
                 <strong>日报记录</strong>
@@ -1619,7 +1619,11 @@ function ReportSection({
               <RightOutlined />
             </button>
             {summaryDailyReport ? (
-              <button type="button" className="console-report-shortcut" onClick={onViewReports}>
+              <button
+                type="button"
+                className="console-report-shortcut"
+                onClick={() => onViewReports(summaryDailyReport.scope)}
+              >
                 <span>
                   <FileDoneOutlined />
                   <strong>{getSummaryRecordLabel(summaryDailyReport)}</strong>
