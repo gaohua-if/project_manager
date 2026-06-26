@@ -8,6 +8,33 @@ import { ROLE_LABELS } from "./types";
 import { useAuth } from "./authContext";
 import { getAuthSession } from "./session";
 
+async function copyText(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    const copied = await navigator.clipboard.writeText(text).then(
+      () => true,
+      () => false
+    );
+    if (copied) return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error("Token copy failed");
+  }
+}
+
 export function UserMenu() {
   const { status, user, logout } = useAuth();
   const navigate = useNavigate();
@@ -22,7 +49,7 @@ export function UserMenu() {
     const { token } = getAuthSession();
     if (!token) return;
     try {
-      await navigator.clipboard.writeText(token);
+      await copyText(token);
       void message.success("Token 已复制到剪贴板");
     } catch {
       void message.error("复制失败，请手动从 localStorage 获取");

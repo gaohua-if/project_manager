@@ -49,7 +49,7 @@ export const appRoutes: AppRoute[] = [
     icon: <TeamOutlined />,
     menuGroup: "管理",
     menuOrder: 20,
-    roles: ["admin", "director", "pm", "team_leader"],
+    roles: ["admin"],
     element: <OrganizationPage />
   },
   {
