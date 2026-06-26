@@ -517,6 +517,13 @@ export interface SessionTokens {
   total_tokens: number;
 }
 
+export interface PaginatedSessionTokens {
+  items: SessionTokens[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface MemberStat {
   user_id: string;
   user_name: string;

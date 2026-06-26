@@ -746,6 +746,13 @@ type SessionTokens struct {
 	TotalTokens         int64     `json:"total_tokens"`
 }
 
+type PaginatedSessionTokens struct {
+	Items    []SessionTokens `json:"items"`
+	Total    int             `json:"total"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"page_size"`
+}
+
 type TokenGroup struct {
 	Key     string  `json:"key"`
 	Label   string  `json:"label"`

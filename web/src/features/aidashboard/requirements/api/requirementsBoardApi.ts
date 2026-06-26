@@ -5,10 +5,10 @@ import {
   createTask,
   deleteRequirement,
   deleteTask,
+  fetchAllSessionTokens,
   fetchFollows,
   fetchRequirement,
   fetchRequirements,
-  fetchSessionTokens,
   fetchTask,
   fetchTasks,
   fetchTaskAssignees,
@@ -225,7 +225,7 @@ export const requirementsBoardApi = {
 
   async listTokenSources(): Promise<MockTokenSource[]> {
     try {
-      const sources = await fetchSessionTokens({
+      const sources = await fetchAllSessionTokens({
         from: dateDaysAgo(90),
         to: new Date().toISOString().slice(0, 10),
         scope: "mine"

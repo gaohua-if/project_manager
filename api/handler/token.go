@@ -48,7 +48,7 @@ func (h *TokenHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build base WHERE with role scoping + period
-	scope, args, argIdx := buildTokenScope(u)
+	scope, args, argIdx := buildTokenScope(u, r.URL.Query().Get("scope"))
 	args = append(args, startDate)
 	startIdx := argIdx
 	argIdx++
@@ -112,6 +112,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	page, pageSize := parsePagination(r, 20, 100)
 
 	from := r.URL.Query().Get("from")
 	to := r.URL.Query().Get("to")
@@ -135,6 +136,12 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 		where += " AND " + scope
 	}
 
+	var total int
+	if err := h.db.QueryRow("SELECT COUNT(*) FROM sessions s "+where, args...).Scan(&total); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	q := `
 		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name, ''), s.agent_type,
 		       CASE WHEN s.models <> '{}' THEN s.models ELSE ARRAY[s.model] END,
@@ -152,7 +159,9 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 			SELECT * FROM token_usage tu WHERE tu.session_id = s.id LIMIT 1
 		) tu ON true
 		` + where + `
-		ORDER BY s.started_at DESC`
+		ORDER BY s.started_at DESC, s.id DESC
+		LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
+	args = append(args, pageSize, (page-1)*pageSize)
 
 	rows, err := h.db.Query(q, args...)
 	if err != nil {
@@ -182,22 +191,27 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, model.PaginatedSessionTokens{
+		Items:    out,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	})
 }
 
 // buildTokenScope returns the role-scoped WHERE fragment for the current user.
 // team_leader / pm see their team; employee sees only themselves; director sees everything.
-func buildTokenScope(u *model.User) (string, []any, int) {
-	switch u.Role {
-	case "employee":
+func buildTokenScope(u *model.User, requestedScope string) (string, []any, int) {
+	if requestedScope == "mine" || u.Role == "employee" {
 		return "tu.user_id = $1", []any{u.ID}, 2
+	}
+	switch u.Role {
 	case "team_leader", "pm":
 		if u.TeamID == nil {
 			return "tu.user_id = $1", []any{u.ID}, 2
 		}
 		return "tu.user_id IN (SELECT id FROM users WHERE team_id = $1)", []any{*u.TeamID}, 2
 	default:
-		// director: no scope, but we still need a placeholder arg index
 		return "", []any{}, 1
 	}
 }

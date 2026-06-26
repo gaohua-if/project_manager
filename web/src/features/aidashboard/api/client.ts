@@ -19,11 +19,11 @@ import type {
   PaginatedDailyReports,
   PaginatedDepartmentReports,
   PaginatedSessions,
+  PaginatedSessionTokens,
   PaginatedTeamReports,
   Requirement,
   RequirementFollowStateDTO,
   Session,
-  SessionTokens,
   Task,
   TeamActivity,
   TeamMemberReport,
@@ -385,10 +385,38 @@ export const fetchTokens = (params?: {
   from?: string;
   to?: string;
   group_by?: TokenGroupBy;
+  scope?: "mine" | "team";
 }) => {
   const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : "";
   return unwrap(api.get<TokenAggregation>(`/tokens${qs}`));
 };
 
-export const fetchSessionTokens = (params: { from: string; to: string; scope?: "mine" | "team" }) =>
-  unwrap(api.get<SessionTokens[]>("/tokens/sessions", params));
+export const fetchSessionTokens = (params: {
+  from: string;
+  to: string;
+  scope?: "mine" | "team";
+  page?: string;
+  page_size?: string;
+}) => unwrap(api.get<PaginatedSessionTokens>("/tokens/sessions", params));
+
+export async function fetchAllSessionTokens(params: { from: string; to: string; scope?: "mine" | "team" }) {
+  const pageSize = 100;
+  const firstPage = await fetchSessionTokens({
+    ...params,
+    page: "1",
+    page_size: String(pageSize)
+  });
+  const items = [...firstPage.items];
+  const totalPages = Math.ceil(firstPage.total / firstPage.page_size);
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const nextPage = await fetchSessionTokens({
+      ...params,
+      page: String(page),
+      page_size: String(pageSize)
+    });
+    items.push(...nextPage.items);
+  }
+
+  return items;
+}

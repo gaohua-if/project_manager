@@ -129,9 +129,29 @@ async function uploadSessionBatch(token, sessions) {
   return { status: res.status, data };
 }
 
-async function fetchSessionTokens(token, from, to, scope) {
-  const qs = `from=${from}&to=${to}&scope=${scope}`;
+async function fetchSessionTokenPage(token, from, to, scope, page, pageSize) {
+  const qs = `from=${from}&to=${to}&scope=${scope}&page=${page}&page_size=${pageSize}`;
   return apiGet(`/tokens/sessions?${qs}`, token);
+}
+
+async function fetchSessionTokens(token, from, to, scope) {
+  const pageSize = 100;
+  const first = await fetchSessionTokenPage(token, from, to, scope, 1, pageSize);
+  if (first.status !== 200 || !first.data || !Array.isArray(first.data.items)) {
+    return first;
+  }
+
+  const items = [...first.data.items];
+  const totalPages = Math.ceil(first.data.total / first.data.page_size);
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await fetchSessionTokenPage(token, from, to, scope, page, pageSize);
+    if (next.status !== 200 || !next.data || !Array.isArray(next.data.items)) {
+      return next;
+    }
+    items.push(...next.data.items);
+  }
+
+  return { ...first, data: items };
 }
 
 async function fetchTokenGroups(token, from, to) {

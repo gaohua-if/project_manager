@@ -10,7 +10,7 @@ import { Alert, Button, DatePicker, Empty, Segmented, Space, Table } from "antd"
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 
-import { fetchSessionTokens } from "../../api/client";
+import { fetchSessionTokens, fetchTokens } from "../../api/client";
 import type { SessionTokens } from "../../api/types";
 import {
   RequirementMetricCard,
@@ -54,19 +54,42 @@ export function TokensPage() {
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([firstOfMonth, today]);
   const canViewTeam = Boolean(user && user.role !== "employee");
   const [scope, setScope] = useState<"mine" | "team">("mine");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const effectiveScope = canViewTeam ? scope : "mine";
 
   const from = range[0].format("YYYY-MM-DD");
   const to = range[1].format("YYYY-MM-DD");
 
-  const tokensQuery = useQuery<SessionTokens[]>({
-    queryKey: ["session-tokens", from, to, effectiveScope],
-    queryFn: () => fetchSessionTokens({ from, to, scope: effectiveScope }),
+  const tokensQuery = useQuery({
+    queryKey: ["session-tokens", from, to, effectiveScope, page, pageSize],
+    queryFn: () =>
+      fetchSessionTokens({
+        from,
+        to,
+        scope: effectiveScope,
+        page: String(page),
+        page_size: String(pageSize)
+      }),
+    placeholderData: (previousData) => previousData,
     staleTime: 60_000
   });
-  const sessions = useMemo(() => tokensQuery.data ?? [], [tokensQuery.data]);
+  const aggregationQuery = useQuery({
+    queryKey: ["token-aggregation", from, to, effectiveScope],
+    queryFn: () =>
+      fetchTokens({
+        period: "range",
+        from,
+        to,
+        group_by: "model",
+        scope: effectiveScope
+      }),
+    staleTime: 60_000
+  });
+  const sessions = useMemo(() => tokensQuery.data?.items ?? [], [tokensQuery.data]);
+  const total = tokensQuery.data?.total ?? 0;
 
-  const totals = useMemo(() => {
+  const pageTotals = useMemo(() => {
     return sessions.reduce(
       (acc, s) => {
         acc.input += s.input_tokens;
@@ -79,6 +102,14 @@ export function TokensPage() {
       { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0 }
     );
   }, [sessions]);
+
+  const totals = {
+    input: aggregationQuery.data?.input_sum ?? 0,
+    output: aggregationQuery.data?.output_sum ?? 0,
+    cacheCreate: aggregationQuery.data?.cache_creation_sum ?? 0,
+    cacheRead: aggregationQuery.data?.cache_read_sum ?? 0,
+    total: aggregationQuery.data?.total ?? 0
+  };
 
   const cacheHitRate =
     totals.input + totals.cacheCreate + totals.cacheRead > 0
@@ -103,13 +134,16 @@ export function TokensPage() {
           <span>·</span>
           <span>{dateLabel}</span>
           <span>·</span>
-          <span>{sessions.length} 条工作记录</span>
+          <span>{total} 条工作记录</span>
         </div>
         <div className="tokens-toolbar__right">
           {canViewTeam ? (
             <Segmented
               value={scope}
-              onChange={(v) => setScope(v as "mine" | "team")}
+              onChange={(v) => {
+                setScope(v as "mine" | "team");
+                setPage(1);
+              }}
               options={[
                 { label: "我的", value: "mine" },
                 { label: teamLabel, value: "team" }
@@ -118,7 +152,11 @@ export function TokensPage() {
           ) : null}
           <DatePicker.RangePicker
             value={range}
-            onChange={(v) => v && v[0] && v[1] && setRange([v[0], v[1]])}
+            onChange={(v) => {
+              if (!v || !v[0] || !v[1]) return;
+              setRange([v[0], v[1]]);
+              setPage(1);
+            }}
           />
         </div>
       </div>
@@ -133,22 +171,32 @@ export function TokensPage() {
         />
       ) : null}
 
+      {aggregationQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Token 统计加载失败"
+          description={errorMessage(aggregationQuery.error)}
+          action={<Button onClick={() => void aggregationQuery.refetch()}>重试</Button>}
+        />
+      ) : null}
+
       <RequirementMetricGrid>
         <RequirementMetricCard
           tone="primary"
           icon={<ThunderboltOutlined />}
-          loading={tokensQuery.isLoading}
+          loading={aggregationQuery.isLoading}
           metric={{
             key: "total",
             title: "总 Token",
             value: formatTokens(totals.total),
-            description: `${sessions.length} 条工作记录合计`
+            description: `${total} 条工作记录合计`
           }}
         />
         <RequirementMetricCard
           tone="info"
           icon={<ImportOutlined />}
-          loading={tokensQuery.isLoading}
+          loading={aggregationQuery.isLoading}
           metric={{
             key: "input",
             title: "输入 Token",
@@ -159,7 +207,7 @@ export function TokensPage() {
         <RequirementMetricCard
           tone="info"
           icon={<UploadOutlined />}
-          loading={tokensQuery.isLoading}
+          loading={aggregationQuery.isLoading}
           metric={{
             key: "output",
             title: "输出 Token",
@@ -170,7 +218,7 @@ export function TokensPage() {
         <RequirementMetricCard
           tone="success"
           icon={<DatabaseOutlined />}
-          loading={tokensQuery.isLoading}
+          loading={aggregationQuery.isLoading}
           metric={{
             key: "cache-read",
             title: "缓存读取",
@@ -181,7 +229,7 @@ export function TokensPage() {
         <RequirementMetricCard
           tone="warning"
           icon={<CloudOutlined />}
-          loading={tokensQuery.isLoading}
+          loading={aggregationQuery.isLoading}
           metric={{
             key: "cache-create",
             title: "缓存创建",
@@ -196,7 +244,17 @@ export function TokensPage() {
           rowKey="session_id"
           dataSource={sessions}
           loading={tokensQuery.isLoading}
-          pagination={false}
+          pagination={{
+            current: tokensQuery.data?.page ?? page,
+            pageSize: tokensQuery.data?.page_size ?? pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: (value) => `共 ${value} 条工作记录`,
+            onChange: (nextPage, nextPageSize) => {
+              setPage(nextPage);
+              setPageSize(nextPageSize);
+            }
+          }}
           scroll={{ x: "max-content" }}
           columns={[
             {
@@ -284,22 +342,22 @@ export function TokensPage() {
             <Table.Summary fixed>
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={effectiveScope === "team" ? 4 : 3}>
-                  合计（{sessions.length}）
+                  本页小计（{sessions.length}）
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={3} align="right">
-                  {formatTokens(totals.input)}
+                  {formatTokens(pageTotals.input)}
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={4} align="right">
-                  {formatTokens(totals.output)}
+                  {formatTokens(pageTotals.output)}
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={5} align="right">
-                  {formatTokens(totals.cacheCreate)}
+                  {formatTokens(pageTotals.cacheCreate)}
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={6} align="right">
-                  <span className="tokens-cache-cell">{formatTokens(totals.cacheRead)}</span>
+                  <span className="tokens-cache-cell">{formatTokens(pageTotals.cacheRead)}</span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={7} align="right">
-                  <span className="tokens-total-cell">{formatTokens(totals.total)}</span>
+                  <span className="tokens-total-cell">{formatTokens(pageTotals.total)}</span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={8} />
               </Table.Summary.Row>
