@@ -412,12 +412,8 @@ type PersonalWeeklyReportSources struct {
 	UserName     string                    `json:"user_name"`
 	WeekStart    string                    `json:"week_start"`
 	WeekEnd      string                    `json:"week_end"`
-	Sessions     []WeeklySessionSource     `json:"sessions"`
 	DailyReports []WeeklyDailyReportSource `json:"daily_reports"`
-	Tasks        []WeeklyTaskSource        `json:"tasks"`
-	SessionCount int                       `json:"session_count"`
 	DailyCount   int                       `json:"daily_count"`
-	TaskCount    int                       `json:"task_count"`
 }
 
 type PersonalWeeklyReport struct {
@@ -465,26 +461,20 @@ type PaginatedPersonalWeeklyReports struct {
 
 type GeneratePersonalWeeklyReportRequest struct {
 	WeekStart            string   `json:"week_start"`
-	SourceSessionIDs     []string `json:"source_session_ids"`
 	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
-	SourceTaskIDs        []string `json:"source_task_ids"`
 }
 
 type PersonalWeeklyReportPreview struct {
 	ReportMarkdown       string   `json:"report_markdown"`
 	WeekStart            string   `json:"week_start"`
 	WeekEnd              string   `json:"week_end"`
-	SourceSessionIDs     []string `json:"source_session_ids"`
 	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
-	SourceTaskIDs        []string `json:"source_task_ids"`
 }
 
 type SavePersonalWeeklyReportRequest struct {
 	WeekStart            string   `json:"week_start"`
 	Content              string   `json:"content"`
-	SourceSessionIDs     []string `json:"source_session_ids"`
 	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
-	SourceTaskIDs        []string `json:"source_task_ids"`
 }
 
 type GenerateReportDraftRequest struct {
@@ -728,36 +718,72 @@ type WeeklyTaskSource struct {
 }
 
 type TeamWeeklyReportSources struct {
-	TeamID              string                        `json:"team_id"`
-	TeamName            string                        `json:"team_name"`
-	WeekStart           string                        `json:"week_start"`
-	WeekEnd             string                        `json:"week_end"`
-	DailyReports        []WeeklyDailyReportSource     `json:"daily_reports"`
-	TeamReports         []WeeklyTeamDailyReportSource `json:"team_reports"`
-	Tasks               []WeeklyTaskSource            `json:"tasks"`
-	SubmittedDailyCount int                           `json:"submitted_daily_count"`
-	TeamReportCount     int                           `json:"team_report_count"`
-	TaskCount           int                           `json:"task_count"`
+	TeamID                         string                        `json:"team_id"`
+	TeamName                       string                        `json:"team_name"`
+	WeekStart                      string                        `json:"week_start"`
+	WeekEnd                        string                        `json:"week_end"`
+	SubmittedPersonalWeeklyReports []TeamPersonalWeeklySource    `json:"submitted_personal_weekly_reports"`
+	MissingPeople                  []TeamWeeklyMissingPerson     `json:"missing_people"`
+	SubmittedPersonalWeeklyCount   int                           `json:"submitted_personal_weekly_count"`
+	MissingPeopleCount             int                           `json:"missing_people_count"`
+	DailyReports                   []WeeklyDailyReportSource     `json:"daily_reports,omitempty"`
+	TeamReports                    []WeeklyTeamDailyReportSource `json:"team_reports,omitempty"`
+	Tasks                          []WeeklyTaskSource            `json:"tasks,omitempty"`
+	SubmittedDailyCount            int                           `json:"submitted_daily_count,omitempty"`
+	TeamReportCount                int                           `json:"team_report_count,omitempty"`
+	TaskCount                      int                           `json:"task_count,omitempty"`
+}
+
+type TeamPersonalWeeklySource struct {
+	ReportID         string     `json:"report_id"`
+	UserID           string     `json:"user_id"`
+	UserName         string     `json:"user_name"`
+	SourceRole       string     `json:"source_role"`
+	WeekStart        string     `json:"week_start"`
+	WeekEnd          string     `json:"week_end"`
+	SubmittedAt      *time.Time `json:"submitted_at,omitempty"`
+	SubmittedContent string     `json:"submitted_content"`
+}
+
+type TeamWeeklyMissingPerson struct {
+	UserID     string `json:"user_id"`
+	UserName   string `json:"user_name"`
+	SourceRole string `json:"source_role"`
 }
 
 type TeamWeeklyReport struct {
-	ID                   string     `json:"id"`
-	TeamID               string     `json:"team_id"`
-	TeamName             string     `json:"team_name"`
-	LeaderID             string     `json:"leader_id"`
-	LeaderName           string     `json:"leader_name"`
-	WeekStart            string     `json:"week_start"`
-	Content              string     `json:"content"`
-	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
-	SourceTeamReportIDs  []string   `json:"source_team_report_ids"`
-	SourceTaskIDs        []string   `json:"source_task_ids"`
-	SubmittedAt          *time.Time `json:"submitted_at,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID                            string     `json:"id"`
+	TeamID                        string     `json:"team_id"`
+	TeamName                      string     `json:"team_name"`
+	LeaderID                      string     `json:"leader_id"`
+	LeaderName                    string     `json:"leader_name"`
+	WeekStart                     string     `json:"week_start"`
+	Content                       string     `json:"content"`
+	SourceDailyReportIDs          []string   `json:"source_daily_report_ids"`
+	SourceTeamReportIDs           []string   `json:"source_team_report_ids"`
+	SourceTaskIDs                 []string   `json:"source_task_ids"`
+	SourcePersonalWeeklyReportIDs []string   `json:"source_personal_weekly_report_ids"`
+	SubmittedAt                   *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt                     time.Time  `json:"created_at"`
+	UpdatedAt                     time.Time  `json:"updated_at"`
+}
+
+type GenerateTeamWeeklyReportRequest struct {
+	WeekStart                     string   `json:"week_start"`
+	SourcePersonalWeeklyReportIDs []string `json:"source_personal_weekly_report_ids"`
+}
+
+type TeamWeeklyReportPreview struct {
+	ReportMarkdown                string   `json:"report_markdown"`
+	WeekStart                     string   `json:"week_start"`
+	WeekEnd                       string   `json:"week_end"`
+	SourcePersonalWeeklyReportIDs []string `json:"source_personal_weekly_report_ids"`
 }
 
 type UpdateTeamWeeklyReportRequest struct {
-	Content *string `json:"content,omitempty"`
+	WeekStart                     string   `json:"week_start,omitempty"`
+	Content                       *string  `json:"content,omitempty"`
+	SourcePersonalWeeklyReportIDs []string `json:"source_personal_weekly_report_ids,omitempty"`
 }
 
 type DepartmentTeamWeeklyReportSource struct {

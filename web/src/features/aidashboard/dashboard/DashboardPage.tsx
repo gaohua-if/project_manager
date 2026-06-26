@@ -1797,6 +1797,7 @@ function ReportSection({
 }) {
   if (variant === "personal") {
     const dailyReport = reports.find((report) => report.kind === "personal_daily") ?? reports[0];
+    const weeklyReport = reports.find((report) => report.kind === "personal_weekly");
     const summaryDailyReport = summaryReports.find(
       (report) => report.kind === "team_daily" || report.kind === "department_daily"
     );
@@ -1814,6 +1815,14 @@ function ReportSection({
             description={getDailyReportCopy(dailyReport)}
             onOpen={onOpen}
           />
+          {weeklyReport ? (
+            <ReportTaskRow
+              label="我的周报"
+              report={weeklyReport}
+              description={getPersonalWeeklyReportCopy(weeklyReport)}
+              onOpen={onOpen}
+            />
+          ) : null}
           {summaryDailyReport ? (
             <ReportTaskRow
               label={getSummaryReportLabel(summaryDailyReport)}
@@ -1957,7 +1966,9 @@ function renderReportActions(
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          {report.scope === "personal" ? "查看并编辑日报" : `编辑${getReportActionNoun(report)}`}
+          {report.kind === "personal_daily"
+            ? "查看并编辑日报"
+            : `编辑${getReportActionNoun(report)}`}
         </Button>
       </>
     );
@@ -2006,7 +2017,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        {report.scope === "personal"
+        {report.kind === "personal_daily"
           ? "查看并编辑日报"
           : report.scope === "department"
             ? "编辑部门日报"
@@ -2048,6 +2059,9 @@ function renderPrimaryReportAction(
 }
 
 function getReportActionNoun(report: ReportItem) {
+  if (report.kind === "personal_weekly") return "个人周报";
+  if (report.kind === "team_weekly") return "组周报";
+  if (report.kind === "department_weekly") return "部门周报";
   if (report.scope === "team") return "组日报";
   if (report.scope === "department") return "部门日报";
   return "日报";
@@ -2083,6 +2097,26 @@ function getDailyReportCopy(report: ReportItem) {
 
 function getSummaryReportLabel(report: ReportItem) {
   return report.scope === "department" ? "部门日报" : "组日报";
+}
+
+function getPersonalWeeklyReportCopy(report: ReportItem) {
+  if (report.status === "已发送") {
+    return "本周周报已发送给上级，可继续打开修改并重新发送。";
+  }
+
+  if (report.status === "已保存") {
+    return "本周周报已保存，尚未发送给上级。";
+  }
+
+  if (report.status === "生成中") {
+    return "正在根据已选择的本周日报生成周报。";
+  }
+
+  if (report.status === "生成失败") {
+    return "本周周报生成失败，请重新选择日报生成。";
+  }
+
+  return "选择本周日报，生成可确认的个人周报。";
 }
 
 function getSummaryRecordLabel(report: ReportItem) {

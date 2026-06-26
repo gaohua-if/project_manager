@@ -34,6 +34,7 @@ import type {
   TeamReport,
   TeamReportSources,
   TeamWeeklyReport,
+  TeamWeeklyReportPreview,
   TeamWeeklyReportSources,
   TokenAggregation,
   TokenGroupBy,
@@ -365,23 +366,17 @@ export async function fetchPersonalWeeklyReportCurrentOrNull(weekStart: string) 
 }
 export const generatePersonalWeeklyReport = (data: {
   week_start: string;
-  source_session_ids?: string[];
   source_daily_report_ids?: string[];
-  source_task_ids?: string[];
 }) => unwrap(api.post<PersonalWeeklyReportPreview>("/reports/weekly/mine/current/generate", data));
 export const savePersonalWeeklyReport = (data: {
   week_start: string;
   content: string;
-  source_session_ids?: string[];
   source_daily_report_ids?: string[];
-  source_task_ids?: string[];
 }) => unwrap(api.put<PersonalWeeklyReport>("/reports/weekly/mine/current", data));
 export const submitPersonalWeeklyReport = (data: {
   week_start: string;
   content: string;
-  source_session_ids?: string[];
   source_daily_report_ids?: string[];
-  source_task_ids?: string[];
 }) => unwrap(api.post<PersonalWeeklyReport>("/reports/weekly/mine/current/submit", data));
 
 export const fetchTeamWeeklyReportSources = (weekStart: string, teamId?: string) =>
@@ -414,12 +409,20 @@ export async function fetchTeamWeeklyReportCurrentOrNull(weekStart: string, team
     throw error;
   }
 }
-export const generateTeamWeeklyReport = (weekStart: string) =>
-  unwrap(
-    api.post<TeamWeeklyReport>("/reports/team/weekly/current/generate", undefined, {
-      params: { week_start: weekStart }
-    })
-  );
+export const generateTeamWeeklyReport = (data: {
+  week_start: string;
+  source_personal_weekly_report_ids?: string[];
+}) => unwrap(api.post<TeamWeeklyReportPreview>("/reports/team/weekly/current/generate", data));
+export const saveTeamWeeklyReport = (data: {
+  week_start: string;
+  content: string;
+  source_personal_weekly_report_ids?: string[];
+}) => unwrap(api.put<TeamWeeklyReport>("/reports/team/weekly/current", data));
+export const submitTeamWeeklyReportCurrent = (data: {
+  week_start: string;
+  content: string;
+  source_personal_weekly_report_ids?: string[];
+}) => unwrap(api.post<TeamWeeklyReport>("/reports/team/weekly/current/submit", data));
 export const updateTeamWeeklyReport = (id: string, data: { content?: string }) =>
   unwrap(api.put<TeamWeeklyReport>(`/reports/team/weekly/${id}`, data));
 export const submitTeamWeeklyReport = (id: string) =>

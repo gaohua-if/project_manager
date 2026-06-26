@@ -137,6 +137,8 @@ func main() {
 		r.Get("/reports/team/weekly/sources", reportH.GetTeamWeeklyReportSources)
 		r.Get("/reports/team/weekly/current", reportH.GetTeamWeeklyReportCurrent)
 		r.Post("/reports/team/weekly/current/generate", reportH.GenerateTeamWeeklyReport)
+		r.Put("/reports/team/weekly/current", reportH.SaveTeamWeeklyReportCurrent)
+		r.Post("/reports/team/weekly/current/submit", reportH.SubmitTeamWeeklyReportCurrent)
 		r.Get("/reports/team/weekly", reportH.ListTeamWeeklyReports)
 		r.Put("/reports/team/weekly/{id}", reportH.UpdateTeamWeeklyReport)
 		r.Post("/reports/team/weekly/{id}/submit", reportH.SubmitTeamWeeklyReport)

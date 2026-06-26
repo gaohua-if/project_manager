@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aidashboard/api/model"
@@ -793,13 +794,15 @@ func (h *ReportHandler) GeneratePersonalWeeklyReportPreview(w http.ResponseWrite
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	sessionIDs, dailyIDs, taskIDs := personalWeeklySourceIDs(sources, req.SourceSessionIDs, req.SourceDailyReportIDs, req.SourceTaskIDs)
+	dailyIDs := personalWeeklyDailySourceIDs(sources, req.SourceDailyReportIDs)
+	if len(dailyIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source_daily_report_ids is required"})
+		return
+	}
 	body, _ := json.Marshal(map[string]any{
 		"user_id":                 u.ID,
 		"week_start":              weekStart,
-		"source_session_ids":      sessionIDs,
 		"source_daily_report_ids": dailyIDs,
-		"source_task_ids":         taskIDs,
 	})
 	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.reportGeneratorURL+"/reports/weekly/generate", bytes.NewReader(body))
 	if err != nil {
@@ -829,9 +832,7 @@ func (h *ReportHandler) GeneratePersonalWeeklyReportPreview(w http.ResponseWrite
 		ReportMarkdown:       genResp.ReportMarkdown,
 		WeekStart:            weekStart,
 		WeekEnd:              weekEnd,
-		SourceSessionIDs:     sessionIDs,
 		SourceDailyReportIDs: dailyIDs,
-		SourceTaskIDs:        taskIDs,
 	})
 }
 
@@ -1810,23 +1811,44 @@ func (h *ReportHandler) GenerateTeamWeeklyReport(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can generate team weekly reports"})
 		return
 	}
-	weekStart, _, ok := weeklyRangeFromRequest(w, r)
+	var req model.GenerateTeamWeeklyReportRequest
+	if r.Body != nil {
+		if err := readJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+	}
+	if req.WeekStart == "" {
+		req.WeekStart = r.URL.Query().Get("week_start")
+	}
+	weekStart, weekEnd, ok := weeklyRangeFromValue(w, req.WeekStart)
 	if !ok {
 		return
 	}
-
-	body, _ := json.Marshal(map[string]string{
-		"team_id":    *u.TeamID,
-		"leader_id":  u.ID,
-		"week_start": weekStart,
-	})
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.reportGeneratorURL+"/reports/team/weekly/generate", bytes.NewReader(body))
+	sources, err := h.buildTeamWeeklyReportSources(*u.TeamID, weekStart, weekEnd)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	sourceIDs := teamWeeklyPersonalSourceIDs(sources, req.SourcePersonalWeeklyReportIDs)
+	if len(sourceIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source_personal_weekly_report_ids is required"})
+		return
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"team_id":                           *u.TeamID,
+		"leader_id":                         u.ID,
+		"week_start":                        weekStart,
+		"source_personal_weekly_report_ids": sourceIDs,
+	})
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.reportGeneratorURL+"/reports/team/weekly/generate", bytes.NewReader(body))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator request failed: " + err.Error()})
 		return
@@ -1838,13 +1860,67 @@ func (h *ReportHandler) GenerateTeamWeeklyReport(w http.ResponseWriter, r *http.
 		return
 	}
 	var genResp struct {
-		ReportID string `json:"report_id"`
+		ReportMarkdown string `json:"report_markdown"`
 	}
-	if err := json.Unmarshal(respBody, &genResp); err != nil || genResp.ReportID == "" {
+	if err := json.Unmarshal(respBody, &genResp); err != nil || genResp.ReportMarkdown == "" {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "report generator returned invalid response"})
 		return
 	}
-	report, err := h.getTeamWeeklyReportByID(genResp.ReportID)
+	writeJSON(w, http.StatusOK, model.TeamWeeklyReportPreview{
+		ReportMarkdown:                genResp.ReportMarkdown,
+		WeekStart:                     weekStart,
+		WeekEnd:                       weekEnd,
+		SourcePersonalWeeklyReportIDs: sourceIDs,
+	})
+}
+
+func (h *ReportHandler) SaveTeamWeeklyReportCurrent(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "team_leader" || u.TeamID == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can save team weekly reports"})
+		return
+	}
+	var req model.UpdateTeamWeeklyReportRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Content == nil || strings.TrimSpace(*req.Content) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
+		return
+	}
+	weekStart, weekEnd, ok := weeklyRangeFromValue(w, req.WeekStart)
+	if !ok {
+		return
+	}
+	report, err := h.upsertTeamWeeklyReport(*u.TeamID, u.ID, weekStart, weekEnd, *req.Content, req.SourcePersonalWeeklyReportIDs, false)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (h *ReportHandler) SubmitTeamWeeklyReportCurrent(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "team_leader" || u.TeamID == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can submit team weekly reports"})
+		return
+	}
+	var req model.UpdateTeamWeeklyReportRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Content == nil || strings.TrimSpace(*req.Content) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
+		return
+	}
+	weekStart, weekEnd, ok := weeklyRangeFromValue(w, req.WeekStart)
+	if !ok {
+		return
+	}
+	report, err := h.upsertTeamWeeklyReport(*u.TeamID, u.ID, weekStart, weekEnd, *req.Content, req.SourcePersonalWeeklyReportIDs, true)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1931,7 +2007,8 @@ func (h *ReportHandler) ListTeamWeeklyReports(w http.ResponseWriter, r *http.Req
 	query := `
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
-			twr.source_task_ids, twr.submitted_at, twr.created_at, twr.updated_at
+			twr.source_task_ids, twr.source_personal_weekly_report_ids,
+			twr.submitted_at, twr.created_at, twr.updated_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
@@ -2181,95 +2258,144 @@ func (h *ReportHandler) buildTeamWeeklyReportSources(teamID, weekStart, weekEnd 
 		return nil, err
 	}
 	sources := &model.TeamWeeklyReportSources{
-		TeamID:       teamID,
-		TeamName:     teamName,
-		WeekStart:    weekStart,
-		WeekEnd:      weekEnd,
-		DailyReports: []model.WeeklyDailyReportSource{},
-		TeamReports:  []model.WeeklyTeamDailyReportSource{},
-		Tasks:        []model.WeeklyTaskSource{},
+		TeamID:                         teamID,
+		TeamName:                       teamName,
+		WeekStart:                      weekStart,
+		WeekEnd:                        weekEnd,
+		SubmittedPersonalWeeklyReports: []model.TeamPersonalWeeklySource{},
+		MissingPeople:                  []model.TeamWeeklyMissingPerson{},
 	}
 
-	dailyRows, err := h.db.Query(`
-		SELECT dr.id::text, u.id::text, u.name, dr.report_date, dr.content
-		FROM daily_reports dr
-		JOIN users u ON u.id = dr.user_id
-		WHERE u.team_id = $1 AND dr.report_date BETWEEN $2 AND $3
-		ORDER BY dr.report_date DESC, u.name`, teamID, weekStart, weekEnd)
+	rows, err := h.db.Query(`
+		WITH eligible_people AS (
+			SELECT u.id, u.name,
+				CASE WHEN u.role = 'team_leader' THEN 'leader' ELSE 'member' END AS source_role
+			FROM users u
+			WHERE u.team_id = $1 AND u.role IN ('team_leader', 'employee')
+		)
+		SELECT ep.id::text, ep.name, ep.source_role,
+			pwr.id::text, pwr.week_start, pwr.week_end, pwr.submitted_at,
+			COALESCE(pwr.submitted_content, pwr.content, '')
+		FROM eligible_people ep
+		LEFT JOIN personal_weekly_reports pwr
+			ON pwr.user_id = ep.id
+			AND pwr.week_start = $2
+			AND pwr.status = 'submitted'
+			AND pwr.submitted_at IS NOT NULL
+		ORDER BY CASE WHEN ep.source_role = 'leader' THEN 0 ELSE 1 END, ep.name`, teamID, weekStart)
 	if err != nil {
 		return nil, err
 	}
-	defer dailyRows.Close()
-	for dailyRows.Next() {
-		var item model.WeeklyDailyReportSource
-		if err := dailyRows.Scan(&item.ReportID, &item.UserID, &item.UserName, &item.ReportDate, &item.Content); err != nil {
+	defer rows.Close()
+	for rows.Next() {
+		var userID, userName, sourceRole string
+		var reportID, submittedContent sql.NullString
+		var reportWeekStart, reportWeekEnd, submittedAt sql.NullTime
+		if err := rows.Scan(&userID, &userName, &sourceRole, &reportID, &reportWeekStart, &reportWeekEnd, &submittedAt, &submittedContent); err != nil {
 			return nil, err
 		}
-		sources.DailyReports = append(sources.DailyReports, item)
-	}
-	if err := dailyRows.Err(); err != nil {
-		return nil, err
-	}
-	sources.SubmittedDailyCount = len(sources.DailyReports)
-
-	teamRows, err := h.db.Query(`
-		SELECT tr.id::text, tr.team_id::text, t.name, tr.leader_id::text, u.name,
-			tr.report_date, tr.content, tr.submitted_at
-		FROM team_reports tr
-		JOIN teams t ON t.id = tr.team_id
-		JOIN users u ON u.id = tr.leader_id
-		WHERE tr.team_id = $1 AND tr.report_date BETWEEN $2 AND $3
-		ORDER BY tr.report_date DESC`, teamID, weekStart, weekEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer teamRows.Close()
-	for teamRows.Next() {
-		var item model.WeeklyTeamDailyReportSource
-		var submittedAt sql.NullTime
-		if err := teamRows.Scan(&item.ReportID, &item.TeamID, &item.TeamName, &item.LeaderID, &item.LeaderName, &item.ReportDate, &item.Content, &submittedAt); err != nil {
-			return nil, err
+		if reportID.Valid {
+			item := model.TeamPersonalWeeklySource{
+				ReportID:         reportID.String,
+				UserID:           userID,
+				UserName:         userName,
+				SourceRole:       sourceRole,
+				SubmittedAt:      nullTimePtr(submittedAt),
+				SubmittedContent: submittedContent.String,
+			}
+			if reportWeekStart.Valid {
+				item.WeekStart = reportWeekStart.Time.Format("2006-01-02")
+			}
+			if reportWeekEnd.Valid {
+				item.WeekEnd = reportWeekEnd.Time.Format("2006-01-02")
+			}
+			sources.SubmittedPersonalWeeklyReports = append(sources.SubmittedPersonalWeeklyReports, item)
+		} else {
+			sources.MissingPeople = append(sources.MissingPeople, model.TeamWeeklyMissingPerson{
+				UserID:     userID,
+				UserName:   userName,
+				SourceRole: sourceRole,
+			})
 		}
-		item.SubmittedAt = nullTimePtr(submittedAt)
-		sources.TeamReports = append(sources.TeamReports, item)
 	}
-	if err := teamRows.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	sources.TeamReportCount = len(sources.TeamReports)
-
-	taskRows, err := h.db.Query(`
-		SELECT DISTINCT task.id::text, task.title, req.id::text, req.title,
-			task.assignee_id::text, COALESCE(assignee.name, ''), task.status, task.priority, task.due_date
-		FROM tasks task
-		JOIN requirements req ON req.id = task.requirement_id
-		LEFT JOIN users assignee ON assignee.id = task.assignee_id
-		WHERE (assignee.team_id = $1 OR task.creator_tl_id IN (SELECT id FROM users WHERE team_id = $1))
-		  AND (DATE(task.updated_at) BETWEEN $2 AND $3 OR task.status = 'blocked' OR task.priority = 'high')
-		ORDER BY task.status, task.priority DESC, task.title`, teamID, weekStart, weekEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer taskRows.Close()
-	for taskRows.Next() {
-		var item model.WeeklyTaskSource
-		var assigneeID sql.NullString
-		var dueDate sql.NullTime
-		if err := taskRows.Scan(&item.TaskID, &item.TaskTitle, &item.RequirementID, &item.RequirementTitle, &assigneeID, &item.AssigneeName, &item.Status, &item.Priority, &dueDate); err != nil {
-			return nil, err
-		}
-		item.AssigneeID = nullStringPtr(assigneeID)
-		if dueDate.Valid {
-			date := dueDate.Time.Format("2006-01-02")
-			item.DueDate = &date
-		}
-		sources.Tasks = append(sources.Tasks, item)
-	}
-	if err := taskRows.Err(); err != nil {
-		return nil, err
-	}
-	sources.TaskCount = len(sources.Tasks)
+	sources.SubmittedPersonalWeeklyCount = len(sources.SubmittedPersonalWeeklyReports)
+	sources.MissingPeopleCount = len(sources.MissingPeople)
 	return sources, nil
+}
+
+func teamWeeklyPersonalSourceIDs(sources *model.TeamWeeklyReportSources, ids []string) []string {
+	available := map[string]bool{}
+	for _, item := range sources.SubmittedPersonalWeeklyReports {
+		available[item.ReportID] = true
+	}
+	return filterAvailableIDs(uniqueStringsPreserveOrder(ids), available)
+}
+
+func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, weekEnd, content string, sourcePersonalWeeklyIDs []string, submitted bool) (*model.TeamWeeklyReport, error) {
+	sources, err := h.buildTeamWeeklyReportSources(teamID, weekStart, weekEnd)
+	if err != nil {
+		return nil, err
+	}
+	sourceIDs := teamWeeklyPersonalSourceIDs(sources, sourcePersonalWeeklyIDs)
+	if len(sourceIDs) == 0 {
+		return nil, fmt.Errorf("source_personal_weekly_report_ids is required")
+	}
+	sourceDailyIDs := []string{}
+	sourceTeamReportIDs := []string{}
+	sourceTaskIDs := []string{}
+	var reportID string
+	if submitted {
+		err = h.db.QueryRow(`
+			INSERT INTO team_weekly_reports (
+				team_id, leader_id, week_start, content,
+				source_daily_report_ids, source_team_report_ids, source_task_ids,
+				source_personal_weekly_report_ids, submitted_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			ON CONFLICT (team_id, week_start)
+			DO UPDATE SET
+				leader_id = EXCLUDED.leader_id,
+				content = EXCLUDED.content,
+				source_daily_report_ids = EXCLUDED.source_daily_report_ids,
+				source_team_report_ids = EXCLUDED.source_team_report_ids,
+				source_task_ids = EXCLUDED.source_task_ids,
+				source_personal_weekly_report_ids = EXCLUDED.source_personal_weekly_report_ids,
+				submitted_at = now(),
+				updated_at = now()
+			RETURNING id::text`,
+			teamID, leaderID, weekStart, content,
+			pq.Array(sourceDailyIDs), pq.Array(sourceTeamReportIDs), pq.Array(sourceTaskIDs), pq.Array(sourceIDs),
+		).Scan(&reportID)
+	} else {
+		err = h.db.QueryRow(`
+			INSERT INTO team_weekly_reports (
+				team_id, leader_id, week_start, content,
+				source_daily_report_ids, source_team_report_ids, source_task_ids,
+				source_personal_weekly_report_ids, submitted_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL)
+			ON CONFLICT (team_id, week_start)
+			DO UPDATE SET
+				leader_id = EXCLUDED.leader_id,
+				content = EXCLUDED.content,
+				source_daily_report_ids = EXCLUDED.source_daily_report_ids,
+				source_team_report_ids = EXCLUDED.source_team_report_ids,
+				source_task_ids = EXCLUDED.source_task_ids,
+				source_personal_weekly_report_ids = EXCLUDED.source_personal_weekly_report_ids,
+				submitted_at = NULL,
+				updated_at = now()
+			RETURNING id::text`,
+			teamID, leaderID, weekStart, content,
+			pq.Array(sourceDailyIDs), pq.Array(sourceTeamReportIDs), pq.Array(sourceTaskIDs), pq.Array(sourceIDs),
+		).Scan(&reportID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return h.getTeamWeeklyReportByID(reportID)
 }
 
 func (h *ReportHandler) buildDepartmentWeeklyReportSources(weekStart, weekEnd string) (*model.DepartmentWeeklyReportSources, error) {
@@ -2321,46 +2447,8 @@ func (h *ReportHandler) buildPersonalWeeklyReportSources(userID, userName, weekS
 		UserName:     userName,
 		WeekStart:    weekStart,
 		WeekEnd:      weekEnd,
-		Sessions:     []model.WeeklySessionSource{},
 		DailyReports: []model.WeeklyDailyReportSource{},
-		Tasks:        []model.WeeklyTaskSource{},
 	}
-
-	sessionRows, err := h.db.Query(`
-		SELECT s.id::text, s.session_ref, s.agent_type, s.started_at, s.ended_at,
-			COALESCE(s.summary, ''), s.task_id::text, COALESCE(task.title, ''),
-			req.id::text, COALESCE(req.title, ''), COALESCE(tu.total_tokens, 0)
-		FROM sessions s
-		LEFT JOIN tasks task ON task.id = s.task_id
-		LEFT JOIN requirements req ON req.id = task.requirement_id
-		LEFT JOIN (
-			SELECT session_id, SUM(total_tokens) total_tokens
-			FROM token_usage
-			GROUP BY session_id
-		) tu ON tu.session_id = s.id
-		WHERE s.user_id = $1 AND DATE(s.started_at) BETWEEN $2 AND $3
-		ORDER BY s.started_at`, userID, weekStart, weekEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer sessionRows.Close()
-	for sessionRows.Next() {
-		var item model.WeeklySessionSource
-		var taskID, requirementID sql.NullString
-		if err := sessionRows.Scan(
-			&item.SessionID, &item.SessionRef, &item.AgentType, &item.StartedAt, &item.EndedAt,
-			&item.Summary, &taskID, &item.TaskTitle, &requirementID, &item.RequirementTitle, &item.TotalTokens,
-		); err != nil {
-			return nil, err
-		}
-		item.TaskID = nullStringPtr(taskID)
-		item.RequirementID = nullStringPtr(requirementID)
-		sources.Sessions = append(sources.Sessions, item)
-	}
-	if err := sessionRows.Err(); err != nil {
-		return nil, err
-	}
-	sources.SessionCount = len(sources.Sessions)
 
 	dailyRows, err := h.db.Query(`
 		SELECT dr.id::text, dr.user_id::text, u.name, dr.report_date, dr.content
@@ -2384,71 +2472,15 @@ func (h *ReportHandler) buildPersonalWeeklyReportSources(userID, userName, weekS
 	}
 	sources.DailyCount = len(sources.DailyReports)
 
-	taskRows, err := h.db.Query(`
-		SELECT DISTINCT task.id::text, task.title, req.id::text, req.title,
-			task.assignee_id::text, COALESCE(assignee.name, ''), task.status, task.priority, task.due_date
-		FROM tasks task
-		JOIN requirements req ON req.id = task.requirement_id
-		LEFT JOIN users assignee ON assignee.id = task.assignee_id
-		WHERE (task.assignee_id = $1 OR task.creator_tl_id = $1)
-		  AND (DATE(task.updated_at) BETWEEN $2 AND $3 OR task.status = 'blocked' OR task.priority = 'high')
-		ORDER BY task.status, task.priority DESC, task.title`, userID, weekStart, weekEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer taskRows.Close()
-	for taskRows.Next() {
-		var item model.WeeklyTaskSource
-		var assigneeID sql.NullString
-		var dueDate sql.NullTime
-		if err := taskRows.Scan(&item.TaskID, &item.TaskTitle, &item.RequirementID, &item.RequirementTitle, &assigneeID, &item.AssigneeName, &item.Status, &item.Priority, &dueDate); err != nil {
-			return nil, err
-		}
-		item.AssigneeID = nullStringPtr(assigneeID)
-		if dueDate.Valid {
-			date := dueDate.Time.Format("2006-01-02")
-			item.DueDate = &date
-		}
-		sources.Tasks = append(sources.Tasks, item)
-	}
-	if err := taskRows.Err(); err != nil {
-		return nil, err
-	}
-	sources.TaskCount = len(sources.Tasks)
 	return sources, nil
 }
 
-func personalWeeklySourceIDs(sources *model.PersonalWeeklyReportSources, sessionIDs, dailyIDs, taskIDs []string) ([]string, []string, []string) {
-	availableSessions := map[string]bool{}
-	for _, item := range sources.Sessions {
-		availableSessions[item.SessionID] = true
-	}
+func personalWeeklyDailySourceIDs(sources *model.PersonalWeeklyReportSources, dailyIDs []string) []string {
 	availableDaily := map[string]bool{}
 	for _, item := range sources.DailyReports {
 		availableDaily[item.ReportID] = true
 	}
-	availableTasks := map[string]bool{}
-	for _, item := range sources.Tasks {
-		availableTasks[item.TaskID] = true
-	}
-	if len(sessionIDs) == 0 {
-		for _, item := range sources.Sessions {
-			sessionIDs = append(sessionIDs, item.SessionID)
-		}
-	}
-	if len(dailyIDs) == 0 {
-		for _, item := range sources.DailyReports {
-			dailyIDs = append(dailyIDs, item.ReportID)
-		}
-	}
-	if len(taskIDs) == 0 {
-		for _, item := range sources.Tasks {
-			taskIDs = append(taskIDs, item.TaskID)
-		}
-	}
-	return filterAvailableIDs(uniqueStringsPreserveOrder(sessionIDs), availableSessions),
-		filterAvailableIDs(uniqueStringsPreserveOrder(dailyIDs), availableDaily),
-		filterAvailableIDs(uniqueStringsPreserveOrder(taskIDs), availableTasks)
+	return filterAvailableIDs(uniqueStringsPreserveOrder(dailyIDs), availableDaily)
 }
 
 func filterAvailableIDs(ids []string, available map[string]bool) []string {
@@ -2462,9 +2494,9 @@ func filterAvailableIDs(ids []string, available map[string]bool) []string {
 }
 
 func (h *ReportHandler) upsertPersonalWeeklyReport(userID, weekStart, weekEnd string, req model.SavePersonalWeeklyReportRequest, status string, submittedTo *string) (*model.PersonalWeeklyReport, error) {
-	sourceSessionIDs := uniqueStringsPreserveOrder(req.SourceSessionIDs)
+	sourceSessionIDs := []string{}
 	sourceDailyIDs := uniqueStringsPreserveOrder(req.SourceDailyReportIDs)
-	sourceTaskIDs := uniqueStringsPreserveOrder(req.SourceTaskIDs)
+	sourceTaskIDs := []string{}
 	var reportID string
 	if status == "submitted" {
 		err := h.db.QueryRow(`
@@ -2553,7 +2585,8 @@ func (h *ReportHandler) getTeamWeeklyReportByTeamWeek(teamID, weekStart string) 
 	row := h.db.QueryRow(`
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
-			twr.source_task_ids, twr.submitted_at, twr.created_at, twr.updated_at
+			twr.source_task_ids, twr.source_personal_weekly_report_ids,
+			twr.submitted_at, twr.created_at, twr.updated_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
@@ -2566,7 +2599,8 @@ func (h *ReportHandler) getTeamWeeklyReportByID(id string) (*model.TeamWeeklyRep
 	row := h.db.QueryRow(`
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
-			twr.source_task_ids, twr.submitted_at, twr.created_at, twr.updated_at
+			twr.source_task_ids, twr.source_personal_weekly_report_ids,
+			twr.submitted_at, twr.created_at, twr.updated_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
@@ -2623,10 +2657,10 @@ func scanPersonalWeeklyReport(row scanner) (model.PersonalWeeklyReport, error) {
 
 func scanTeamWeeklyReport(row scanner) (model.TeamWeeklyReport, error) {
 	var report model.TeamWeeklyReport
-	var dailyIDsStr, teamIDsStr, taskIDsStr string
+	var dailyIDsStr, teamIDsStr, taskIDsStr, personalWeeklyIDsStr string
 	var submittedAt sql.NullTime
 	err := row.Scan(&report.ID, &report.TeamID, &report.TeamName, &report.LeaderID, &report.LeaderName,
-		&report.WeekStart, &report.Content, &dailyIDsStr, &teamIDsStr, &taskIDsStr,
+		&report.WeekStart, &report.Content, &dailyIDsStr, &teamIDsStr, &taskIDsStr, &personalWeeklyIDsStr,
 		&submittedAt, &report.CreatedAt, &report.UpdatedAt)
 	if err != nil {
 		return report, err
@@ -2634,6 +2668,7 @@ func scanTeamWeeklyReport(row scanner) (model.TeamWeeklyReport, error) {
 	report.SourceDailyReportIDs = parseUUIDArray(dailyIDsStr)
 	report.SourceTeamReportIDs = parseUUIDArray(teamIDsStr)
 	report.SourceTaskIDs = parseUUIDArray(taskIDsStr)
+	report.SourcePersonalWeeklyReportIDs = parseUUIDArray(personalWeeklyIDsStr)
 	report.SubmittedAt = nullTimePtr(submittedAt)
 	return report, nil
 }

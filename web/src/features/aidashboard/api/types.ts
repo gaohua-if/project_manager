@@ -442,12 +442,8 @@ export interface PersonalWeeklyReportSources {
   user_name: string;
   week_start: string;
   week_end: string;
-  sessions: WeeklySessionSource[];
   daily_reports: WeeklyDailyReportSource[];
-  tasks: WeeklyTaskSource[];
-  session_count: number;
   daily_count: number;
-  task_count: number;
 }
 
 export interface PersonalWeeklyReport {
@@ -497,9 +493,7 @@ export interface PersonalWeeklyReportPreview {
   report_markdown: string;
   week_start: string;
   week_end: string;
-  source_session_ids: string[];
   source_daily_report_ids: string[];
-  source_task_ids: string[];
 }
 
 export interface TeamWeeklyReportSources {
@@ -507,12 +501,33 @@ export interface TeamWeeklyReportSources {
   team_name: string;
   week_start: string;
   week_end: string;
-  daily_reports: WeeklyDailyReportSource[];
-  team_reports: WeeklyTeamDailyReportSource[];
-  tasks: WeeklyTaskSource[];
-  submitted_daily_count: number;
-  team_report_count: number;
-  task_count: number;
+  submitted_personal_weekly_reports: TeamPersonalWeeklySource[];
+  missing_people: TeamWeeklyMissingPerson[];
+  submitted_personal_weekly_count: number;
+  missing_people_count: number;
+  daily_reports?: WeeklyDailyReportSource[];
+  team_reports?: WeeklyTeamDailyReportSource[];
+  tasks?: WeeklyTaskSource[];
+  submitted_daily_count?: number;
+  team_report_count?: number;
+  task_count?: number;
+}
+
+export interface TeamPersonalWeeklySource {
+  report_id: string;
+  user_id: string;
+  user_name: string;
+  source_role: "leader" | "member";
+  week_start: string;
+  week_end: string;
+  submitted_at?: string;
+  submitted_content: string;
+}
+
+export interface TeamWeeklyMissingPerson {
+  user_id: string;
+  user_name: string;
+  source_role: "leader" | "member";
 }
 
 export interface TeamWeeklyReport {
@@ -526,9 +541,17 @@ export interface TeamWeeklyReport {
   source_daily_report_ids: string[];
   source_team_report_ids: string[];
   source_task_ids: string[];
+  source_personal_weekly_report_ids: string[];
   submitted_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TeamWeeklyReportPreview {
+  report_markdown: string;
+  week_start: string;
+  week_end: string;
+  source_personal_weekly_report_ids: string[];
 }
 
 export interface DepartmentTeamWeeklyReportSource {
