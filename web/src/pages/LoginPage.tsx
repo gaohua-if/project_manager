@@ -1,48 +1,113 @@
-import { LockOutlined, UserOutlined } from "@ant-design/icons";
+import {
+  ApiOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  LockOutlined,
+  SafetyCertificateOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Spin } from "antd";
 import { useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { runtimeConfig } from "@/config/runtimeConfig";
 import { useAuth } from "@/shared/auth/authContext";
 
 import "./LoginPage.css";
 
-function resolveSafeReturnPath(candidate: string | null | undefined) {
-  if (!candidate?.startsWith("/") || candidate.startsWith("//") || candidate.startsWith("/login")) {
-    return "/";
-  }
-  return candidate;
-}
+const DASHBOARD_PATH = "/dashboard";
+
+const accessSignals = [
+  { label: "身份验证", status: "Encrypted", tone: "cyan" },
+  { label: "权限校验", status: "Scoped", tone: "amber" },
+  { label: "安全连接", status: "Private", tone: "green" },
+];
+
+const operationLines = [
+  "Secure channel established",
+  "Identity policy prepared",
+  "Access scope verified",
+  "Workspace handoff ready",
+];
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
   const { status, isAuthenticated, login } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const fromLocation = (location.state as { from?: { pathname?: string; search?: string } } | null)
-    ?.from;
-  const requestedPath = fromLocation
-    ? `${fromLocation.pathname ?? "/"}${fromLocation.search ?? ""}`
-    : searchParams.get("next");
-  const from = resolveSafeReturnPath(requestedPath);
 
   if (isAuthenticated) {
-    return <Navigate to={from} replace />;
+    return <Navigate to={DASHBOARD_PATH} replace />;
   }
 
   return (
     <main className="login-page">
-      <section className="login-page__shell" aria-labelledby="login-title">
-        <Card className="login-page__card">
-          <div className="login-page__title">
-            <h2>{runtimeConfig.appTitle}</h2>
-            <p>使用工号登录</p>
+      <div className="login-page__background" aria-hidden="true">
+        <span className="login-page__beam login-page__beam--one" />
+        <span className="login-page__beam login-page__beam--two" />
+        <span className="login-page__mesh" />
+      </div>
+
+      <section className="login-page__shell login-page__shell--login" aria-labelledby="login-title">
+        <div className="login-page__intro">
+          <div className="login-page__brand-row">
+            <span className="login-page__brand-mark">AI</span>
+            <span>
+              <strong>{runtimeConfig.appTitle}</strong>
+              <em>AI delivery command center</em>
+            </span>
           </div>
 
-          {from !== "/" ? <div className="login-page__return-tip">登录后返回：{from}</div> : null}
+          <div className="login-page__hero">
+            <p className="login-page__eyebrow">Aida Ops Console</p>
+            <h1>进入 Aida 内部工作台</h1>
+            <p>
+              使用授权账号访问团队协作环境，保持入口清晰、安全、专注。
+            </p>
+          </div>
+
+          <div className="login-page__signal-grid" aria-label="访问状态">
+            {accessSignals.map((item) => (
+              <article key={item.label} className={`login-page__signal login-page__signal--${item.tone}`}>
+                <span>{item.label}</span>
+                <strong>{item.status}</strong>
+              </article>
+            ))}
+          </div>
+
+          <div className="login-page__terminal" aria-label="认证流程">
+            <div className="login-page__terminal-head">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="login-page__terminal-body">
+              {operationLines.map((line, index) => (
+                <p key={line} style={{ animationDelay: `${index * 120}ms` }}>
+                  <CheckCircleOutlined />
+                  <span>{line}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Card className="login-page__card">
+          <div className="login-page__access-strip" aria-hidden="true">
+            <span className="is-active" />
+            <span />
+            <span />
+            <span />
+          </div>
+
+          <div className="login-page__title">
+            <span className="login-page__secure-badge">
+              <SafetyCertificateOutlined />
+              内部系统
+            </span>
+            <h2 id="login-title">登录工作台</h2>
+            <p>使用工号和密码进入 Aida 控制台。</p>
+          </div>
 
           <Form
             layout="vertical"
@@ -59,9 +124,9 @@ export function LoginPage() {
               try {
                 await login({
                   employee_id: values.employee_id.trim(),
-                  password: values.password
+                  password: values.password,
                 });
-                navigate(from, { replace: true });
+                navigate(DASHBOARD_PATH, { replace: true });
               } catch (error) {
                 setLoginError(error instanceof Error ? error.message : "登录失败，请稍后重试");
               } finally {
@@ -74,7 +139,12 @@ export function LoginPage() {
               name="employee_id"
               rules={[{ required: true, message: "请输入工号" }]}
             >
-              <Input prefix={<UserOutlined />} autoComplete="username" placeholder="如 admin" />
+              <Input
+                prefix={<UserOutlined />}
+                autoComplete="username"
+                placeholder="例如 admin"
+                size="large"
+              />
             </Form.Item>
             <Form.Item
               label="密码"
@@ -85,19 +155,29 @@ export function LoginPage() {
                 prefix={<LockOutlined />}
                 autoComplete="current-password"
                 placeholder="请输入密码"
+                size="large"
               />
             </Form.Item>
+
             {loginError ? (
               <Alert type="error" showIcon message={loginError} className="login-page__error" />
             ) : null}
-            <Button type="primary" htmlType="submit" block loading={submitting}>
+
+            <Button type="primary" htmlType="submit" block loading={submitting} size="large">
               登录
             </Button>
           </Form>
 
-          <div style={{ marginTop: 16, textAlign: "center", fontSize: 13 }}>
-            没有账号？
-            <Link to="/register">注册</Link>
+          <div className="login-page__card-footer">
+            <span>
+              <ApiOutlined />
+              私有访问
+            </span>
+            <span>
+              <ClockCircleOutlined />
+              安全连接
+            </span>
+            <Link to="/register">注册账号</Link>
           </div>
 
           {status === "initializing" && !submitting ? (

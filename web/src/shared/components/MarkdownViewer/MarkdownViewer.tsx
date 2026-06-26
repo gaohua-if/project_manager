@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import Viewer from "@toast-ui/editor/viewer";
-import "@toast-ui/editor/dist/toastui-editor-viewer.css";
+import "@toast-ui/editor/toastui-editor-viewer.css";
 
 import "./MarkdownViewer.css";
 
