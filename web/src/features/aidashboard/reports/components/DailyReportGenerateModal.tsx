@@ -402,6 +402,14 @@ export function DailyReportGenerateModal({
 
   const runGenerate = () => {
     if (scope === "personal") {
+      if (effectiveSelectedSessionIds.length === 0) {
+        setPersonalDraftSessionIds([]);
+        setDraftMarkdown("");
+        setDraftTouched(true);
+        setDraftError(null);
+        setStep("editor");
+        return;
+      }
       personalDraftMutation.mutate({
         report_date: date,
         session_ids: effectiveSelectedSessionIds,
@@ -447,6 +455,14 @@ export function DailyReportGenerateModal({
     onClose();
   };
 
+  const saveEditor = (finalAction: boolean) => {
+    if (!editorMarkdown.trim()) {
+      message.warning("请先填写日报内容");
+      return;
+    }
+    saveMutation.mutate({ finalAction });
+  };
+
   const footer =
     lookupLoading ? null : effectiveStep === "editor" ? (
       <Space>
@@ -455,7 +471,7 @@ export function DailyReportGenerateModal({
         </Button>
         {scope === "department" ? null : (
           <Button
-            onClick={() => saveMutation.mutate({ finalAction: false })}
+            onClick={() => saveEditor(false)}
             loading={saveMutation.isPending}
             disabled={editorLoading}
           >
@@ -466,7 +482,7 @@ export function DailyReportGenerateModal({
           <Button
             type="primary"
             icon={<FileDoneOutlined />}
-            onClick={() => saveMutation.mutate({ finalAction: true })}
+            onClick={() => saveEditor(true)}
             loading={saveMutation.isPending}
             disabled={editorLoading}
           >
@@ -483,14 +499,16 @@ export function DailyReportGenerateModal({
           type="primary"
           loading={isGenerating}
           disabled={
-            (scope === "personal" && (sessionsQuery.isLoading || effectiveSelectedSessionIds.length === 0)) ||
+            (scope === "personal" && sessionsQuery.isLoading) ||
             (scope === "team" && (teamSourcesQuery.data?.submitted_count ?? teamSourcesQuery.data?.submitted ?? 0) === 0) ||
             (scope === "department" && (departmentSourcesQuery.data?.submitted_team_count ?? 0) === 0)
           }
           onClick={handleGenerate}
         >
           {scope === "personal"
-            ? "生成日报"
+            ? effectiveSelectedSessionIds.length > 0
+              ? "生成日报草稿"
+              : "手写日报"
             : scope === "team"
               ? "基于已发送成员日报生成组日报"
               : "基于已发送小组日报生成部门日报"}
@@ -516,11 +534,13 @@ export function DailyReportGenerateModal({
         {!lookupLoading && effectiveStep === "sessions" ? (
           <>
             <div className="console-session-modal__section">
-              <strong>选择生成来源</strong>
+              <strong>选择生成来源（可选）</strong>
               <span>
                 {sessionsQuery.isLoading
                   ? "正在加载已上传 session。"
-                  : `已找到 ${sessionOptions.length} 个 session，默认勾选全部记录。`}
+                  : sessionOptions.length > 0
+                    ? `已找到 ${sessionOptions.length} 个 session，默认勾选全部记录；也可以取消选择后手写日报。`
+                    : "当天暂无已上传 session，可直接手写日报。"}
               </span>
             </div>
             {sessionsQuery.isError ? <Alert type="error" showIcon message="Session 加载失败" /> : null}
@@ -690,7 +710,7 @@ function TeamSourceReview({
                   <div className="console-team-source__row">
                     <div className="console-team-source__member">
                       <strong title={member.user_name}>{member.user_name}</strong>
-                      <Tag color="blue" bordered={false}>已发送</Tag>
+                      <Tag color="blue" variant="filled">已发送</Tag>
                     </div>
                     <div className="console-team-source__actions">
                       <time>{member.submitted_at ? formatDateTime(member.submitted_at, "HH:mm") : "-"}</time>

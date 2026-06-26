@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
@@ -31,7 +31,7 @@ const { Text } = Typography;
 function DependencyList({ deps, empty }: { deps: MockTaskDependency[]; empty: string }) {
   if (!deps.length) return <Text type="secondary">{empty}</Text>;
   return (
-    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={6} style={{ width: "100%" }}>
       {deps.map((dependency) => (
         <Space key={dependency.task_id} size={8}>
           <TaskStatusTag status={dependency.status} />
@@ -221,7 +221,7 @@ export function TaskDetailPage() {
                 <Descriptions.Item label="截止日期">{task.due_date || "-"}</Descriptions.Item>
                 <Descriptions.Item label="任务验收标准">
                   {task.acceptance_criteria.length ? (
-                    <Space direction="vertical" size={4}>
+                    <Space orientation="vertical" size={4}>
                       {task.acceptance_criteria.map((criterion, index) => (
                         <Space key={`${index}-${criterion}`} align="start">
                           <Tag>标准 {index + 1}</Tag>
@@ -243,7 +243,7 @@ export function TaskDetailPage() {
           </Col>
           <Col xs={24} lg={12}>
             <Card size="small" title="依赖阻塞">
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                 <div>
                   <Text type="secondary" className="aidashboard-task-detail__label">
                     依赖于
@@ -265,7 +265,7 @@ export function TaskDetailPage() {
 
         <Card size="small" title="Token 来源">
           {linkedSources.length ? (
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
               {linkedSources.map((source) => (
                 <div key={source.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", background: "#f8fafc", border: "1px solid #e5eaf3", borderRadius: 10 }}>
                   <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
@@ -295,14 +295,16 @@ export function TaskDetailPage() {
               disabled={!canUpdateProgress}
               onChange={setProgressOverride}
             />
-            <InputNumber
-              min={0}
-              max={100}
-              value={progress}
-              disabled={!canUpdateProgress}
-              addonAfter="%"
-              onChange={(value) => setProgressOverride(value ?? 0)}
-            />
+            <Space.Compact>
+              <InputNumber
+                min={0}
+                max={100}
+                value={progress}
+                disabled={!canUpdateProgress}
+                onChange={(value) => setProgressOverride(value ?? 0)}
+              />
+              <Button disabled>%</Button>
+            </Space.Compact>
             <Button
               type="primary"
               loading={progressMutation.isPending}
@@ -317,3 +319,4 @@ export function TaskDetailPage() {
     </PagePanel>
   );
 }
+

@@ -26,7 +26,7 @@ export function MainLayout({ children }: PropsWithChildren) {
         <Sidebar />
         <Drawer
           className="main-layout__mobile-drawer"
-          width={280}
+          size={280}
           placement="left"
           open={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}

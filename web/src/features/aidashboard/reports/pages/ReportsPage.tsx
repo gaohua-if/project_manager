@@ -1,4 +1,4 @@
-import { RobotOutlined } from "@ant-design/icons";
+﻿import { RobotOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -477,7 +477,7 @@ export function PersonalDailyReportDetailPage() {
       ) : !report ? (
         <Card loading={reportQuery.isLoading} />
       ) : (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
@@ -568,7 +568,7 @@ export function TeamDailyReportDetailPage() {
       ) : !report ? (
         <Card loading={reportQuery.isLoading} />
       ) : (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
@@ -669,7 +669,7 @@ function TeamSources({ sources }: { sources?: TeamReportSources }) {
     }
   ];
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <Card>
         <Space size="large" wrap>
           <Text>成员数：{sources.members.length}</Text>
@@ -730,7 +730,7 @@ export function DepartmentDailyReportDetailPage() {
       ) : !report ? (
         <Card loading={reportQuery.isLoading} />
       ) : (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
@@ -839,7 +839,7 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
     }
   ];
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <Card>
         <Space size="large" wrap>
           <Text>小组总数：{sources.total_team_count}</Text>
@@ -865,3 +865,4 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
     </Space>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
@@ -159,7 +159,7 @@ export function SessionsPage() {
         </Space>
       }
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={16} style={{ width: "100%" }}>
         {sessionsQuery.isError ? (
           <Alert
             type="error"
@@ -202,7 +202,7 @@ export function SessionsPage() {
               title: "Session",
               key: "session",
               render: (_: unknown, s) => (
-                <Space direction="vertical" size={0}>
+                <Space orientation="vertical" size={0}>
                   <Text code style={{ fontSize: 11 }}>
                     {s.session_ref.slice(0, 12)}
                   </Text>
@@ -330,3 +330,4 @@ export function SessionsPage() {
     </PagePanel>
   );
 }
+

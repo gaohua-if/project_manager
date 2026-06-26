@@ -1,4 +1,4 @@
-import { PlusOutlined } from "@ant-design/icons";
+﻿import { PlusOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Card, Empty, Result, Space, Tag, Typography } from "antd";
 import type { TableProps } from "antd";
@@ -207,7 +207,7 @@ export function RequirementDetailPage() {
 
         <Card title={`需求验收标准 (${requirement.acceptance_criteria.length})`}>
           {requirement.acceptance_criteria.length ? (
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
               {requirement.acceptance_criteria.map((criterion, index) => (
                 <Space key={criterion} align="start">
                   <Tag color="blue">标准 {index + 1}</Tag>
@@ -257,3 +257,4 @@ export function RequirementDetailPage() {
     </PagePanel>
   );
 }
+

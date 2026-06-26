@@ -90,7 +90,7 @@ import {
   DailyReportGenerateModal,
   type DailyGenerateScope
 } from "../reports/components/DailyReportGenerateModal";
-import { PersonalWeeklyReportsView } from "../reports/pages/WeeklyReportsPage";
+import { PersonalWeeklyReportModal } from "../reports/pages/WeeklyReportsPage";
 
 import "./console-dashboard.css";
 
@@ -1629,6 +1629,7 @@ export function DashboardPage() {
               variant="personal"
               onOpen={openReportModal}
               onViewReports={(scope) => navigate(`/reports/daily?tab=${scope}`)}
+              onViewWeeklyReports={() => navigate("/reports/weekly")}
             />
           </Col>
           <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
@@ -1664,22 +1665,18 @@ export function DashboardPage() {
         />
       ) : null}
 
-      <Modal
-        className="console-report-workflow-modal"
-        title="我的周报"
+      <PersonalWeeklyReportModal
         open={weeklyMineOpen}
-        width={980}
-        footer={null}
-        onCancel={() => setWeeklyMineOpen(false)}
-        destroyOnHidden
-      >
-        <PersonalWeeklyReportsView
-          key={`dashboard-mine-${weekStart}`}
-          weekStart={weekStart}
-          weekEnd={weekEnd}
-          weekPicker={<span />}
-        />
-      </Modal>
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        onClose={() => setWeeklyMineOpen(false)}
+        onDone={() => {
+          void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["reports", "weekly", "mine", "dashboard-current", currentUserId, weekStart]
+          });
+        }}
+      />
 
       <Modal
         className="console-report-workflow-modal"
@@ -1784,7 +1781,8 @@ function ReportSection({
   coverage,
   variant,
   onOpen,
-  onViewReports
+  onViewReports,
+  onViewWeeklyReports
 }: {
   title: string;
   icon: ReactNode;
@@ -1794,6 +1792,7 @@ function ReportSection({
   variant: "personal" | "summary";
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
   onViewReports: (scope: ReportScope) => void;
+  onViewWeeklyReports?: () => void;
 }) {
   if (variant === "personal") {
     const dailyReport = reports.find((report) => report.kind === "personal_daily") ?? reports[0];
@@ -1801,39 +1800,32 @@ function ReportSection({
     const summaryDailyReport = summaryReports.find(
       (report) => report.kind === "team_daily" || report.kind === "department_daily"
     );
-    const summaryWeeklyReport = summaryReports.find(
-      (report) => report.kind === "team_weekly" || report.kind === "department_weekly"
-    );
-
     return (
       <div className="console-panel console-panel--daily">
         <PanelHeader icon={icon} title={title} />
-        <div className="console-report-status-card">
-          <ReportTaskRow
-            label="我的日报"
-            report={dailyReport}
-            description={getDailyReportCopy(dailyReport)}
-            onOpen={onOpen}
-          />
-          {weeklyReport ? (
+        <div className="console-report-status-card console-report-status-card--personal">
+          <div className="console-report-task-group">
             <ReportTaskRow
-              label="我的周报"
-              report={weeklyReport}
-              description={getPersonalWeeklyReportCopy(weeklyReport)}
+              label="我的日报"
+              report={dailyReport}
+              description={getDailyReportCopy(dailyReport)}
               onOpen={onOpen}
             />
-          ) : null}
-          {summaryDailyReport ? (
-            <ReportTaskRow
-              label={getSummaryReportLabel(summaryDailyReport)}
-              report={summaryDailyReport}
-              description={getSummaryDailyReportCopy(summaryDailyReport)}
-              meta={coverage ? getCoverageSummary(summaryDailyReport, coverage) : undefined}
-              emphasized
-              onOpen={onOpen}
-            />
-          ) : null}
-          <div className="console-report-shortcuts" aria-label="报告入口">
+            {summaryDailyReport ? (
+              <ReportSummaryInlineRow
+                report={summaryDailyReport}
+                meta={coverage ? getCoverageSummary(summaryDailyReport, coverage) : undefined}
+                onOpen={onOpen}
+              />
+            ) : null}
+            {weeklyReport ? (
+              <ReportWeeklyInlineRow
+                report={weeklyReport}
+                onOpen={onOpen}
+              />
+            ) : null}
+          </div>
+          <div className="console-report-shortcuts console-report-shortcuts--list" aria-label="报告入口">
             <button
               type="button"
               className="console-report-shortcut"
@@ -1843,27 +1835,23 @@ function ReportSection({
                 <FileTextOutlined />
                 <strong>日报记录</strong>
               </span>
-              <em>确认与归档记录</em>
               <RightOutlined />
             </button>
-            {summaryDailyReport ? (
-              <button
-                type="button"
-                className="console-report-shortcut"
-                onClick={() => onViewReports(summaryDailyReport.scope)}
-              >
-                <span>
-                  <FileDoneOutlined />
-                  <strong>{getSummaryRecordLabel(summaryDailyReport)}</strong>
-                </span>
-                <em>
-                  {summaryWeeklyReport
-                    ? getSummaryWeeklyRecordCopy(summaryWeeklyReport)
-                    : "汇总与历史报告"}
-                </em>
-                <RightOutlined />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="console-report-shortcut"
+              onClick={() =>
+                onViewWeeklyReports
+                  ? onViewWeeklyReports()
+                  : onViewReports(summaryDailyReport?.scope ?? "personal")
+              }
+            >
+              <span>
+                <FileDoneOutlined />
+                <strong>周报记录</strong>
+              </span>
+              <RightOutlined />
+            </button>
           </div>
         </div>
       </div>
@@ -1886,6 +1874,53 @@ function ReportSection({
         ))}
       </div>
     </div>
+  );
+}
+
+function ReportSummaryInlineRow({
+  report,
+  meta,
+  onOpen
+}: {
+  report: ReportItem;
+  meta?: string;
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void;
+}) {
+  return (
+    <section className="console-report-summary-inline">
+      <div className="console-report-summary-inline__main">
+        <Space size={8} wrap>
+          <strong>{getSummaryReportLabel(report)}</strong>
+          <ReportStatusTag status={report.status} />
+        </Space>
+        {meta ? <span>{meta}</span> : null}
+      </div>
+      <Button type="link" onClick={() => onOpen(report, getGenerateStepForReport(report))}>
+        {getReportButtonText(report)} <RightOutlined />
+      </Button>
+    </section>
+  );
+}
+
+function ReportWeeklyInlineRow({
+  report,
+  onOpen
+}: {
+  report: ReportItem;
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void;
+}) {
+  return (
+    <section className="console-report-weekly-inline">
+      <div className="console-report-weekly-inline__main">
+        <Space size={8} wrap>
+          <strong>本周周报</strong>
+          <span>{getPersonalWeeklyInlineCopy(report)}</span>
+        </Space>
+      </div>
+      <Button type="link" onClick={() => onOpen(report, getGenerateStepForReport(report))}>
+        生成个人周报 <RightOutlined />
+      </Button>
+    </section>
   );
 }
 
@@ -1932,11 +1967,7 @@ function renderReportActions(
         icon={<FileDoneOutlined />}
         onClick={() => onOpen(report, getGenerateStepForReport(report))}
       >
-        {report.scope === "team"
-          ? "查看并生成组日报"
-          : report.scope === "department"
-            ? "查看并生成部门日报"
-            : "查看并生成"}
+        {getReportButtonText(report)}
       </Button>
     );
   }
@@ -1952,7 +1983,7 @@ function renderReportActions(
         icon={<FileDoneOutlined />}
         onClick={() => onOpen(report, getGenerateStepForReport(report))}
       >
-        查看并生成
+        {getReportButtonText(report)}
       </Button>
     );
   }
@@ -1966,9 +1997,7 @@ function renderReportActions(
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          {report.kind === "personal_daily"
-            ? "查看并编辑日报"
-            : `编辑${getReportActionNoun(report)}`}
+          {getReportButtonText(report)}
         </Button>
       </>
     );
@@ -1976,11 +2005,11 @@ function renderReportActions(
 
   if (report.status === "已归档") {
     return (
-      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        编辑{getReportActionNoun(report)}
-      </Button>
-    );
-  }
+    <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
+      {getReportButtonText(report)}
+    </Button>
+  );
+}
 
   return (
     <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
@@ -2004,12 +2033,7 @@ function renderPrimaryReportAction(
     );
   }
 
-  if (
-    report.status === "草稿待确认" ||
-    report.status === "已保存" ||
-    report.status === "已发送" ||
-    report.status === "已保存，未发送最新修改"
-  ) {
+  if (report.status === "草稿待确认") {
     return (
       <Button
         className="console-report-primary-action console-report-primary-action--confirm"
@@ -2017,11 +2041,35 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        {report.kind === "personal_daily"
-          ? "查看并编辑日报"
-          : report.scope === "department"
-            ? "编辑部门日报"
-            : "编辑组日报"}
+        {getReportButtonText(report)}
+      </Button>
+    );
+  }
+
+  if (report.status === "已保存" || report.status === "已保存，未发送最新修改") {
+    return (
+      <Button
+        className={`console-report-primary-action ${
+          report.status === "已保存，未发送最新修改"
+            ? "console-report-primary-action--edited"
+            : "console-report-primary-action--saved"
+        }`}
+        icon={<EditOutlined />}
+        onClick={() => onOpen(report, "editor")}
+      >
+        {getReportButtonText(report)}
+      </Button>
+    );
+  }
+
+  if (report.status === "已发送") {
+    return (
+      <Button
+        className="console-report-primary-action console-report-primary-action--quiet"
+        icon={<EditOutlined />}
+        onClick={() => onOpen(report, "editor")}
+      >
+        {getReportButtonText(report)}
       </Button>
     );
   }
@@ -2033,7 +2081,7 @@ function renderPrimaryReportAction(
         icon={<EditOutlined />}
         onClick={() => onOpen(report, "editor")}
       >
-        {report.scope === "department" ? "编辑部门日报" : `编辑${getReportActionNoun(report)}`}
+        {getReportButtonText(report)}
       </Button>
     );
   }
@@ -2049,13 +2097,23 @@ function renderPrimaryReportAction(
       icon={<FileDoneOutlined />}
       onClick={() => onOpen(report, getGenerateStepForReport(report))}
     >
-      {report.scope === "department"
-        ? "查看并生成部门日报"
-        : report.status === "生成失败"
-          ? `查看并生成${getReportActionNoun(report)}`
-          : `查看并生成${getReportActionNoun(report)}`}
+      {getReportButtonText(report)}
     </Button>
   );
+}
+
+function getReportButtonText(report: ReportItem) {
+  const noun = getReportActionNoun(report);
+
+  if (report.status === "待生成") return `生成${noun}`;
+  if (report.status === "生成失败") return "重新生成";
+  if (report.status === "草稿待确认") return `确认${noun}`;
+  if (report.status === "已保存，未发送最新修改") return "继续编辑";
+  if (report.status === "已保存") return `编辑${noun}`;
+  if (report.status === "已发送") return `查看${noun}`;
+  if (report.status === "已归档") return `查看${noun}`;
+
+  return `查看${noun}`;
 }
 
 function getReportActionNoun(report: ReportItem) {
@@ -2099,64 +2157,12 @@ function getSummaryReportLabel(report: ReportItem) {
   return report.scope === "department" ? "部门日报" : "组日报";
 }
 
-function getPersonalWeeklyReportCopy(report: ReportItem) {
-  if (report.status === "已发送") {
-    return "本周周报已发送给上级，可继续打开修改并重新发送。";
-  }
-
-  if (report.status === "已保存") {
-    return "本周周报已保存，尚未发送给上级。";
-  }
-
-  if (report.status === "生成中") {
-    return "正在根据已选择的本周日报生成周报。";
-  }
-
-  if (report.status === "生成失败") {
-    return "本周周报生成失败，请重新选择日报生成。";
-  }
-
-  return "选择本周日报，生成可确认的个人周报。";
-}
-
-function getSummaryRecordLabel(report: ReportItem) {
-  return report.scope === "department" ? "部门日报记录" : "组日报记录";
-}
-
-function getSummaryDailyReportCopy(report: ReportItem) {
-  if (report.status === "草稿待确认") {
-    return report.scope === "department"
-      ? "部门日报已生成，内容基于已发送的小组日报。"
-      : `${getReportActionNoun(report)}已生成，可继续编辑后保存或发送。`;
-  }
-
-  if (report.status === "已归档") {
-    return `${getReportActionNoun(report)}已归档，可回看按组来源和汇总内容。`;
-  }
-
-  if (report.status === "已发送") {
-    return `${getReportActionNoun(report)}已发送给总监，可继续编辑并重新发送。`;
-  }
-
-  if (report.status === "已保存，未发送最新修改") {
-    return `${getReportActionNoun(report)}已保存，最新修改尚未发送给总监。`;
-  }
-
-  if (report.status === "已保存") {
-    return `${getReportActionNoun(report)}已保存，尚未发送给总监。`;
-  }
-
-  if (report.status === "生成中") {
-    return `正在汇总成员报告、任务风险和阻塞情况。`;
-  }
-
-  if (report.status === "生成失败") {
-    return `${getReportActionNoun(report)}生成失败，请根据发送覆盖情况重新生成。`;
-  }
-
-  return report.scope === "department"
-    ? "先查看各小组已发送日报和未发送小组，再生成部门日报。"
-    : "查看组内成员日报发送情况后生成组日报。";
+function getPersonalWeeklyInlineCopy(report: ReportItem) {
+  if (report.status === "已发送") return "已发送";
+  if (report.status === "已保存") return "已保存";
+  if (report.status === "生成中") return "生成中";
+  if (report.status === "生成失败") return "生成失败";
+  return `待生成 · 已收集 ${report.sessionCount} 篇日报`;
 }
 
 function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
@@ -2165,10 +2171,6 @@ function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
   }
 
   return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 人未发送`;
-}
-
-function getSummaryWeeklyRecordCopy(report: ReportItem) {
-  return report.scope === "department" ? "部门汇总与历史报告" : "组内汇总与历史组报";
 }
 
 function getInitialReportModalStep(report: ReportItem): ReportModalStep {
@@ -3411,7 +3413,7 @@ function TeamSourceReview({
                   <div className="console-team-source__row">
                     <div className="console-team-source__member">
                       <strong title={member.user_name}>{member.user_name}</strong>
-                      <Tag color={member.has_report ? "blue" : "gold"} bordered={false}>
+                      <Tag color={member.has_report ? "blue" : "gold"} variant="filled">
                         {member.has_report ? "已发送" : "未发送"}
                       </Tag>
                     </div>

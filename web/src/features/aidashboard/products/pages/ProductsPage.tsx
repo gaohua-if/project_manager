@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
@@ -208,7 +208,7 @@ export function ProductsPage() {
         </Space>
       }
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={16} style={{ width: "100%" }}>
 
       {isManager ? (
         <Segmented
@@ -259,7 +259,7 @@ export function ProductsPage() {
                 title: "标题",
                 dataIndex: "title",
                 render: (title: string, d) => (
-                  <Space direction="vertical" size={0}>
+                  <Space orientation="vertical" size={0}>
                     <a href={d.url} target="_blank" rel="noreferrer">
                       {title}
                     </a>
@@ -348,7 +348,7 @@ export function ProductsPage() {
                 title: "记录",
                 key: "session",
                 render: (_: unknown, s) => (
-                  <Space direction="vertical" size={0}>
+                  <Space orientation="vertical" size={0}>
                     <Text strong>{s.summary || s.session_ref.slice(0, 12)}</Text>
                     <Text type="secondary" style={{ fontSize: 11 }}>
                       {s.model || "Claude Code"} · {formatDuration(s.duration_secs)}
@@ -428,3 +428,4 @@ export function ProductsPage() {
     </PagePanel>
   );
 }
+

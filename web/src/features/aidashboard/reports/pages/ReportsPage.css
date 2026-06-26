@@ -171,6 +171,72 @@
   white-space: pre-wrap;
 }
 
+.reports-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.console-report-workflow-modal .reports-source-list {
+  max-height: min(48vh, 440px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.reports-source-list__item {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e6ebf3;
+  border-radius: 8px;
+}
+
+.reports-source-list__main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.reports-source-list__main > .ant-checkbox-wrapper {
+  margin-top: 5px;
+}
+
+.reports-source-list__content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reports-source-list__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reports-source-list__head strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reports-source-list__head .ant-btn {
+  height: 22px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.reports-source-list__content p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #526173;
+  font-size: 12.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .reports-report-card__empty {
   color: #b1bccf;
   font-size: 12px;
@@ -282,6 +348,13 @@
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+.reports-team-card__body--compact {
+  color: #526173;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .reports-member-grid {

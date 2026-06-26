@@ -1,5 +1,22 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { Alert, App, Button, Checkbox, DatePicker, Empty, Input, Segmented, Skeleton } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Checkbox,
+  DatePicker,
+  Drawer,
+  Empty,
+  Input,
+  Modal,
+  Segmented,
+  Skeleton,
+  Space,
+  Table,
+  Tag
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   CalendarOutlined,
   CheckCircleOutlined,
@@ -35,6 +52,7 @@ import type {
   DepartmentWeeklyReportSources,
   PaginatedPersonalWeeklyReports,
   PersonalWeeklyReport,
+  PersonalWeeklyReportListItem,
   PersonalWeeklyReportPreview,
   PersonalWeeklyReportSources,
   TeamWeeklyReport,
@@ -66,6 +84,20 @@ function weekEndOf(weekStart: string) {
   return dayjs(weekStart).add(6, "day").format("YYYY-MM-DD");
 }
 
+function formatDailySourceTitle(reportDate: string) {
+  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const value = dayjs(reportDate);
+  return `${value.format("MM-DD")} ${weekdays[value.day()]}日报`;
+}
+
+function summarizeSourceContent(content: string) {
+  const text = content
+    .replace(/[#>*_`-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || "暂无摘要";
+}
+
 function ReportsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="reports-loading-frame">
@@ -82,16 +114,45 @@ function ReportsEmpty({ description }: { description: string }) {
   );
 }
 
+function formatDateTime(value?: string) {
+  return value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-";
+}
+
+function formatWeekDate(value: string) {
+  return dayjs(value).format("YYYY-MM-DD");
+}
+
+function weeklyRange(weekStart: string, weekEnd?: string) {
+  const start = formatWeekDate(weekStart);
+  return `${start} 至 ${weekEnd ? formatWeekDate(weekEnd) : weekEndOf(start)}`;
+}
+
+function personalWeeklyStatus(status: PersonalWeeklyReport["status"]) {
+  return status === "submitted" ? <Tag color="green">已发送</Tag> : <Tag color="blue">已保存</Tag>;
+}
+
+function teamWeeklyStatus(report: TeamWeeklyReport) {
+  return report.submitted_at ? <Tag color="green">已提交</Tag> : <Tag color="blue">已保存</Tag>;
+}
+
+function departmentWeeklyStatus(report: DepartmentWeeklyReport) {
+  return report.archived_at ? <Tag color="green">已归档</Tag> : <Tag color="blue">已保存</Tag>;
+}
+
 export function PersonalWeeklyReportsView({
   weekStart,
   weekEnd,
   weekPicker,
-  scopeTabs
+  scopeTabs,
+  modalMode = false,
+  onDone
 }: {
   weekStart: string;
   weekEnd: string;
   weekPicker: ReactNode;
   scopeTabs?: ReactNode;
+  modalMode?: boolean;
+  onDone?: () => void;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -103,6 +164,7 @@ export function PersonalWeeklyReportsView({
   const [contentTouched, setContentTouched] = useState(false);
   const [selectedDailyReportIds, setSelectedDailyReportIds] = useState<string[]>([]);
   const [dailySelectionTouched, setDailySelectionTouched] = useState(false);
+  const showHistory = !modalMode;
 
   const sourcesQuery = useQuery<PersonalWeeklyReportSources>({
     queryKey: ["reports", "weekly", "mine", "sources", weekStart],
@@ -117,7 +179,8 @@ export function PersonalWeeklyReportsView({
   const historyQuery = useQuery<PaginatedPersonalWeeklyReports>({
     queryKey: ["reports", "weekly", "mine", "history"],
     queryFn: () => fetchPersonalWeeklyReports({ page: "1", page_size: "20" }),
-    staleTime: 30_000
+    staleTime: 30_000,
+    enabled: showHistory
   });
 
   const report = reportQuery.data ?? null;
@@ -127,10 +190,16 @@ export function PersonalWeeklyReportsView({
     ? selectedDailyReportIds
     : defaultDailyReportIds;
 
-  const effectiveTab = !tabTouched && report && !preview ? "draft" : tab;
+  const effectiveTab =
+    !showHistory && tab === "history"
+      ? "sources"
+      : !tabTouched && report && !preview
+        ? "draft"
+        : tab;
   const editorContent = contentTouched
     ? content
     : (preview?.report_markdown ?? report?.content ?? "");
+  const collectedDailyCount = sourcesQuery.data?.daily_count ?? 0;
   const sourceIDs = preview
     ? {
         source_daily_report_ids: preview.source_daily_report_ids
@@ -142,6 +211,7 @@ export function PersonalWeeklyReportsView({
       : {
           source_daily_report_ids: report.source_daily_report_ids
         };
+  const selectedSourceCount = sourceIDs.source_daily_report_ids.length;
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "mine"] });
@@ -171,6 +241,7 @@ export function PersonalWeeklyReportsView({
       setContent(saved.content);
       setContentTouched(true);
       invalidate();
+      onDone?.();
       message.success("周报已保存");
     },
     onError: (err: unknown) => message.error(errorMessage(err))
@@ -183,6 +254,7 @@ export function PersonalWeeklyReportsView({
       setContent(saved.content);
       setContentTouched(true);
       invalidate();
+      onDone?.();
       message.success(user?.role === "employee" ? "已发送给 TL" : "已发送给总监");
     },
     onError: (err: unknown) => message.error(errorMessage(err))
@@ -200,41 +272,43 @@ export function PersonalWeeklyReportsView({
       className="reports-page aidashboard-list"
       showNav={false}
     >
-      <RequirementMetricGrid>
-        <RequirementMetricCard
-          tone="primary"
-          icon={<CalendarOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "week",
-            title: "周报周期",
-            value: dayjs(weekStart).format("MM-DD"),
-            description: `${weekStart} 至 ${weekEnd}`
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<FileTextOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "daily",
-            title: "个人日报",
-            value: sourcesQuery.data?.daily_count ?? 0,
-            description: "本周已保存/发送日报"
-          }}
-        />
-        <RequirementMetricCard
-          tone="info"
-          icon={<CheckCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "selected-daily",
-            title: "已选日报",
-            value: effectiveDailyReportIds.length,
-            description: "用于生成周报的日报"
-          }}
-        />
-      </RequirementMetricGrid>
+      {!modalMode ? (
+        <RequirementMetricGrid>
+          <RequirementMetricCard
+            tone="primary"
+            icon={<CalendarOutlined />}
+            loading={sourcesQuery.isLoading}
+            metric={{
+              key: "week",
+              title: "周报周期",
+              value: dayjs(weekStart).format("MM-DD"),
+              description: `${weekStart} 至 ${weekEnd}`
+            }}
+          />
+          <RequirementMetricCard
+            tone="success"
+            icon={<FileTextOutlined />}
+            loading={sourcesQuery.isLoading}
+            metric={{
+              key: "daily",
+              title: "个人日报",
+              value: collectedDailyCount,
+              description: "本周已保存/发送日报"
+            }}
+          />
+          <RequirementMetricCard
+            tone="info"
+            icon={<CheckCircleOutlined />}
+            loading={sourcesQuery.isLoading}
+            metric={{
+              key: "selected-daily",
+              title: "已选日报",
+              value: effectiveDailyReportIds.length,
+              description: "用于生成周报的日报"
+            }}
+          />
+        </RequirementMetricGrid>
+      ) : null}
 
       <div className="reports-toolbar">
         <div className="reports-toolbar__meta">
@@ -261,7 +335,7 @@ export function PersonalWeeklyReportsView({
             options={[
               { label: "来源确认", value: "sources" },
               { label: "确认周报", value: "draft" },
-              { label: "历史", value: "history" }
+              ...(showHistory ? [{ label: "历史", value: "history" }] : [])
             ]}
           />
           {weekPicker}
@@ -288,7 +362,7 @@ export function PersonalWeeklyReportsView({
             setDailySelectionTouched(true);
           }}
         />
-      ) : effectiveTab === "history" ? (
+      ) : effectiveTab === "history" && showHistory ? (
         <PersonalWeeklyHistory query={historyQuery} />
       ) : reportQuery.isError ? (
         <Alert
@@ -304,7 +378,9 @@ export function PersonalWeeklyReportsView({
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
-            <span className="reports-team-card__title">我的周报</span>
+            <span className="reports-team-card__title">
+              确认周报 · {weekStart} 至 {weekEnd}
+            </span>
             <span className="reports-team-card__meta">
               <span
                 className={`reports-tag ${report?.status === "submitted" ? "is-submitted" : "is-team"}`}
@@ -320,6 +396,9 @@ export function PersonalWeeklyReportsView({
               <span>{weekStart}</span>
             </span>
           </header>
+          <p className="reports-team-card__body reports-team-card__body--compact">
+            基于 {selectedSourceCount} 篇日报生成，可编辑后保存或发送。
+          </p>
           <div className="reports-edit-shell">
             <TextArea
               rows={14}
@@ -358,6 +437,41 @@ export function PersonalWeeklyReportsView({
   );
 }
 
+export function PersonalWeeklyReportModal({
+  open,
+  weekStart,
+  weekEnd,
+  onClose,
+  onDone
+}: {
+  open: boolean;
+  weekStart: string;
+  weekEnd: string;
+  onClose: () => void;
+  onDone?: () => void;
+}) {
+  return (
+    <Modal
+      className="console-report-workflow-modal"
+      title="我的周报"
+      open={open}
+      width={980}
+      footer={null}
+      onCancel={onClose}
+      destroyOnHidden
+    >
+      <PersonalWeeklyReportsView
+        key={`personal-weekly-modal-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={<span />}
+        modalMode
+        onDone={onDone}
+      />
+    </Modal>
+  );
+}
+
 function PersonalWeeklySources({
   query,
   selectedDailyReportIds,
@@ -368,6 +482,9 @@ function PersonalWeeklySources({
   onSelectedDailyReportIdsChange: (ids: string[]) => void;
 }) {
   const sources = query.data;
+  const [activeSource, setActiveSource] = useState<PersonalWeeklyReportSources["daily_reports"][number] | null>(
+    null
+  );
   if (query.isError)
     return (
       <Alert
@@ -382,24 +499,47 @@ function PersonalWeeklySources({
   if (sources.daily_reports.length === 0)
     return <ReportsEmpty description="本周暂无可用于生成周报的日报" />;
   return (
-    <Checkbox.Group
-      className="reports-member-grid"
-      value={selectedDailyReportIds}
-      onChange={(values) => onSelectedDailyReportIdsChange(values.map(String))}
-    >
-      {sources.daily_reports.map((item) => (
-        <label key={item.report_id} className="reports-report-card is-auto">
-          <header className="reports-report-card__head">
-            <span className="reports-report-card__head-left">
+    <>
+      <Checkbox.Group
+        className="reports-source-list"
+        value={selectedDailyReportIds}
+        onChange={(values) => onSelectedDailyReportIdsChange(values.map(String))}
+      >
+        {sources.daily_reports.map((item) => (
+          <div key={item.report_id} className="reports-source-list__item">
+            <div className="reports-source-list__main">
               <Checkbox value={item.report_id} />
-              <span className="reports-report-card__author">{item.report_date}</span>
-              <span className="reports-tag is-team">个人日报</span>
-            </span>
-          </header>
-          <p className="reports-report-card__content">{item.content}</p>
-        </label>
-      ))}
-    </Checkbox.Group>
+              <div className="reports-source-list__content">
+                <div className="reports-source-list__head">
+                  <strong>{formatDailySourceTitle(item.report_date)}</strong>
+                  <span className="reports-tag is-submitted">已发送</span>
+                  <span className="reports-tag is-team">个人日报</span>
+                  <Button
+                    type="link"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveSource(item);
+                    }}
+                  >
+                    查看全文
+                  </Button>
+                </div>
+                <p>{summarizeSourceContent(item.content)}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </Checkbox.Group>
+      <Drawer
+        title={activeSource ? `${formatDailySourceTitle(activeSource.report_date)}原文` : "日报原文"}
+        open={Boolean(activeSource)}
+        size={560}
+        onClose={() => setActiveSource(null)}
+      >
+        <pre className="reports-source-content">{activeSource?.content}</pre>
+      </Drawer>
+    </>
   );
 }
 
@@ -435,103 +575,289 @@ function PersonalWeeklyHistory({
 
 export function WeeklyReportsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => weekStartOf(dayjs()));
   const [roleTab, setRoleTab] = useState<"mine" | "team" | "department">("mine");
+  const [modalTarget, setModalTarget] = useState<{
+    scope: "mine" | "team" | "department";
+    weekStart: string;
+  } | null>(null);
 
   if (!user) return null;
 
-  const weekEnd = weekEndOf(weekStart);
-  const picker = (
-    <DatePicker
-      value={dayjs(weekStart)}
-      allowClear={false}
-      onChange={(value) => value && setWeekStart(weekStartOf(value))}
-    />
-  );
-
-  if (user.role === "team_leader") {
-    return roleTab === "team" ? (
-      <TeamWeeklyReportsView
-        key={`team-${weekStart}`}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-        weekPicker={picker}
-        canEdit
-        scopeTabs={
-          <Segmented
-            value={roleTab}
-            onChange={(v) => setRoleTab(v as "mine" | "team")}
-            options={[
-              { label: "我的周报", value: "mine" },
-              { label: "小组周报", value: "team" }
-            ]}
-          />
-        }
-      />
-    ) : (
-      <PersonalWeeklyReportsView
-        key={`mine-${weekStart}`}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-        weekPicker={picker}
-        scopeTabs={
-          <Segmented
-            value={roleTab}
-            onChange={(v) => setRoleTab(v as "mine" | "team")}
-            options={[
-              { label: "我的周报", value: "mine" },
-              { label: "小组周报", value: "team" }
-            ]}
-          />
-        }
-      />
-    );
-  }
-  if (user.role === "director" || user.role === "admin") {
-    return roleTab === "department" ? (
-      <DirectorWeeklyReportsView
-        key={`department-${weekStart}`}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-        weekPicker={picker}
-        scopeTabs={
-          <Segmented
-            value={roleTab}
-            onChange={(v) => setRoleTab(v as "mine" | "department")}
-            options={[
-              { label: "我的周报", value: "mine" },
-              { label: "部门周报", value: "department" }
-            ]}
-          />
-        }
-      />
-    ) : (
-      <PersonalWeeklyReportsView
-        key={`mine-${weekStart}`}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-        weekPicker={picker}
-        scopeTabs={
-          <Segmented
-            value={roleTab}
-            onChange={(v) => setRoleTab(v as "mine" | "department")}
-            options={[
-              { label: "我的周报", value: "mine" },
-              { label: "部门周报", value: "department" }
-            ]}
-          />
-        }
-      />
-    );
-  }
+  const tabOptions =
+    user.role === "director" || user.role === "admin"
+      ? [
+          { label: "我的周报记录", value: "mine" },
+          { label: "部门周报记录", value: "department" }
+        ]
+      : user.role === "team_leader" || user.role === "pm"
+        ? [
+            { label: "我的周报记录", value: "mine" },
+            { label: "小组周报记录", value: "team" }
+          ]
+        : [{ label: "我的周报记录", value: "mine" }];
+  const activeTab = tabOptions.some((item) => item.value === roleTab) ? roleTab : "mine";
+  const generateLabel =
+    activeTab === "team"
+      ? "生成本周小组周报"
+      : activeTab === "department"
+        ? "生成本周部门周报"
+        : "生成本周周报";
+  const invalidateWeekly = () => {
+    void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
+  };
 
   return (
-    <PersonalWeeklyReportsView
-      key={`mine-${weekStart}`}
-      weekStart={weekStart}
-      weekEnd={weekEnd}
-      weekPicker={picker}
-    />
+    <PagePanel
+      title="周报"
+      description="按记录列表查看周报，当前周生成与编辑通过弹窗处理。"
+      breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
+    >
+      <Card>
+        <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
+          <Space wrap>
+            {tabOptions.length > 1 ? (
+              <Segmented
+                value={activeTab}
+                onChange={(value) => setRoleTab(value as "mine" | "team" | "department")}
+                options={tabOptions}
+              />
+            ) : null}
+            <DatePicker
+              value={dayjs(weekStart)}
+              allowClear={false}
+              onChange={(value) => value && setWeekStart(weekStartOf(value))}
+            />
+          </Space>
+          <Button
+            type="primary"
+            icon={<RobotOutlined />}
+            onClick={() => setModalTarget({ scope: activeTab, weekStart })}
+          >
+            {generateLabel}
+          </Button>
+        </Space>
+      </Card>
+
+      {activeTab === "mine" ? (
+        <PersonalWeeklyRecordsTable
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "mine", weekStart: recordWeekStart })}
+        />
+      ) : null}
+      {activeTab === "team" ? (
+        <TeamWeeklyRecordsTable
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "team", weekStart: recordWeekStart })}
+        />
+      ) : null}
+      {activeTab === "department" ? (
+        <DepartmentWeeklyRecordsTable
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "department", weekStart: recordWeekStart })}
+        />
+      ) : null}
+
+      {modalTarget?.scope === "mine" ? (
+        <PersonalWeeklyReportModal
+          open
+          weekStart={modalTarget.weekStart}
+          weekEnd={weekEndOf(modalTarget.weekStart)}
+          onClose={() => setModalTarget(null)}
+          onDone={invalidateWeekly}
+        />
+      ) : null}
+      {modalTarget?.scope === "team" ? (
+        <TeamWeeklyReportModal
+          open
+          weekStart={modalTarget.weekStart}
+          weekEnd={weekEndOf(modalTarget.weekStart)}
+          onClose={() => setModalTarget(null)}
+          onDone={invalidateWeekly}
+        />
+      ) : null}
+      {modalTarget?.scope === "department" ? (
+        <DepartmentWeeklyReportModal
+          open
+          weekStart={modalTarget.weekStart}
+          weekEnd={weekEndOf(modalTarget.weekStart)}
+          onClose={() => setModalTarget(null)}
+          onDone={invalidateWeekly}
+        />
+      ) : null}
+    </PagePanel>
+  );
+}
+
+function PersonalWeeklyRecordsTable({
+  onOpen
+}: {
+  onOpen: (weekStart: string) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const reportsQuery = useQuery<PaginatedPersonalWeeklyReports>({
+    queryKey: ["reports", "weekly", "mine", "history", { page, pageSize }],
+    queryFn: () => fetchPersonalWeeklyReports({ page: String(page), page_size: String(pageSize) }),
+    staleTime: 30_000
+  });
+
+  const columns: ColumnsType<PersonalWeeklyReportListItem> = [
+    {
+      title: "周期",
+      dataIndex: "week_start",
+      width: 220,
+      render: (_, record) => weeklyRange(record.week_start, record.week_end)
+    },
+    { title: "状态", dataIndex: "status", width: 120, render: personalWeeklyStatus },
+    { title: "来源日报", dataIndex: "source_daily_count", width: 120 },
+    { title: "来源 session", dataIndex: "source_session_count", width: 130 },
+    { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_, record) => (
+        <Button size="small" type="link" onClick={() => onOpen(formatWeekDate(record.week_start))}>
+          打开
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <Card title="我的周报记录">
+      {reportsQuery.isError ? (
+        <Alert type="error" showIcon message="我的周报记录加载失败" description={errorMessage(reportsQuery.error)} />
+      ) : (
+        <Table<PersonalWeeklyReportListItem>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data?.items ?? []}
+          loading={reportsQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: reportsQuery.data?.total ?? 0,
+            showSizeChanger: true,
+            onChange: (next, size) => {
+              setPage(size !== pageSize ? 1 : next);
+              setPageSize(size);
+            }
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
+function TeamWeeklyRecordsTable({
+  onOpen
+}: {
+  onOpen: (weekStart: string) => void;
+}) {
+  const reportsQuery = useQuery<TeamWeeklyReport[]>({
+    queryKey: ["reports", "weekly", "team", "history"],
+    queryFn: () => fetchTeamWeeklyReports(),
+    staleTime: 30_000
+  });
+  const columns: ColumnsType<TeamWeeklyReport> = [
+    { title: "小组", dataIndex: "team_name", width: 160 },
+    {
+      title: "周期",
+      dataIndex: "week_start",
+      width: 220,
+      render: (_, record) => weeklyRange(record.week_start)
+    },
+    { title: "状态", key: "status", width: 120, render: (_, record) => teamWeeklyStatus(record) },
+    {
+      title: "来源个人周报",
+      key: "source_personal_weekly_report_ids",
+      width: 150,
+      render: (_, record) => record.source_personal_weekly_report_ids.length
+    },
+    { title: "提交时间", dataIndex: "submitted_at", render: formatDateTime },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_, record) => (
+        <Button size="small" type="link" onClick={() => onOpen(formatWeekDate(record.week_start))}>
+          打开
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <Card title="小组周报记录">
+      {reportsQuery.isError ? (
+        <Alert type="error" showIcon message="小组周报记录加载失败" description={errorMessage(reportsQuery.error)} />
+      ) : (
+        <Table<TeamWeeklyReport>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data ?? []}
+          loading={reportsQuery.isLoading}
+        />
+      )}
+    </Card>
+  );
+}
+
+function DepartmentWeeklyRecordsTable({
+  onOpen
+}: {
+  onOpen: (weekStart: string) => void;
+}) {
+  const reportsQuery = useQuery<DepartmentWeeklyReport[]>({
+    queryKey: ["reports", "weekly", "department", "history"],
+    queryFn: () => fetchDepartmentWeeklyReports(),
+    staleTime: 30_000
+  });
+  const columns: ColumnsType<DepartmentWeeklyReport> = [
+    {
+      title: "周期",
+      dataIndex: "week_start",
+      width: 220,
+      render: (_, record) => weeklyRange(record.week_start)
+    },
+    { title: "状态", key: "status", width: 120, render: (_, record) => departmentWeeklyStatus(record) },
+    {
+      title: "来源小组周报",
+      key: "source_team_weekly_report_ids",
+      width: 150,
+      render: (_, record) => record.source_team_weekly_report_ids.length
+    },
+    { title: "归档时间", dataIndex: "archived_at", render: formatDateTime },
+    { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_, record) => (
+        <Button size="small" type="link" onClick={() => onOpen(formatWeekDate(record.week_start))}>
+          打开
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <Card title="部门周报记录">
+      {reportsQuery.isError ? (
+        <Alert type="error" showIcon message="部门周报记录加载失败" description={errorMessage(reportsQuery.error)} />
+      ) : (
+        <Table<DepartmentWeeklyReport>
+          rowKey="id"
+          columns={columns}
+          dataSource={reportsQuery.data ?? []}
+          loading={reportsQuery.isLoading}
+        />
+      )}
+    </Card>
   );
 }
 
@@ -540,13 +866,17 @@ function TeamWeeklyReportsView({
   weekEnd,
   weekPicker,
   canEdit = false,
-  scopeTabs
+  scopeTabs,
+  modalMode = false,
+  onDone
 }: {
   weekStart: string;
   weekEnd: string;
   weekPicker: ReactNode;
   canEdit?: boolean;
   scopeTabs?: ReactNode;
+  modalMode?: boolean;
+  onDone?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -558,6 +888,7 @@ function TeamWeeklyReportsView({
     []
   );
   const [selectionTouched, setSelectionTouched] = useState(false);
+  const showHistory = !modalMode;
 
   const sourcesQuery = useQuery<TeamWeeklyReportSources>({
     queryKey: ["reports", "weekly", "team", "sources", weekStart],
@@ -572,7 +903,8 @@ function TeamWeeklyReportsView({
   const historyQuery = useQuery<TeamWeeklyReport[]>({
     queryKey: ["reports", "weekly", "team", "history"],
     queryFn: () => fetchTeamWeeklyReports(),
-    staleTime: 30_000
+    staleTime: 30_000,
+    enabled: showHistory
   });
 
   const sources = sourcesQuery.data;
@@ -598,6 +930,7 @@ function TeamWeeklyReportsView({
           source_personal_weekly_report_ids: report.source_personal_weekly_report_ids
         };
   const submittedLocked = Boolean(report?.submitted_at && !preview);
+  const effectiveTab = !showHistory && tab === "history" ? "sources" : tab;
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "team"] });
@@ -629,6 +962,7 @@ function TeamWeeklyReportsView({
       setContentTouched(true);
       message.success("已保存");
       invalidate();
+      onDone?.();
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
@@ -644,6 +978,7 @@ function TeamWeeklyReportsView({
       message.success("已提交给总监");
       setPreview(null);
       invalidate();
+      onDone?.();
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "提交失败")
   });
@@ -656,6 +991,7 @@ function TeamWeeklyReportsView({
       className="reports-page aidashboard-list"
       showNav={false}
     >
+      {!modalMode ? (
       <RequirementMetricGrid>
         <RequirementMetricCard
           tone="primary"
@@ -702,11 +1038,12 @@ function TeamWeeklyReportsView({
           }}
         />
       </RequirementMetricGrid>
+      ) : null}
 
       <div className="reports-toolbar">
         <div className="reports-toolbar__meta">
           <strong>
-            {tab === "sources" ? "本周来源确认" : tab === "draft" ? "小组周报草稿" : "小组周报历史"}
+            {effectiveTab === "sources" ? "本周来源确认" : effectiveTab === "draft" ? "小组周报草稿" : "小组周报历史"}
           </strong>
           <span>·</span>
           <span>
@@ -716,16 +1053,16 @@ function TeamWeeklyReportsView({
         <div className="reports-toolbar__right">
           {scopeTabs}
           <Segmented
-            value={tab}
+            value={effectiveTab}
             onChange={(v) => setTab(v as "sources" | "draft" | "history")}
             options={[
               { label: "来源确认", value: "sources" },
               { label: "周报草稿", value: "draft" },
-              { label: "历史", value: "history" }
+              ...(showHistory ? [{ label: "历史", value: "history" }] : [])
             ]}
           />
           {weekPicker}
-          {canEdit && tab === "sources" ? (
+          {canEdit && effectiveTab === "sources" ? (
             <Button
               type="primary"
               icon={<RobotOutlined />}
@@ -739,7 +1076,7 @@ function TeamWeeklyReportsView({
         </div>
       </div>
 
-      {tab === "sources" ? (
+      {effectiveTab === "sources" ? (
         <TeamWeeklySources
           query={sourcesQuery}
           selectedPersonalWeeklyReportIds={effectivePersonalWeeklyReportIds}
@@ -748,7 +1085,7 @@ function TeamWeeklyReportsView({
             setSelectionTouched(true);
           }}
         />
-      ) : tab === "history" ? (
+      ) : effectiveTab === "history" && showHistory ? (
         <TeamWeeklyHistory query={historyQuery} reports={history} />
       ) : reportQuery.isError ? (
         <Alert
@@ -896,6 +1233,42 @@ function TeamWeeklySources({
   );
 }
 
+function TeamWeeklyReportModal({
+  open,
+  weekStart,
+  weekEnd,
+  onClose,
+  onDone
+}: {
+  open: boolean;
+  weekStart: string;
+  weekEnd: string;
+  onClose: () => void;
+  onDone?: () => void;
+}) {
+  return (
+    <Modal
+      className="console-report-workflow-modal"
+      title="小组周报"
+      open={open}
+      width={980}
+      footer={null}
+      onCancel={onClose}
+      destroyOnHidden
+    >
+      <TeamWeeklyReportsView
+        key={`team-weekly-modal-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={<span />}
+        canEdit
+        modalMode
+        onDone={onDone}
+      />
+    </Modal>
+  );
+}
+
 function TeamWeeklyHistory({
   query,
   reports
@@ -931,12 +1304,16 @@ function DirectorWeeklyReportsView({
   weekStart,
   weekEnd,
   weekPicker,
-  scopeTabs
+  scopeTabs,
+  modalMode = false,
+  onDone
 }: {
   weekStart: string;
   weekEnd: string;
   weekPicker: React.ReactNode;
   scopeTabs?: ReactNode;
+  modalMode?: boolean;
+  onDone?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -957,18 +1334,23 @@ function DirectorWeeklyReportsView({
   const historyQuery = useQuery<DepartmentWeeklyReport[]>({
     queryKey: ["reports", "weekly", "department", "history"],
     queryFn: () => fetchDepartmentWeeklyReports(),
-    staleTime: 30_000
+    staleTime: 30_000,
+    enabled: !modalMode
   });
   const teamHistoryQuery = useQuery<TeamWeeklyReport[]>({
     queryKey: ["reports", "weekly", "team", "history", "director"],
     queryFn: () => fetchTeamWeeklyReports(),
-    staleTime: 30_000
+    staleTime: 30_000,
+    enabled: !modalMode
   });
 
   const sources = sourcesQuery.data;
   const report = reportQuery.data ?? null;
   const history = historyQuery.data ?? [];
   const teamHistory = teamHistoryQuery.data ?? [];
+  const showHistory = !modalMode;
+  const effectiveTab =
+    !showHistory && (tab === "history" || tab === "teams") ? "sources" : tab;
   const submitted = sources?.submitted_team_count ?? 0;
   const total = sources?.total_team_count ?? 0;
   const missing = sources?.missing_teams.length ?? 0;
@@ -989,6 +1371,7 @@ function DirectorWeeklyReportsView({
       message.success("已保存");
       setEditing(false);
       invalidate();
+      onDone?.();
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
@@ -999,6 +1382,7 @@ function DirectorWeeklyReportsView({
       message.success("部门周报已归档");
       setEditing(false);
       invalidate();
+      onDone?.();
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "归档失败")
   });
@@ -1011,6 +1395,7 @@ function DirectorWeeklyReportsView({
       className="reports-page aidashboard-list"
       showNav={false}
     >
+      {!modalMode ? (
       <RequirementMetricGrid>
         <RequirementMetricCard
           tone="primary"
@@ -1057,15 +1442,16 @@ function DirectorWeeklyReportsView({
           }}
         />
       </RequirementMetricGrid>
+      ) : null}
 
       <div className="reports-toolbar">
         <div className="reports-toolbar__meta">
           <strong>
-            {tab === "sources"
+            {effectiveTab === "sources"
               ? "小组周报收集"
-              : tab === "draft"
+              : effectiveTab === "draft"
                 ? "部门周报草稿"
-                : tab === "teams"
+                : effectiveTab === "teams"
                   ? "小组周报记录"
                   : "部门周报历史"}
           </strong>
@@ -1077,17 +1463,21 @@ function DirectorWeeklyReportsView({
         <div className="reports-toolbar__right">
           {scopeTabs}
           <Segmented
-            value={tab}
+            value={effectiveTab}
             onChange={(v) => setTab(v as "sources" | "draft" | "history" | "teams")}
             options={[
               { label: "来源确认", value: "sources" },
               { label: "周报草稿", value: "draft" },
-              { label: "小组记录", value: "teams" },
-              { label: "部门历史", value: "history" }
+              ...(showHistory
+                ? [
+                    { label: "小组记录", value: "teams" },
+                    { label: "部门历史", value: "history" }
+                  ]
+                : [])
             ]}
           />
           {weekPicker}
-          {tab === "sources" ? (
+          {effectiveTab === "sources" ? (
             <Button
               type="primary"
               icon={<RobotOutlined />}
@@ -1100,11 +1490,11 @@ function DirectorWeeklyReportsView({
         </div>
       </div>
 
-      {tab === "sources" ? (
+      {effectiveTab === "sources" ? (
         <DepartmentWeeklySources query={sourcesQuery} />
-      ) : tab === "teams" ? (
+      ) : effectiveTab === "teams" && showHistory ? (
         <TeamWeeklyHistory query={teamHistoryQuery} reports={teamHistory} />
-      ) : tab === "history" ? (
+      ) : effectiveTab === "history" && showHistory ? (
         historyQuery.isError ? (
           <Alert
             type="error"
@@ -1235,6 +1625,41 @@ function DepartmentWeeklySources({
         </article>
       ))}
     </div>
+  );
+}
+
+function DepartmentWeeklyReportModal({
+  open,
+  weekStart,
+  weekEnd,
+  onClose,
+  onDone
+}: {
+  open: boolean;
+  weekStart: string;
+  weekEnd: string;
+  onClose: () => void;
+  onDone?: () => void;
+}) {
+  return (
+    <Modal
+      className="console-report-workflow-modal"
+      title="部门周报"
+      open={open}
+      width={980}
+      footer={null}
+      onCancel={onClose}
+      destroyOnHidden
+    >
+      <DirectorWeeklyReportsView
+        key={`department-weekly-modal-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={<span />}
+        modalMode
+        onDone={onDone}
+      />
+    </Modal>
   );
 }
 

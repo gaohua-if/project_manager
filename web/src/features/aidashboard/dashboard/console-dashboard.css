@@ -32,6 +32,7 @@
 }
 
 .console-dashboard-hero-row__report {
+  align-self: flex-start;
   flex: 0 0 var(--report-column-width);
   max-width: var(--report-column-width);
 }
@@ -51,6 +52,9 @@
 }
 
 .console-panel--daily {
+  display: flex;
+  flex-direction: column;
+  height: auto;
   background:
     linear-gradient(180deg, rgba(245, 249, 255, 0.85) 0%, rgba(255, 255, 255, 0.96) 62%), #ffffff;
 }
@@ -161,8 +165,9 @@
 }
 
 .console-report-actions--head .console-report-primary-action.ant-btn {
-  height: 36px;
-  padding-inline: 14px;
+  height: 32px;
+  padding-inline: 12px;
+  font-size: 13px;
   box-shadow: none;
 }
 
@@ -184,17 +189,44 @@
 
 .console-report-actions--head
   .ant-btn.console-report-primary-action--confirm.ant-btn-primary.ant-btn-color-primary.ant-btn-variant-solid {
-  color: #ffffff;
-  background: #1677ff;
-  border-color: #1677ff;
+  color: #0958d9;
+  background: #edf5ff;
+  border-color: #b7d4ff;
 }
 
 .console-report-actions--head
   .ant-btn.console-report-primary-action--confirm.ant-btn-primary.ant-btn-color-primary.ant-btn-variant-solid:hover,
 .console-report-actions--head
   .ant-btn.console-report-primary-action--confirm.ant-btn-primary.ant-btn-color-primary.ant-btn-variant-solid:focus-visible {
-  background: #0958d9;
-  border-color: #0958d9;
+  color: #0958d9;
+  background: #dceaff;
+  border-color: #8bbcff;
+}
+
+.console-report-actions--head .console-report-primary-action--saved.ant-btn {
+  color: #047857;
+  background: #f0fdf7;
+  border-color: #bbf7d0;
+}
+
+.console-report-actions--head .console-report-primary-action--saved.ant-btn:hover,
+.console-report-actions--head .console-report-primary-action--saved.ant-btn:focus-visible {
+  color: #036746;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.console-report-actions--head .console-report-primary-action--edited.ant-btn {
+  color: #b45309;
+  background: #fff8eb;
+  border-color: #ffe3b8;
+}
+
+.console-report-actions--head .console-report-primary-action--edited.ant-btn:hover,
+.console-report-actions--head .console-report-primary-action--edited.ant-btn:focus-visible {
+  color: #92400e;
+  background: #ffefd1;
+  border-color: #f8c471;
 }
 
 .console-report-actions--head .console-report-primary-action--quiet.ant-btn {
@@ -253,11 +285,19 @@
   gap: 12px;
 }
 
+.console-panel--daily > .console-report-status-card--personal {
+  flex: 1;
+  align-content: start;
+}
+
+.console-report-task-group {
+  display: grid;
+  gap: 14px;
+}
+
 .console-report-task {
   display: grid;
   gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eef3f8;
 }
 
 .console-report-task--summary {
@@ -273,6 +313,68 @@
   color: #526173;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.console-report-weekly-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.console-report-weekly-inline__main {
+  min-width: 0;
+  color: #526173;
+  font-size: 13px;
+}
+
+.console-report-weekly-inline__main strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.console-report-weekly-inline .ant-btn {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.console-report-summary-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+
+.console-report-summary-inline__main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #526173;
+  font-size: 13px;
+}
+
+.console-report-summary-inline__main strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.console-report-summary-inline__main > span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.console-report-summary-inline .ant-btn {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
 }
 
 .console-report-card-head {
@@ -318,6 +420,13 @@
   border-top: 1px solid #eef3f8;
 }
 
+.console-report-shortcuts--list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-top: 16px;
+}
+
 .console-report-shortcut {
   box-sizing: border-box;
   display: grid;
@@ -340,28 +449,49 @@
     box-shadow 0.18s ease;
 }
 
+.console-report-shortcuts--list .console-report-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.console-report-shortcuts--list .console-report-shortcut + .console-report-shortcut {
+  border-top: 0;
+}
+
 .console-report-shortcut:hover {
   background: #f6faff;
   border-color: #b7d4ff;
   box-shadow: 0 4px 10px rgba(22, 119, 255, 0.06);
 }
 
+.console-report-shortcuts--list .console-report-shortcut:hover {
+  color: #1d4ed8;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .console-report-shortcut span {
   display: flex;
-  grid-column: 1;
-  grid-row: 1;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #172033;
+  color: inherit;
   font-size: 12px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .console-report-shortcut span .anticon {
-  color: #1677ff;
-  font-size: 13px;
+  color: inherit;
+  font-size: 12px;
 }
 
 .console-report-shortcut strong {
@@ -387,10 +517,9 @@
 }
 
 .console-report-shortcut > .anticon:last-child {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  color: #94a3b8;
-  font-size: 11px;
+  color: inherit;
+  font-size: 10px;
+  transform: translateY(0);
 }
 
 .console-token-range.ant-segmented {

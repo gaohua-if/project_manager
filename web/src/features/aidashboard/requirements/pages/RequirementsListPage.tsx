@@ -747,7 +747,7 @@ export function RequirementsListPage() {
                             <div className="requirements-board__column-head-left">
                               <span className="requirements-board__status-dot" />
                               <strong>{column.label}</strong>
-                              <Tag bordered={false}>{headerCountBadge}</Tag>
+                              <Tag variant="filled">{headerCountBadge}</Tag>
                             </div>
                             {isCompletedColumn ? (
                               hiddenCompletedCount > 0 ? (
@@ -1520,7 +1520,7 @@ function RequirementDrawer({
   return (
     <Drawer
       className="requirements-drawer"
-      width={720}
+      size={720}
       open={Boolean(requirement)}
       onClose={onClose}
       title={
@@ -1544,7 +1544,7 @@ function RequirementDrawer({
       }
     >
       {requirement ? (
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={16} style={{ width: "100%" }}>
           <section className="requirements-drawer__summary">
             <div className="requirements-drawer__summary-head">
               <div className="requirements-drawer__summary-tags">
@@ -2211,7 +2211,7 @@ function TaskDrawer({
   return (
     <Drawer
       className="requirements-drawer"
-      width={640}
+      size={640}
       open={Boolean(task)}
       onClose={onClose}
       title={
@@ -2416,7 +2416,7 @@ function TaskDrawerContent({
     : [];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <section className="requirements-drawer__summary requirements-task-detail__summary">
         <div className="requirements-drawer__summary-head">
           <div className="requirements-drawer__summary-tags">
@@ -2472,14 +2472,16 @@ function TaskDrawerContent({
         </div>
         <div className="requirements-drawer__progress-editor">
           <Slider min={0} max={100} value={progress} disabled={!task.can_update_progress} onChange={setProgress} />
-          <InputNumber
-            min={0}
-            max={100}
-            value={progress}
-            disabled={!task.can_update_progress}
-            addonAfter="%"
-            onChange={(value) => setProgress(value ?? 0)}
-          />
+          <Space.Compact>
+            <InputNumber
+              min={0}
+              max={100}
+              value={progress}
+              disabled={!task.can_update_progress}
+              onChange={(value) => setProgress(value ?? 0)}
+            />
+            <Button disabled>%</Button>
+          </Space.Compact>
           <Button
             type="primary"
             loading={progressMutation.isPending}
@@ -2581,7 +2583,7 @@ function TaskDrawerContent({
           </div>
         </div>
         {linkedSources.length ? (
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             {linkedSources.map((source) => (
               <div key={source.id} className="requirements-drawer__token-row">
                 <div className="requirements-drawer__token-row-main">

@@ -1,4 +1,4 @@
-import {
+﻿import {
   CloudOutlined,
   DatabaseOutlined,
   ImportOutlined,
@@ -262,7 +262,7 @@ export function TokensPage() {
               key: "record",
               width: 260,
               render: (_: unknown, s) => (
-                <Space direction="vertical" size={0}>
+                <Space orientation="vertical" size={0}>
                   <span className="tokens-session-ref">{s.session_ref.slice(0, 12)}</span>
                   {s.summary ? (
                     <span
@@ -389,3 +389,4 @@ export function TokensPage() {
     </PagePanel>
   );
 }
+
