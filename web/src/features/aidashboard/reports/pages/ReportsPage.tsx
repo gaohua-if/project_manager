@@ -3,10 +3,13 @@ import {
   Alert,
   App,
   Button,
+  Checkbox,
   DatePicker,
   Empty,
   Input,
+  Modal,
   Segmented,
+  Select,
   Skeleton,
   Space
 } from "antd";
@@ -25,15 +28,20 @@ import dayjs from "dayjs";
 
 import {
   fetchReports,
+  fetchManagedAgents,
+  fetchManagedReportRun,
+  fetchSessions,
+  fetchTodayReport,
   fetchTeamMemberReports,
   fetchTeamReportTodayOrNull,
   fetchTeamReports,
   generateTeamReport,
   generateTodayReport,
+  startManagedReportRun,
   updateReport,
   updateTeamReport
 } from "../../api/client";
-import type { DailyReport, TeamMemberReport, TeamReport } from "../../api/types";
+import type { AIRun, DailyReport, ManagedAgent, Session, TeamMemberReport, TeamReport } from "../../api/types";
 import {
   RequirementMetricCard,
   RequirementMetricGrid
@@ -99,6 +107,11 @@ function EmployeeReportsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editFeishuUrl, setEditFeishuUrl] = useState("");
+  const [managedOpen, setManagedOpen] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>();
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const [managedRunId, setManagedRunId] = useState<string>();
+  const [managedDraft, setManagedDraft] = useState("");
 
   const reportsQuery = useQuery<DailyReport[]>({
     queryKey: ["reports", { from: weekAgoStr(), to: todayStr() }],
@@ -106,6 +119,33 @@ function EmployeeReportsView() {
     staleTime: 30_000
   });
   const reports = reportsQuery.data ?? [];
+
+  const sessionsQuery = useQuery({
+    queryKey: ["sessions", "today-report", todayStr()],
+    queryFn: () => fetchSessions({ date: todayStr(), page: "1", page_size: "100" }),
+    enabled: managedOpen,
+    staleTime: 30_000
+  });
+  const managedAgentsQuery = useQuery({
+    queryKey: ["managed-agents"],
+    queryFn: () => fetchManagedAgents(),
+    enabled: managedOpen,
+    staleTime: 30_000
+  });
+  const managedRunQuery = useQuery<AIRun>({
+    queryKey: ["managed-report-run", managedRunId],
+    queryFn: () => fetchManagedReportRun(managedRunId as string),
+    enabled: Boolean(managedRunId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "running" ? 2500 : false;
+    }
+  });
+
+  const todaySessions = useMemo(() => sessionsQuery.data?.items ?? [], [sessionsQuery.data]);
+  const managedAgents = useMemo(() => managedAgentsQuery.data?.agents ?? [], [managedAgentsQuery.data]);
+  const activeRun = managedRunQuery.data;
+  const runDraft = activeRun?.draft;
 
   const generateMutation = useMutation({
     mutationFn: () => generateTodayReport(),
@@ -122,6 +162,39 @@ function EmployeeReportsView() {
     onSuccess: () => {
       message.success("已保存");
       setEditingId(null);
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
+  });
+
+  const startManagedMutation = useMutation({
+    mutationFn: () =>
+      startManagedReportRun({
+        report_date: todayStr(),
+        session_ids: selectedSessionIds,
+        agent_id: selectedAgentId || ""
+      }),
+    onSuccess: (run) => {
+      setManagedRunId(run.id);
+      message.success("已提交到个人 Agent");
+    },
+    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "提交失败")
+  });
+
+  const saveManagedMutation = useMutation({
+    mutationFn: async () => {
+      const todayReport = await fetchTodayReport();
+      return updateReport(todayReport.id, {
+        content: managedDraft || runDraft?.report_markdown || "",
+        session_ids: runDraft?.selected_session_ids || selectedSessionIds,
+        managed_agent_run_id: managedRunId
+      });
+    },
+    onSuccess: () => {
+      message.success("日报草稿已保存");
+      setManagedOpen(false);
+      setManagedRunId(undefined);
+      setManagedDraft("");
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
@@ -145,7 +218,7 @@ function EmployeeReportsView() {
           type="primary"
           icon={<RobotOutlined />}
           loading={generateMutation.isPending}
-          onClick={() => generateMutation.mutate()}
+          onClick={() => setManagedOpen(true)}
         >
           生成 AI 日报
         </Button>
@@ -268,7 +341,156 @@ function EmployeeReportsView() {
           ))}
         </div>
       )}
+      <ManagedReportModal
+        open={managedOpen}
+        agents={managedAgents}
+        sessions={todaySessions}
+        loading={sessionsQuery.isLoading || managedAgentsQuery.isLoading}
+        selectedAgentId={selectedAgentId}
+        selectedSessionIds={selectedSessionIds}
+        run={activeRun}
+        draft={managedDraft || runDraft?.report_markdown || ""}
+        submitting={startManagedMutation.isPending}
+        saving={saveManagedMutation.isPending}
+        onCancel={() => {
+          setManagedOpen(false);
+          setManagedRunId(undefined);
+          setManagedDraft("");
+        }}
+        onAgentChange={setSelectedAgentId}
+        onSessionChange={setSelectedSessionIds}
+        onDraftChange={setManagedDraft}
+        onFallbackGenerate={() => generateMutation.mutate()}
+        onStart={() => startManagedMutation.mutate()}
+        onSave={() => saveManagedMutation.mutate()}
+      />
     </PagePanel>
+  );
+}
+
+function ManagedReportModal({
+  open,
+  agents,
+  sessions,
+  loading,
+  selectedAgentId,
+  selectedSessionIds,
+  run,
+  draft,
+  submitting,
+  saving,
+  onCancel,
+  onAgentChange,
+  onSessionChange,
+  onDraftChange,
+  onFallbackGenerate,
+  onStart,
+  onSave
+}: {
+  open: boolean;
+  agents: ManagedAgent[];
+  sessions: Session[];
+  loading: boolean;
+  selectedAgentId?: string;
+  selectedSessionIds: string[];
+  run?: AIRun;
+  draft: string;
+  submitting: boolean;
+  saving: boolean;
+  onCancel: () => void;
+  onAgentChange: (value: string) => void;
+  onSessionChange: (value: string[]) => void;
+  onDraftChange: (value: string) => void;
+  onFallbackGenerate: () => void;
+  onStart: () => void;
+  onSave: () => void;
+}) {
+  const canStart = Boolean(selectedAgentId) && selectedSessionIds.length > 0 && !submitting;
+  const canSave = Boolean(draft) && run?.status === "succeeded";
+  const statusText =
+    run?.status === "succeeded"
+      ? "生成完成"
+      : run?.status === "failed"
+        ? "生成失败"
+        : run?.status === "running"
+          ? "运行中"
+          : run?.status === "pending"
+            ? "排队中"
+            : "待提交";
+
+  return (
+    <Modal
+      title="使用个人 Agent 生成日报"
+      open={open}
+      onCancel={onCancel}
+      width={860}
+      footer={
+        <Space>
+          <Button onClick={onFallbackGenerate}>使用默认生成器</Button>
+          <Button onClick={onStart} loading={submitting} disabled={!canStart}>
+            提交 Agent
+          </Button>
+          <Button type="primary" onClick={onSave} loading={saving} disabled={!canSave}>
+            保存到今日日报
+          </Button>
+        </Space>
+      }
+      destroyOnClose
+    >
+      <div className="reports-managed-modal">
+        <div className="reports-managed-modal__controls">
+          <Select
+            placeholder="选择个人 Agent"
+            value={selectedAgentId}
+            onChange={onAgentChange}
+            loading={loading}
+            options={agents.map((agent) => ({
+              label: `${agent.name} (${agent.agent_id})`,
+              value: agent.agent_id
+            }))}
+          />
+          <span className={`reports-managed-status is-${run?.status || "idle"}`}>
+            {statusText}
+          </span>
+        </div>
+
+        {run?.error_message ? (
+          <Alert type="error" showIcon message="Agent 生成失败" description={run.error_message} />
+        ) : null}
+
+        <section className="reports-managed-sessions">
+          <header>
+            <strong>今日 Session</strong>
+            <span>{selectedSessionIds.length} / {sessions.length}</span>
+          </header>
+          {loading ? (
+            <Skeleton active paragraph={{ rows: 3 }} />
+          ) : sessions.length === 0 ? (
+            <Empty description="今天暂无可用于生成的 Session" />
+          ) : (
+            <Checkbox.Group value={selectedSessionIds} onChange={(values) => onSessionChange(values as string[])}>
+              <div className="reports-managed-session-list">
+                {sessions.map((session) => (
+                  <Checkbox key={session.id} value={session.id}>
+                    <span className="reports-managed-session-item">
+                      <strong>{session.summary || session.session_ref}</strong>
+                      <span>{session.model || session.agent_type}</span>
+                    </span>
+                  </Checkbox>
+                ))}
+              </div>
+            </Checkbox.Group>
+          )}
+        </section>
+
+        <Input.TextArea
+          rows={10}
+          value={draft}
+          onChange={(event) => onDraftChange(event.target.value)}
+          placeholder="Agent 生成完成后会在这里显示 Markdown 草稿"
+        />
+      </div>
+    </Modal>
   );
 }
 

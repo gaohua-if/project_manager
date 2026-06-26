@@ -12,6 +12,13 @@ import type {
   Document,
   GenerateReportDraftPayload,
   GenerateReportDraftResponse,
+  AIRun,
+  ManagedAgent,
+  ManagedAgentManualRunPayload,
+  ManagedMCPEntry,
+  ManagedReportRunPayload,
+  ManagedScope,
+  ManagedSkill,
   PaginatedSessions,
   Requirement,
   RequirementFollowStateDTO,
@@ -24,7 +31,8 @@ import type {
   TokenAggregation,
   TokenGroupBy,
   TokenPeriod,
-  Team
+  Team,
+  UpsertManagedAgentPayload
 } from "./types";
 
 async function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
@@ -197,9 +205,19 @@ export const generateTodayReport = () => unwrap(api.post<DailyReport>("/reports/
 export const fetchReport = (id: string) => unwrap(api.get<DailyReport>(`/reports/${id}`));
 export const updateReport = (
   id: string,
-  data: { content?: string; feishu_doc_url?: string; session_ids?: string[] }
+  data: {
+    content?: string;
+    feishu_doc_url?: string;
+    session_ids?: string[];
+    managed_agent_run_id?: string;
+  }
 ) =>
   unwrap(api.put<DailyReport>(`/reports/${id}`, data));
+
+export const startManagedReportRun = (payload: ManagedReportRunPayload) =>
+  unwrap(api.post<AIRun>("/reports/today/managed-agent-runs", payload));
+export const fetchManagedReportRun = (runId: string) =>
+  unwrap(api.get<AIRun>(`/reports/managed-agent-runs/${runId}`));
 
 export const fetchTeamMemberReports = (date: string) =>
   unwrap(api.get<TeamMemberReport[]>(`/reports/team/members`, { date }));
@@ -218,6 +236,32 @@ export async function fetchTeamReportTodayOrNull() {
 }
 export const generateTeamReport = () =>
   unwrap(api.post<TeamReport>("/reports/team/today/generate"));
+
+// ───────────────────────── Managed AI assets ─────────────────────────
+
+export const fetchManagedSkills = (scope: ManagedScope = "mine") =>
+  unwrap(api.get<{ skills: ManagedSkill[] }>("/ai-assets/skills", { scope }));
+export const fetchManagedMCPEntries = (scope: ManagedScope = "mine") =>
+  unwrap(api.get<{ entries: ManagedMCPEntry[] }>("/ai-assets/mcp", { scope }));
+export const createManagedMCPEntry = (payload: ManagedMCPEntry) =>
+  unwrap(api.post<ManagedMCPEntry>("/ai-assets/mcp", payload));
+export const fetchManagedAgents = () =>
+  unwrap(api.get<{ agents: ManagedAgent[] }>("/ai-assets/agents"));
+export const createManagedAgent = (payload: UpsertManagedAgentPayload) =>
+  unwrap(api.post<{ agent_id: string; managed_version?: number }>("/ai-assets/agents", payload));
+export const updateManagedAgent = (agentId: string, payload: UpsertManagedAgentPayload) =>
+  unwrap(
+    api.put<{ agent_id: string; managed_version?: number }>(`/ai-assets/agents/${agentId}`, payload)
+  );
+export const startManagedAgentRun = (agentId: string, payload: ManagedAgentManualRunPayload) =>
+  unwrap(api.post<AIRun>(`/ai-assets/agents/${agentId}/runs`, payload));
+export const fetchManagedAgentRuns = (params?: {
+  agent_id?: string;
+  business_type?: string;
+  page_size?: string;
+}) => unwrap(api.get<{ runs: AIRun[] }>("/ai-assets/agent-runs", params));
+export const fetchManagedAgentRun = (runId: string) =>
+  unwrap(api.get<AIRun>(`/ai-assets/agent-runs/${runId}`));
 export const fetchTeamReports = (params?: Record<string, string>) =>
   unwrap(api.get<TeamReport[]>("/reports/team", params));
 export const updateTeamReport = (id: string, data: { content?: string; feishu_doc_url?: string }) =>

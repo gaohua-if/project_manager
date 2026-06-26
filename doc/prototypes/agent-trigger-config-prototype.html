@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aida Agent 触发配置原型</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --panel-soft: #fbfcfe;
+        --line: #dfe7f1;
+        --line-strong: #c9d6e5;
+        --text: #172033;
+        --muted: #657287;
+        --muted-2: #8a96a8;
+        --blue: #2563eb;
+        --blue-soft: #eef5ff;
+        --green: #047857;
+        --green-soft: #ecfdf5;
+        --amber: #b45309;
+        --amber-soft: #fff7ed;
+        --red: #b91c1c;
+        --red-soft: #fef2f2;
+        --purple: #6d28d9;
+        --shadow: 0 12px 30px rgba(20, 32, 54, 0.08);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--bg);
+        letter-spacing: 0;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .side {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 18px 14px;
+        background: #111827;
+        color: #dbe4f0;
+      }
+
+      .brand {
+        display: grid;
+        gap: 4px;
+        padding: 4px 8px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .brand strong {
+        color: #fff;
+        font-size: 17px;
+      }
+
+      .brand span {
+        color: #9ca8ba;
+        font-size: 12px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 4px;
+      }
+
+      .nav button {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        align-items: center;
+        width: 100%;
+        min-height: 38px;
+        padding: 6px 10px;
+        color: #cbd5e1;
+        text-align: left;
+        background: transparent;
+        border-radius: 7px;
+      }
+
+      .nav button.is-active,
+      .nav button:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .nav small {
+        color: #8c98aa;
+        font-size: 11px;
+      }
+
+      .main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-width: 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 24px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .title {
+        display: grid;
+        gap: 4px;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.25;
+      }
+
+      .title span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 12px;
+        color: var(--text);
+        background: #fff;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        white-space: nowrap;
+      }
+
+      .btn.primary {
+        color: #fff;
+        background: var(--blue);
+        border-color: var(--blue);
+      }
+
+      .btn.icon {
+        width: 34px;
+        padding: 0;
+      }
+
+      .content {
+        display: grid;
+        gap: 16px;
+        padding: 18px 24px 28px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        padding: 14px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+
+      .metric-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        color: var(--blue);
+        background: var(--blue-soft);
+        border-radius: 7px;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 20px;
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .workbench {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) 360px;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .section {
+        display: grid;
+        gap: 12px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .segmented {
+        display: inline-flex;
+        gap: 3px;
+        padding: 3px;
+        background: #edf2f7;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .segmented button {
+        min-height: 28px;
+        padding: 0 10px;
+        color: var(--muted);
+        background: transparent;
+        border-radius: 6px;
+      }
+
+      .segmented button.is-active {
+        color: var(--text);
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      }
+
+      .table-panel,
+      .form-panel,
+      .run-panel,
+      .timeline-panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--panel-soft);
+      }
+
+      td {
+        font-size: 13px;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .name-cell {
+        display: grid;
+        gap: 3px;
+      }
+
+      .name-cell strong {
+        font-size: 13px;
+      }
+
+      .name-cell span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0 8px;
+        color: #334155;
+        font-size: 12px;
+        background: #f1f5f9;
+        border-radius: 999px;
+      }
+
+      .tag.green {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .tag.amber {
+        color: var(--amber);
+        background: var(--amber-soft);
+      }
+
+      .tag.blue {
+        color: var(--blue);
+        background: var(--blue-soft);
+      }
+
+      .tag.red {
+        color: var(--red);
+        background: var(--red-soft);
+      }
+
+      .row-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .row-actions .btn {
+        min-height: 28px;
+        padding: 0 8px;
+        font-size: 12px;
+      }
+
+      .form-panel {
+        padding: 16px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field.full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        min-height: 36px;
+        padding: 8px 10px;
+        color: var(--text);
+        background: #fff;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 94px;
+        resize: vertical;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      }
+
+      .param-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .param-row {
+        display: grid;
+        grid-template-columns: 140px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .run-panel {
+        display: grid;
+      }
+
+      .run-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px;
+        background: var(--panel-soft);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .run-body {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .template-box,
+      .result-box {
+        margin: 0;
+        padding: 12px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.6;
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        white-space: pre-wrap;
+      }
+
+      .result-box {
+        min-height: 132px;
+      }
+
+      .timeline-panel {
+        padding: 14px;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 12px;
+      }
+
+      .event {
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+      }
+
+      .event time {
+        color: var(--muted-2);
+        font-size: 12px;
+      }
+
+      .event strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 13px;
+      }
+
+      .event span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .drawer {
+        position: fixed;
+        inset: 0;
+        display: none;
+        background: rgba(15, 23, 42, 0.28);
+        z-index: 10;
+      }
+
+      .drawer.is-open {
+        display: grid;
+        justify-items: end;
+      }
+
+      .drawer-panel {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        width: min(620px, 100vw);
+        height: 100vh;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .drawer-head,
+      .drawer-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .drawer-foot {
+        justify-content: flex-end;
+        border-top: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .drawer-body {
+        padding: 16px;
+        overflow: auto;
+      }
+
+      .drawer-head h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .kbd {
+        padding: 1px 6px;
+        color: #475569;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+        background: #f1f5f9;
+        border: 1px solid #dbe3ee;
+        border-radius: 5px;
+      }
+
+      @media (max-width: 1100px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .side {
+          display: none;
+        }
+
+        .workbench {
+          grid-template-columns: 1fr;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar,
+        .content {
+          padding-left: 14px;
+          padding-right: 14px;
+        }
+
+        .topbar,
+        .section-head {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .metrics,
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .param-row {
+          grid-template-columns: 1fr;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3),
+        th:nth-child(4),
+        td:nth-child(4) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="side">
+        <div class="brand">
+          <strong>Aida</strong>
+          <span>Agent 触发配置</span>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="is-active"><span>◉</span><span>Agent 配置</span><small>4</small></button>
+          <button><span>◆</span><span>日报 / 周报</span><small>2</small></button>
+          <button><span>◇</span><span>运行历史</span><small>18</small></button>
+          <button><span>◌</span><span>系统设置</span><small></small></button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title">
+            <h1>业务 Agent 触发配置</h1>
+            <span>用户将个人 Agent 绑定到日报、团队日报和定时草稿场景</span>
+          </div>
+          <div class="top-actions">
+            <button class="btn icon" title="刷新" aria-label="刷新">↻</button>
+            <button class="btn">运行历史</button>
+            <button class="btn primary" data-open-drawer="binding">新建绑定</button>
+          </div>
+        </header>
+
+        <section class="content">
+          <div class="metrics">
+            <div class="metric">
+              <span class="metric-icon">⚙</span>
+              <div><strong>4</strong><span>已启用绑定</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">▶</span>
+              <div><strong>27</strong><span>本周 Agent 运行</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">◷</span>
+              <div><strong>3</strong><span>定时草稿任务</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">!</span>
+              <div><strong>2</strong><span>需要处理的失败</span></div>
+            </div>
+          </div>
+
+          <div class="workbench">
+            <section class="section">
+              <div class="section-head">
+                <h2>Agent 使用绑定</h2>
+                <div class="segmented" role="tablist">
+                  <button class="is-active" data-filter="all">全部</button>
+                  <button data-filter="personal">个人日报</button>
+                  <button data-filter="team">团队日报</button>
+                  <button data-filter="schedule">定时</button>
+                </div>
+              </div>
+
+              <div class="table-panel">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>业务场景</th>
+                      <th>默认 Agent</th>
+                      <th>触发方式</th>
+                      <th>输出</th>
+                      <th>状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bindingRows">
+                    <tr data-kind="personal">
+                      <td>
+                        <div class="name-cell">
+                          <strong>个人日报</strong>
+                          <span>普通用户 / 每日工作总结</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="name-cell">
+                          <strong>aida-daily-report-agent</strong>
+                          <span>Kimi-K2.6 · v2</span>
+                        </div>
+                      </td>
+                      <td><span class="tag blue">手动</span></td>
+                      <td>Markdown 草稿 + 任务建议</td>
+                      <td><span class="tag green">启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="btn" data-open-drawer="run">运行</button>
+                          <button class="btn" data-open-drawer="binding">编辑</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr data-kind="team">
+                      <td>
+                        <div class="name-cell">
+                          <strong>团队日报</strong>
+                          <span>AI 工程 / TL 汇总</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="name-cell">
+                          <strong>team-summary-agent</strong>
+                          <span>claude-sonnet · v1</span>
+                        </div>
+                      </td>
+                      <td><span class="tag blue">手动</span></td>
+                      <td>团队日报草稿</td>
+                      <td><span class="tag amber">待配置</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="btn" data-open-drawer="run">运行</button>
+                          <button class="btn" data-open-drawer="binding">编辑</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr data-kind="schedule">
+                      <td>
+                        <div class="name-cell">
+                          <strong>个人日报草稿</strong>
+                          <span>工作日 19:00 自动生成</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="name-cell">
+                          <strong>aida-daily-report-agent</strong>
+                          <span>Kimi-K2.6 · v2</span>
+                        </div>
+                      </td>
+                      <td><span class="tag amber">定时</span></td>
+                      <td>仅生成草稿</td>
+                      <td><span class="tag green">启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="btn" data-open-drawer="run">试运行</button>
+                          <button class="btn" data-open-drawer="binding">编辑</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr data-kind="personal">
+                      <td>
+                        <div class="name-cell">
+                          <strong>需求风险摘要</strong>
+                          <span>PM / 需求看板</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="name-cell">
+                          <strong>risk-review-agent</strong>
+                          <span>gpt-5-codex · v3</span>
+                        </div>
+                      </td>
+                      <td><span class="tag">事件</span></td>
+                      <td>风险建议</td>
+                      <td><span class="tag red">暂停</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="btn" data-open-drawer="run">运行</button>
+                          <button class="btn" data-open-drawer="binding">编辑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="form-panel">
+                <div class="section-head">
+                  <h2>绑定配置</h2>
+                  <span class="tag blue">personal_daily_report</span>
+                </div>
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="scenario">业务场景</label>
+                    <select id="scenario">
+                      <option>个人日报</option>
+                      <option>团队日报</option>
+                      <option>需求风险摘要</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="agent">默认 Agent</label>
+                    <select id="agent">
+                      <option>aida-daily-report-agent</option>
+                      <option>log-analysis-daily-report-agent</option>
+                      <option>team-summary-agent</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="model">模型</label>
+                    <input id="model" value="Kimi-K2.6" />
+                  </div>
+                  <div class="field">
+                    <label for="trigger">触发方式</label>
+                    <select id="trigger">
+                      <option>手动</option>
+                      <option>定时生成草稿</option>
+                      <option>业务事件</option>
+                    </select>
+                  </div>
+                  <div class="field full">
+                    <label for="template">Start Prompt 模板</label>
+                    <textarea id="template">请基于 {{report_date}} 的 Aida 上下文，为 {{user_name}} 生成个人日报草稿。</textarea>
+                  </div>
+                  <div class="field full">
+                    <label>参数映射</label>
+                    <div class="param-list">
+                      <div class="param-row">
+                        <input value="report_date" />
+                        <input value="系统日期 / 用户选择日期" />
+                        <button class="btn icon" title="删除">×</button>
+                      </div>
+                      <div class="param-row">
+                        <input value="selected_sessions" />
+                        <input value="当天已上传 session 列表" />
+                        <button class="btn icon" title="删除">×</button>
+                      </div>
+                      <div class="param-row">
+                        <input value="output_contract" />
+                        <input value="日报 JSON 输出协议" />
+                        <button class="btn icon" title="删除">×</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="section">
+              <div class="run-panel">
+                <div class="run-head">
+                  <strong>试运行</strong>
+                  <span class="tag blue">manual</span>
+                </div>
+                <div class="run-body">
+                  <div class="field">
+                    <label for="runAgent">Agent</label>
+                    <select id="runAgent">
+                      <option>aida-daily-report-agent</option>
+                      <option>log-analysis-daily-report-agent</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="runModel">模型</label>
+                    <input id="runModel" value="Kimi-K2.6" />
+                  </div>
+                  <div class="field">
+                    <label for="runParams">运行参数</label>
+                    <textarea id="runParams">report_date=2026-06-26
+user_name=普通用户
+urls=["xxx","yyy"]</textarea>
+                  </div>
+                  <pre class="template-box">Start Prompt:
+请基于 {{report_date}} 的 Aida 上下文，为 {{user_name}} 生成个人日报草稿。</pre>
+                  <button class="btn primary" id="simulateRun">提交运行</button>
+                  <pre class="result-box" id="runResult">运行结果会显示在这里。</pre>
+                </div>
+              </div>
+
+              <div class="timeline-panel">
+                <div class="section-head">
+                  <h2>最近运行</h2>
+                  <button class="btn">查看全部</button>
+                </div>
+                <div class="timeline">
+                  <div class="event">
+                    <time>09:16</time>
+                    <div>
+                      <strong>aida-daily-report-agent</strong>
+                      <span>Kimi-K2.6 · pending · task result not ready</span>
+                    </div>
+                  </div>
+                  <div class="event">
+                    <time>08:03</time>
+                    <div>
+                      <strong>log-analysis-daily-report-agent</strong>
+                      <span>failed · 模型无权限</span>
+                    </div>
+                  </div>
+                  <div class="event">
+                    <time>昨天</time>
+                    <div>
+                      <strong>team-summary-agent</strong>
+                      <span>succeeded · 团队日报草稿已生成</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="drawer" id="drawer">
+      <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+        <div class="drawer-head">
+          <h3 id="drawerTitle">编辑绑定</h3>
+          <button class="btn icon" id="closeDrawer" aria-label="关闭">×</button>
+        </div>
+        <div class="drawer-body">
+          <div class="form-grid">
+            <div class="field">
+              <label>触发类型</label>
+              <select>
+                <option>手动</option>
+                <option>定时生成草稿</option>
+                <option>业务事件</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>定时策略</label>
+              <select>
+                <option>不启用</option>
+                <option>工作日 18:00</option>
+                <option>每天 19:00</option>
+                <option>周五 17:00</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label>输出协议</label>
+              <textarea>{"report_markdown":"...","task_progress_suggestions":[]}</textarea>
+            </div>
+            <div class="field full">
+              <label>确认方式</label>
+              <select>
+                <option>仅生成草稿，用户手动保存</option>
+                <option>生成草稿并提醒用户确认</option>
+                <option>自动发送前需要审批</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-foot">
+          <button class="btn" id="cancelDrawer">取消</button>
+          <button class="btn primary" id="saveDrawer">保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const drawer = document.getElementById("drawer");
+      const drawerTitle = document.getElementById("drawerTitle");
+      document.querySelectorAll("[data-open-drawer]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const mode = button.getAttribute("data-open-drawer");
+          drawerTitle.textContent = mode === "run" ? "运行 Agent" : "编辑绑定";
+          drawer.classList.add("is-open");
+        });
+      });
+      document.getElementById("closeDrawer").addEventListener("click", () => {
+        drawer.classList.remove("is-open");
+      });
+      document.getElementById("cancelDrawer").addEventListener("click", () => {
+        drawer.classList.remove("is-open");
+      });
+      document.getElementById("saveDrawer").addEventListener("click", () => {
+        drawer.classList.remove("is-open");
+      });
+      drawer.addEventListener("click", (event) => {
+        if (event.target === drawer) drawer.classList.remove("is-open");
+      });
+
+      document.querySelectorAll(".segmented button").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".segmented button").forEach((item) => {
+            item.classList.remove("is-active");
+          });
+          button.classList.add("is-active");
+          const filter = button.getAttribute("data-filter");
+          document.querySelectorAll("#bindingRows tr").forEach((row) => {
+            row.style.display = filter === "all" || row.dataset.kind === filter ? "" : "none";
+          });
+        });
+      });
+
+      document.getElementById("simulateRun").addEventListener("click", () => {
+        const result = document.getElementById("runResult");
+        result.textContent =
+          "pending\\n外部 Task 已提交。\\n\\nAgent: " +
+          document.getElementById("runAgent").value +
+          "\\nModel: " +
+          document.getElementById("runModel").value +
+          "\\n\\n下一次轮询将更新运行状态。";
+        setTimeout(() => {
+          result.textContent =
+            "succeeded\\n\\n# 个人日报草稿\\n\\n## 今日完成\\n- 完成 Agent 触发配置原型梳理\\n- 补充运行历史查询入口\\n\\n## 风险\\n- 定时任务需要单独的失败通知策略";
+        }, 900);
+      });
+    </script>
+  </body>
+</html>

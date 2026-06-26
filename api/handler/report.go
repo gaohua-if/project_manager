@@ -26,12 +26,7 @@ func NewReportHandler(db *sql.DB, reportGeneratorURL string) *ReportHandler {
 
 func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	query := `
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.created_at, dr.updated_at
-		FROM daily_reports dr
-		JOIN users u ON u.id = dr.user_id
-		WHERE 1=1`
+	query := reportSelectColumns + " WHERE 1=1"
 	args := []any{}
 	argIdx := 1
 
@@ -67,13 +62,11 @@ func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	reports := []model.DailyReport{}
 	for rows.Next() {
-		var dr model.DailyReport
-		var feishuURL sql.NullString
-		var sessionIDsStr string
-		rows.Scan(&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
-			&feishuURL, &sessionIDsStr, &dr.CreatedAt, &dr.UpdatedAt)
-		dr.FeishuDocURL = nullStringPtr(feishuURL)
-		dr.SessionIDs = parseUUIDArray(sessionIDsStr)
+		dr, err := scanDailyReport(rows)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		reports = append(reports, dr)
 	}
 	if err := rows.Err(); err != nil {
@@ -86,25 +79,15 @@ func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var dr model.DailyReport
-	var feishuURL sql.NullString
-	var sessionIDsStr string
-
-	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.created_at, dr.updated_at
-		FROM daily_reports dr
-		JOIN users u ON u.id = dr.user_id
-		WHERE dr.id = $1`, id).Scan(
-		&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
-		&feishuURL, &sessionIDsStr, &dr.CreatedAt, &dr.UpdatedAt,
-	)
+	dr, err := scanDailyReport(h.db.QueryRow(reportSelectColumns+" WHERE dr.id = $1", id))
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	dr.FeishuDocURL = nullStringPtr(feishuURL)
-	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, dr)
 }
 
@@ -112,31 +95,16 @@ func (h *ReportHandler) GetOrCreateToday(w http.ResponseWriter, r *http.Request)
 	u := getUser(r)
 	today := time.Now().Format("2006-01-02")
 
-	var dr model.DailyReport
-	var feishuURL sql.NullString
-	var sessionIDsStr string
-
-	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.created_at, dr.updated_at
-		FROM daily_reports dr
-		JOIN users u ON u.id = dr.user_id
-		WHERE dr.user_id = $1 AND dr.report_date = $2`, u.ID, today).Scan(
-		&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
-		&feishuURL, &sessionIDsStr, &dr.CreatedAt, &dr.UpdatedAt,
-	)
-
+	dr, err := scanDailyReport(h.db.QueryRow(reportSelectColumns+" WHERE dr.user_id = $1 AND dr.report_date = $2", u.ID, today))
 	if err == sql.ErrNoRows {
 		content := h.generateReportContent(u.ID, today)
 		var reportID string
-		err := h.db.QueryRow(`
+		if err := h.db.QueryRow(`
 			INSERT INTO daily_reports (user_id, report_date, content)
-			VALUES ($1, $2, $3) RETURNING id`, u.ID, today, content).Scan(&reportID)
-		if err != nil {
+			VALUES ($1, $2, $3) RETURNING id`, u.ID, today, content).Scan(&reportID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-
 		dr = model.DailyReport{
 			ID:         reportID,
 			UserID:     u.ID,
@@ -148,9 +116,6 @@ func (h *ReportHandler) GetOrCreateToday(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	dr.FeishuDocURL = nullStringPtr(feishuURL)
-	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
 	writeJSON(w, http.StatusOK, dr)
 }
 
@@ -225,7 +190,7 @@ func (h *ReportHandler) GenerateTodayDraft(w http.ResponseWriter, r *http.Reques
 		skillID = service.DefaultDailyReportSkillID
 	}
 
-	sessions, err := h.loadDraftSessions(u.ID, sessionIDs)
+	sessions, err := loadDraftSessions(h.db, u.ID, sessionIDs)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -235,7 +200,7 @@ func (h *ReportHandler) GenerateTodayDraft(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tasks, err := h.loadDraftTaskCandidates(u.ID)
+	tasks, err := loadDraftTaskCandidates(h.db, u.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -286,8 +251,8 @@ func (h *ReportHandler) GenerateTodayDraft(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, draftResp)
 }
 
-func (h *ReportHandler) loadDraftSessions(userID string, sessionIDs []string) ([]model.ReportDraftSession, error) {
-	rows, err := h.db.Query(`
+func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.ReportDraftSession, error) {
+	rows, err := db.Query(`
 		SELECT s.id::text, s.session_ref, s.agent_type, s.started_at, s.ended_at, s.duration_secs,
 			COALESCE(s.model, ''), COALESCE(s.summary, ''), COALESCE(s.tool_calls_json::text, '{}'),
 			s.task_id::text, COALESCE(t.title, ''), s.requirement_id::text, COALESCE(r.title, ''),
@@ -337,8 +302,8 @@ func (h *ReportHandler) loadDraftSessions(userID string, sessionIDs []string) ([
 	return sessions, rows.Err()
 }
 
-func (h *ReportHandler) loadDraftTaskCandidates(userID string) ([]model.ReportDraftTaskCandidate, error) {
-	rows, err := h.db.Query(`
+func loadDraftTaskCandidates(db *sql.DB, userID string) ([]model.ReportDraftTaskCandidate, error) {
+	rows, err := db.Query(`
 		SELECT t.id::text, t.title, r.id::text, r.title, t.status, t.progress, COALESCE(u.name, '')
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
@@ -364,23 +329,10 @@ func (h *ReportHandler) loadDraftTaskCandidates(userID string) ([]model.ReportDr
 }
 
 func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.DailyReport, error) {
-	var dr model.DailyReport
-	var feishuURL sql.NullString
-	var sessionIDsStr string
-	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.created_at, dr.updated_at
-		FROM daily_reports dr
-		JOIN users u ON u.id = dr.user_id
-		WHERE dr.user_id = $1 AND dr.report_date = $2`, userID, reportDate).Scan(
-		&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
-		&feishuURL, &sessionIDsStr, &dr.CreatedAt, &dr.UpdatedAt,
-	)
+	dr, err := scanDailyReport(h.db.QueryRow(reportSelectColumns+" WHERE dr.user_id = $1 AND dr.report_date = $2", userID, reportDate))
 	if err != nil {
 		return nil, err
 	}
-	dr.FeishuDocURL = nullStringPtr(feishuURL)
-	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
 	return &dr, nil
 }
 
@@ -400,6 +352,19 @@ func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.SessionIDs = &sessionIDs
+	}
+	var runMeta *reportRunMeta
+	if req.ManagedAgentRunID != nil && *req.ManagedAgentRunID != "" {
+		meta, err := h.loadReportRunMeta(u.ID, *req.ManagedAgentRunID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "managed agent run is not accessible"})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		runMeta = meta
 	}
 
 	sets := []string{"updated_at = now()"}
@@ -421,6 +386,25 @@ func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 		args = append(args, pq.Array(*req.SessionIDs))
 		argIdx++
 	}
+	if runMeta != nil {
+		sets = append(sets, "generation_mode = 'managed_agent'")
+		sets = append(sets, fmt.Sprintf("managed_agent_run_id = $%d", argIdx))
+		args = append(args, runMeta.RunID)
+		argIdx++
+		sets = append(sets, fmt.Sprintf("agent_id = $%d", argIdx))
+		args = append(args, runMeta.AgentID)
+		argIdx++
+		if runMeta.AgentVersionID != nil {
+			sets = append(sets, fmt.Sprintf("agent_version_id = $%d", argIdx))
+			args = append(args, *runMeta.AgentVersionID)
+			argIdx++
+		}
+		if runMeta.ModelID != nil {
+			sets = append(sets, fmt.Sprintf("model_id = $%d", argIdx))
+			args = append(args, *runMeta.ModelID)
+			argIdx++
+		}
+	}
 
 	args = append(args, id)
 	query := fmt.Sprintf("UPDATE daily_reports SET %s WHERE id = $%d", joinWithCommas(sets), argIdx)
@@ -434,8 +418,38 @@ func (h *ReportHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if runMeta != nil {
+		_, _ = h.db.Exec(`UPDATE ai_runs SET business_id = $1 WHERE id = $2 AND user_id = $3`, id, runMeta.RunID, u.ID)
+	}
 
 	h.Get(w, r)
+}
+
+type reportRunMeta struct {
+	RunID          string
+	AgentID        string
+	AgentVersionID *int
+	ModelID        *string
+}
+
+func (h *ReportHandler) loadReportRunMeta(userID, runID string) (*reportRunMeta, error) {
+	var meta reportRunMeta
+	var agentVersionID sql.NullInt64
+	var modelID sql.NullString
+	err := h.db.QueryRow(`
+		SELECT id::text, agent_id, agent_version_id, model_id
+		FROM ai_runs
+		WHERE id = $1 AND user_id = $2 AND business_type = 'daily_report' AND status = 'succeeded'`,
+		runID, userID).Scan(&meta.RunID, &meta.AgentID, &agentVersionID, &modelID)
+	if err != nil {
+		return nil, err
+	}
+	if agentVersionID.Valid {
+		v := int(agentVersionID.Int64)
+		meta.AgentVersionID = &v
+	}
+	meta.ModelID = nullStringPtr(modelID)
+	return &meta, nil
 }
 
 func (h *ReportHandler) validateReportSessionIDs(userID string, sessionIDs []string) error {
@@ -793,6 +807,40 @@ func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) 
 
 func parseUUIDArray(pgArray string) []string {
 	return parseTextArray(pgArray)
+}
+
+// reportSelectColumns is the shared column list + FROM/JOIN for daily_reports.
+// Every daily-report read path uses it so the SELECT and the scan in
+// scanDailyReport cannot drift apart when a column is added.
+const reportSelectColumns = `SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
+			dr.feishu_doc_url, dr.session_ids, dr.generation_mode, dr.managed_agent_run_id::text,
+			dr.agent_id, dr.agent_version_id, dr.model_id, dr.created_at, dr.updated_at
+		FROM daily_reports dr
+		JOIN users u ON u.id = dr.user_id`
+
+// scanDailyReport scans one daily_reports row (from *sql.Row or *sql.Rows) into
+// a model.DailyReport, normalizing the nullable/encoded columns.
+func scanDailyReport(row rowScanner) (model.DailyReport, error) {
+	var dr model.DailyReport
+	var feishuURL sql.NullString
+	var sessionIDsStr string
+	var managedRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	if err := row.Scan(&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
+		&feishuURL, &sessionIDsStr, &dr.GenerationMode, &managedRunID,
+		&agentID, &agentVersionID, &modelID, &dr.CreatedAt, &dr.UpdatedAt); err != nil {
+		return dr, err
+	}
+	dr.FeishuDocURL = nullStringPtr(feishuURL)
+	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	dr.ManagedAgentRunID = nullStringPtr(managedRunID)
+	dr.AgentID = nullStringPtr(agentID)
+	dr.ModelID = nullStringPtr(modelID)
+	if agentVersionID.Valid {
+		v := int(agentVersionID.Int64)
+		dr.AgentVersionID = &v
+	}
+	return dr, nil
 }
 
 func joinWithCommas(items []string) string {

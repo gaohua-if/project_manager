@@ -3,11 +3,13 @@ import {
   BellOutlined,
   DashboardOutlined,
   FileTextOutlined,
+  RobotOutlined,
   ProjectOutlined,
   SolutionOutlined,
   TeamOutlined
 } from "@ant-design/icons";
 
+import { AIAssetsPage } from "@/features/aidashboard/ai-assets/pages/AIAssetsPage";
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
 import { OrganizationPage } from "@/features/aidashboard/organization/pages/OrganizationPage";
 import { OrganizationPasswordResetPage } from "@/features/aidashboard/organization/pages/OrganizationPasswordResetPage";
@@ -141,6 +143,15 @@ export const appRoutes: AppRoute[] = [
     menuGroup: "系统",
     menuOrder: 80,
     element: <TokensPage />
+  },
+  {
+    path: "/ai-assets",
+    title: "我的 AI 资产",
+    icon: <RobotOutlined />,
+    menuGroup: "系统",
+    menuOrder: 90,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AIAssetsPage />
   },
   {
     path: "/notifications",

@@ -1,0 +1,7945 @@
+{
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "title": "Sandboxed Agent Platform Gateway",
+    "version": "0.3.0"
+  },
+  "basePath": "/",
+  "paths": {
+    "/api/admin/agents": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Every Agent including non-public ones, with visibility configuration and the managed (v2) configuration block. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List all agents (admin)",
+        "operationId": "adminListAgents",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "items": {
+                "type": "object",
+                "required": [
+                  "agent_id",
+                  "name",
+                  "image",
+                  "entrypoint",
+                  "timeout",
+                  "is_public",
+                  "default_model_id",
+                  "current_version",
+                  "visible_user_ids"
+                ],
+                "properties": {
+                  "accepted_file_types": {
+                    "type": "string"
+                  },
+                  "agent_id": {
+                    "type": "string"
+                  },
+                  "credential_slots": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/CredentialSlotDef"
+                    }
+                  },
+                  "current_version": {
+                    "type": "integer"
+                  },
+                  "default_model_id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "engine": {
+                    "type": "string"
+                  },
+                  "entrypoint": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "required": [
+                        "description",
+                        "required"
+                      ],
+                      "properties": {
+                        "default": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "$ref": "#/definitions/ParamDef"
+                  },
+                  "estimated_manual_minutes": {
+                    "type": "integer"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "input_schema": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "required": [
+                        "description",
+                        "required"
+                      ],
+                      "properties": {
+                        "default": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "$ref": "#/definitions/ParamDef"
+                  },
+                  "is_public": {
+                    "type": "boolean"
+                  },
+                  "managed": {
+                    "type": "object",
+                    "required": [
+                      "owner_id",
+                      "engine",
+                      "current_version_id",
+                      "archived"
+                    ],
+                    "properties": {
+                      "archived": {
+                        "type": "boolean"
+                      },
+                      "credential_slots": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/CredentialSlotDef"
+                        }
+                      },
+                      "current_version_id": {
+                        "type": "integer"
+                      },
+                      "default_bindings": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "default_model_id": {
+                        "type": "string"
+                      },
+                      "engine": {
+                        "type": "string"
+                      },
+                      "harness_image": {
+                        "type": "string"
+                      },
+                      "instructions": {
+                        "type": "string"
+                      },
+                      "mcp_bindings": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/MCPBindingDef"
+                        }
+                      },
+                      "owner_id": {
+                        "type": "integer"
+                      },
+                      "skills": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/SkillRef"
+                        }
+                      },
+                      "start_prompt_template": {
+                        "type": "string"
+                      },
+                      "subagents": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/SubagentRef"
+                        }
+                      }
+                    },
+                    "$ref": "#/definitions/AdminManagedAgent"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "metrics": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/AgentMetricDef"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "start_prompt_template": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer"
+                  },
+                  "visible_user_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "$ref": "#/definitions/AdminAgentResp"
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Create an Agent with admin-only fields (is_public, estimated_manual_minutes). Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create an agent (admin)",
+        "operationId": "adminCreateAgent",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AdminCreateAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AdminCreateAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/agents/{agentId}": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Merge-update any Agent's configuration. Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update an agent (admin)",
+        "operationId": "adminUpdateAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AdminUpdateAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Hard-delete an Agent. Admin role required.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete an agent (admin)",
+        "operationId": "adminDeleteAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/agents/{agentId}/estimated-time": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Update the estimated manual minutes used for time-saved statistics. Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Set agent estimated manual time (admin)",
+        "operationId": "adminUpdateAgentTime",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UpdateAgentTimeSavedReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/agents/{agentId}/visibility": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Restrict a non-public Agent to a list of user ids. Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Set agent visibility (admin)",
+        "operationId": "adminSetAgentVisibility",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SetAgentVisibilityReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/check": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Whether the calling user has the admin role.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Check admin status",
+        "operationId": "adminCheck",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AdminCheckResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/feedback": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Paginated Platform Feedback inbox. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List platform feedback (admin)",
+        "operationId": "adminListPlatformFeedback",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "integer",
+            "name": "offset",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListPlatformFeedbackResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/health": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "One-shot health probes: OpenSandbox API + sandbox count, Redis, Asynq queue depths, OSS, and an Active Run summary. A failing probe darkens only its own card. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Platform health snapshot",
+        "operationId": "opsHealth",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsHealthResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/reconcile": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Bidirectional cross-check: Active Runs whose sandbox vanished (orphan records, candidates for finalization) and sandboxes no run references (orphan sandboxes, candidates for deletion). Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Reconcile records and sandboxes",
+        "operationId": "opsReconcile",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsReconcileResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/runs": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "The unified Active Run inventory (v1 Tasks + v2 Sessions, non-terminal), annotated with staleness and ordered by suspicion (longest-silent first). Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "List active runs",
+        "operationId": "opsRuns",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsRunsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/runs/{kind}/{runId}/diagnosis": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "On-demand read-only cross-check of one run (kind task|session): joins the control-plane record, the Sandbox Service view and workspace evidence tails into a stall shape classification. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Diagnose a run",
+        "operationId": "opsDiagnosis",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "runId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsRunDiagnosisResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/runs/{kind}/{runId}/finalize": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Admin intervention: finalize a record whose sandbox is already gone (orphaned record). Admin role required.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Finalize a run record (admin)",
+        "operationId": "opsFinalizeRecord",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "runId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/runs/{kind}/{runId}/force-terminate": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Admin intervention: destroy the run's sandbox and finalize the record as terminated. Admin role required.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Force-terminate a run (admin)",
+        "operationId": "opsForceTerminate",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "runId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/runs/{kind}/{runId}/interrupt": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Admin intervention: gracefully interrupt one active run. Recorded as a session.user_action Thread Event with the acting admin's identity. Admin role required.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Interrupt a run (admin)",
+        "operationId": "opsInterrupt",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "runId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/sandboxes/{sandboxId}": {
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Admin intervention: delete a sandbox no Active Run references. Admin role required.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Delete an orphan sandbox (admin)",
+        "operationId": "opsDeleteSandbox",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sandboxId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/sandboxes/{sandboxId}/file": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Bounded tail read of one workspace file (max 256 KiB; truncation flagged). Read-only. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Read a sandbox file",
+        "operationId": "opsReadFile",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sandboxId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "path",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "name": "max_bytes",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsWorkspaceFileResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ops/sandboxes/{sandboxId}/files": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "List a live sandbox workspace directory (default /tmp/workspace, glob pattern default *). Read-only. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Ops Console"
+        ],
+        "summary": "Browse sandbox files",
+        "operationId": "opsBrowseFiles",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sandboxId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "dir",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "string",
+            "name": "pattern",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OpsBrowseFilesResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/settings": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Platform-wide settings: default harness images and the Omni Bar interpreter model config. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get platform settings",
+        "operationId": "adminGetSettings",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/PlatformSettingsResp"
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Partial update; omitted fields are kept. Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update platform settings",
+        "operationId": "adminUpdateSettings",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UpdatePlatformSettingsReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/PlatformSettingsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Aggregated platform stats over the last N days (default 30), merging v1 Tasks and v2 Sessions. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Platform statistics",
+        "operationId": "adminStats",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "days",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AdminStatsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "All platform users with task counts. Admin role required.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List users",
+        "operationId": "adminListUsers",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "items": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "username",
+                  "is_admin",
+                  "task_count",
+                  "last_login_at",
+                  "created_at"
+                ],
+                "properties": {
+                  "created_at": {
+                    "type": "integer"
+                  },
+                  "is_admin": {
+                    "type": "boolean"
+                  },
+                  "last_login_at": {
+                    "type": "integer"
+                  },
+                  "task_count": {
+                    "type": "integer"
+                  },
+                  "user_id": {
+                    "type": "integer"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              },
+              "$ref": "#/definitions/AdminUserResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{userId}/admin": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Grant or revoke the admin role. Admin role required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Set user admin role",
+        "operationId": "adminSetUserAdmin",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "userId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SetAdminReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/list": {
+      "get": {
+        "description": "List Agents visible to the caller: public Agents for anonymous users, plus per-user authorized Agents when a Bearer token is supplied (auth optional).",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Agents"
+        ],
+        "summary": "List visible Agents",
+        "operationId": "listAgents",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListAgentsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/register": {
+      "post": {
+        "description": "Upsert an Agent with merge-update semantics: omitted fields keep stored values; non-nil arrays/objects replace the whole set. v1 image agents require image+entrypoint; presence of any v2 managed field (engine, instructions, skills, ...) marks the Agent as managed and mints a new Agent Version on effective change. No auth required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Register or update an Agent",
+        "operationId": "registerAgent",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RegisterAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/RegisterAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/{agentId}/archive": {
+      "post": {
+        "description": "Toggle the archived flag. Archiving blocks new Sessions and new Subagent references while history stays readable. No auth required (same trust group as register).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Archive or restore an Agent",
+        "operationId": "archiveAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArchiveAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ArchiveAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "Authenticate with an AiHub account and obtain a Bearer token for all authenticated endpoints. No auth required.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LoginReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/LoginResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/credential": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Store a write-only secret. The plaintext value is never returned by any API; it only exists briefly in Worker memory and is injected into sandbox MCP config files (0600), never into sandbox env vars.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Save a credential",
+        "operationId": "createCredential",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreateCredentialReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/CreateCredentialResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/credential/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Non-secret view of the caller's saved credentials (never includes plaintext values).",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "List credentials",
+        "operationId": "listCredentials",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListCredentialsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/credential/{credentialId}": {
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Delete one of the caller's credentials.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Delete a credential",
+        "operationId": "deleteCredential",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Create a dataset",
+        "operationId": "createDataset",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreateDatasetReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/CreateDatasetResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/add-task": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Bulk-add one task to several datasets at once.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Add a task to multiple datasets",
+        "operationId": "addTaskToDatasets",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AddTaskToDatasetsReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AddTaskToDatasetsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/export/{exportId}": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Get export status",
+        "operationId": "getExportStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "exportId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/DatasetExportStatus"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/exports": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "List exports",
+        "operationId": "listExports",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListExportsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Datasets owned by or visible to the caller.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "List datasets",
+        "operationId": "listDatasets",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListDatasetsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/{datasetId}": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Dataset metadata plus a paginated page of items (limit/offset).",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Get dataset detail",
+        "operationId": "getDataset",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "integer",
+            "name": "offset",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/DatasetResp"
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Update a dataset",
+        "operationId": "updateDataset",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UpdateDatasetReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Delete a dataset",
+        "operationId": "deleteDataset",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/{datasetId}/export": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Enqueue an async export job; poll GET /dataset/export/:exportId for progress and the download URL.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Export a dataset",
+        "operationId": "exportDataset",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ExportDatasetResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/{datasetId}/items": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Add one historical task/session (by task_id) to the dataset.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Add a dataset item",
+        "operationId": "addDatasetItem",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AddDatasetItemReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/{datasetId}/items/{itemId}": {
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Remove a dataset item",
+        "operationId": "removeDatasetItem",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "name": "itemId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/dataset/{datasetId}/visibility": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Restrict the dataset to a list of user ids.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Set dataset visibility",
+        "operationId": "setDatasetVisibility",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "datasetId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SetDatasetVisibilityReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/docs": {
+      "get": {
+        "description": "Human-readable, interactive rendering of this document (embedded Swagger UI). Use the Authorize button with 'Bearer \u003ctoken\u003e' to try authenticated endpoints. Public, no authentication required. Response is text/html, not JSON; static assets are served under /api/docs/\u003cfile\u003e.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Meta"
+        ],
+        "summary": "Swagger UI (interactive API docs)",
+        "operationId": "swaggerUI",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Store free-form Platform Feedback with the page it was written on.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Omni Bar"
+        ],
+        "summary": "Submit platform feedback",
+        "operationId": "createPlatformFeedback",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PlatformFeedbackReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/PlatformFeedbackResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/file/upload": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Upload one file to OSS as multipart/form-data with field name 'file' (max 100 MB). The returned oss_key is used in task submissions and session input_files.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file",
+        "operationId": "uploadFile",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/UploadFileResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Register one immutable MCP Registry entry version. transport http: url + auth_header/auth_scheme + static headers (contributes one egress whitelist host per Session). transport stdio: command + args + env; the bound credential is injected via credential_env (Sessions selecting any stdio server run without egress restriction).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "MCP Registry"
+        ],
+        "summary": "Register an MCP entry version",
+        "operationId": "createMCPEntry",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreateMCPEntryReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/MCPEntryResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Default: unarchived public view across all owners. scope=mine: only the caller's own entries, including archived ones.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "MCP Registry"
+        ],
+        "summary": "List MCP entries",
+        "operationId": "listMCPEntries",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "scope",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListMCPEntriesResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/{slug}/{version}": {
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Hard-delete one of the caller's own entry versions. Allowed only when no Agent configuration references it.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "MCP Registry"
+        ],
+        "summary": "Delete an MCP entry",
+        "operationId": "deleteMCPEntry",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/{slug}/{version}/archive": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Toggle archived on one of the caller's own entries. Existing Agent references keep resolving.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "MCP Registry"
+        ],
+        "summary": "Archive or restore an MCP entry",
+        "operationId": "archiveMCPEntry",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArchiveMCPEntryReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/my/agents": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "The caller's own managed Agents with full configuration (suitable for editing).",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "My Agents"
+        ],
+        "summary": "List my agents",
+        "operationId": "listMyAgents",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListMyAgentsResp"
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Self-service creation of a v2 managed Agent owned by the caller. Accepts the same managed fields as /agent/register (engine, instructions, start_prompt_template, skills, mcp_bindings, credential_slots, subagents, ...).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "My Agents"
+        ],
+        "summary": "Create a managed agent",
+        "operationId": "createMyAgent",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RegisterAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/RegisterAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/my/agents/{agentId}": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Merge-update one of the caller's managed Agents: omitted fields keep stored values; non-nil arrays/objects replace the whole set. Effective configuration changes mint a new immutable Agent Version.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "My Agents"
+        ],
+        "summary": "Update a managed agent",
+        "operationId": "updateMyAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UpdateMyAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/RegisterAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/my/agents/{agentId}/archive": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Toggle archived on one of the caller's managed Agents. Archiving blocks new Sessions and new Subagent references; history stays readable.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "My Agents"
+        ],
+        "summary": "Archive or restore my agent",
+        "operationId": "archiveMyAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "agentId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArchiveAgentReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ArchiveAgentResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/omni/interactions/{interactionId}/outcome": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Record what the user did with a Command Draft: confirmed, edited or dismissed.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Omni Bar"
+        ],
+        "summary": "Report omni draft outcome",
+        "operationId": "omniOutcome",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "interactionId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/OmniOutcomeReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/omni/interpret": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "One stateless interpretation of free-form user text into a typed Command Draft: kind is create_agent, start_session, create_skill, feedback or cannot_interpret. Makes a synchronous model call (its own 120s timeout budget). Report what the user did with the draft via POST /omni/interactions/:interactionId/outcome.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Omni Bar"
+        ],
+        "summary": "Interpret omni bar input",
+        "operationId": "omniInterpret",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/OmniInterpretReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OmniInterpretResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "description": "Returns this OpenAPI (Swagger 2.0) JSON document describing every Gateway endpoint. Public, no authentication required. Intended for both human tooling and AI agents. A human-readable Swagger UI rendering is served at GET /api/docs.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Meta"
+        ],
+        "summary": "OpenAPI document",
+        "operationId": "openAPIDoc",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      }
+    },
+    "/api/session": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Create and enqueue a v2 Session against a managed Agent (engine non-empty, not archived). Validates Agent, version and credential bindings before enqueueing; unresolvable required credential slots fail immediately. Follow progress via GET /session/:sessionId/events.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Create a session",
+        "operationId": "createSession",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreateSessionReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/CreateSessionResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "List the caller's Sessions, newest first. limit defaults to 20 (max 100), offset to 0.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List sessions",
+        "operationId": "listSessions",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "integer",
+            "name": "offset",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListSessionsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{sessionId}": {
+      "get": {
+        "description": "Full Session detail: status + stop/termination reason, resources, credential audit (ids only, never plaintext), MCP servers (non-secret view), skills, subagents, threads, deliverables, evidence archive, and all persisted Thread Events with event_cursor. Owner or public; auth optional.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get session detail",
+        "operationId": "getSession",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SessionResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{sessionId}/end": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Explicitly end a retained idle Session (PRD 020): finalization runs asynchronously — final deliverable collection, evidence archive, sandbox deletion. After this the Session is no longer resumable; Rerun remains available. Idempotent. Owner only.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "End a session",
+        "operationId": "endSession",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/EndSessionResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{sessionId}/events": {
+      "get": {
+        "description": "Server-Sent Events stream: an init snapshot (full SessionResp including event history and threads), then live Thread Events by type, then done when the Session reaches idle/terminated; timeout after 30 min. Owner or public; pass ?token=\u003cbearer token\u003e. Response is text/event-stream, not JSON.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Session event stream (SSE)",
+        "operationId": "sessionEvents",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "token",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Send a Follow-up Message (PRD 020) into a resumable idle Session: the Session transitions back to running and the message is delivered to the retained sandbox as a new Session Turn with full prior context. 409 when the Session is running, not resumable, or already finalized. Owner only.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Send a follow-up message",
+        "operationId": "followUpSession",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/FollowUpReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/FollowUpResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{sessionId}/interrupt": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Request an asynchronous User Interrupt of a running Session. The Worker stops the engine and the Session ends as idle with stop_reason=user_interrupted. Owner only.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Interrupt a session",
+        "operationId": "interruptSession",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/InterruptSessionResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{sessionId}/rerun-prefill": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Editable starting data of a source Session (agent, model, start prompt values, initial message, input file refs) used to prefill a new-Session form. Rerun always creates a new Session; it never resumes the source sandbox.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get rerun prefill data",
+        "operationId": "rerunPrefill",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "sessionId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/RerunPrefillResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Register one immutable Skill version as multipart/form-data. Fields: slug, version, name, description, plus either an 'artifact' file (zip/tgz containing a top-level SKILL.md, normalized to a canonical artifact) or 'skill_md' text (editor mode, optionally with repeated 'files' parts and comma-separated 'exec_paths'). version must not be the literal 'latest'; duplicate slug@version is rejected.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Register a skill version",
+        "operationId": "createSkill",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/CreateSkillResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Default: unarchived public view across all owners. scope=mine: only the caller's own entries, including archived ones.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "List skills",
+        "operationId": "listSkills",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "scope",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListSkillsResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Skill Workbench detail for one owner/slug: every version visible to the viewer, newest first, each with its live-config reference count.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Skill detail",
+        "operationId": "skillDetail",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SkillDetailResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}/derive": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Publish the next immutable version of owner/slug from a base version plus a changeset (ADR 0022). Publishing is open (PRD 024): any signed-in caller may publish into another user's slug as a Skill Collaborator; the slug owner stays fixed and the caller is recorded as the version's publisher. multipart/form-data: base_version, version (new), optional name/description, repeated file parts with artifact-relative paths, and repeated 'delete' values for removed paths.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Publish a new skill version (owner or collaborator)",
+        "operationId": "deriveSkill",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/CreateSkillResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}/{version}/download": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "The whole artifact of one skill version transcoded to a zip archive (application/zip attachment).",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Download skill artifact zip",
+        "operationId": "downloadSkillZip",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}/{version}/file": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Raw bytes of one file inside the artifact (?path=SKILL.md). Content-Type is sniffed from the content; response is the file body, not JSON.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Read a skill artifact file",
+        "operationId": "getSkillFile",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "path",
+            "in": "query",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}/{version}/files": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "File tree of one skill version's artifact, with text/binary hints.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "List skill artifact files",
+        "operationId": "listSkillFiles",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListSkillFilesResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{owner}/{slug}/{version}/used-by": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Which live Agent configurations reference this skill version: platform-wide total plus the referencing Agents the viewer is allowed to see.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Skill reverse references",
+        "operationId": "skillUsedBy",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SkillUsedByResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{slug}/{version}": {
+      "delete": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Hard-delete one of the caller's own skill versions. Allowed only when no Agent configuration references it.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Delete a skill version",
+        "operationId": "deleteSkill",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/skill/{slug}/{version}/archive": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Toggle archived on one of the caller's own skill versions. Archived versions disappear from pickers but existing Agent references keep resolving.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Archive or restore a skill version",
+        "operationId": "archiveSkill",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArchiveSkillReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/callback": {
+      "post": {
+        "description": "Internal Worker -\u003e Gateway callback that records a task's terminal status, output files and Claude messages. Not intended for external callers.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Task completion callback (internal)",
+        "operationId": "taskCallback",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/TaskCallbackReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/TaskCallbackResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/list": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "List the caller's tasks, newest first. limit defaults to 20 (max 100), offset to 0. scope=all lists all tasks visible to the caller. search filters by case-insensitive substring across id, agent, model, status, and (scope=all) owner username.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "List tasks",
+        "operationId": "listTasks",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "integer",
+            "name": "offset",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "string",
+            "name": "scope",
+            "in": "query",
+            "allowEmptyValue": true
+          },
+          {
+            "type": "string",
+            "name": "search",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListTasksResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/submit": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Queue a run of an Agent. For v1 image agents this creates a Task; if agent_id points to a v2 managed Agent this transparently creates a Session instead (task_id == session_id, params map to start prompt values, input_files become Session File Resources).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Submit a task",
+        "operationId": "submitTask",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SubmitTaskReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SubmitTaskResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/cancel": {
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Cancel a queued or running task; destroys its sandbox if one was created. Owner only.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Cancel a task",
+        "operationId": "cancelTask",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/events": {
+      "get": {
+        "description": "Server-Sent Events stream of live task updates. Event types: init, status, progress, claude_log, completed, failed, cancelled, done, timeout (30 min). Owner or public; pass ?token=\u003cbearer token\u003e since EventSource cannot set headers. Response is text/event-stream, not JSON.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Task event stream (SSE)",
+        "operationId": "taskEvents",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "token",
+            "in": "query",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {}
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/feedback": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "All user feedback entries recorded on the task.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "List task feedback",
+        "operationId": "getTaskFeedbacks",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListFeedbackResp"
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Rate a finished task: rating 1 (up) or -1 (down) plus an optional comment. One feedback row per user per task (upsert).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Submit task feedback",
+        "operationId": "setTaskFeedback",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SetTaskFeedbackReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SetTaskFeedbackResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/metric-feedback": {
+      "get": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "All metric feedback entries recorded on the task.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "List metric feedback",
+        "operationId": "getMetricFeedback",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/ListMetricFeedbackResp"
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Score one metric declared in the Agent's metrics (PRD 003). Numeric metrics use score; categorical/boolean/text metrics use value.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Submit metric feedback",
+        "operationId": "submitMetricFeedback",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MetricFeedbackReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/OkResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/public": {
+      "put": {
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "description": "Make a task publicly readable (or private again). Owner only.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Set task visibility",
+        "operationId": "setTaskPublic",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SetPublicReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/SetPublicResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/result": {
+      "get": {
+        "description": "Same shape as /status, oriented to the result page (includes archive info). Owner or public; auth optional.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Get task result",
+        "operationId": "getTaskResult",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/TaskStatusResp"
+            }
+          }
+        }
+      }
+    },
+    "/api/task/{taskId}/status": {
+      "get": {
+        "description": "Task detail. Accessible to the owner or anyone if the task is public; auth optional. For v2 managed Agents this facade maps Session states onto task states.",
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "https"
+        ],
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Get task status",
+        "operationId": "getTaskStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "taskId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/TaskStatusResp"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "AddDatasetItemReq": {
+      "type": "object",
+      "required": [
+        "task_id"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string"
+        }
+      }
+    },
+    "AddTaskToDatasetsReq": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "dataset_ids"
+      ],
+      "properties": {
+        "dataset_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "task_id": {
+          "type": "string"
+        }
+      }
+    },
+    "AddTaskToDatasetsResp": {
+      "type": "object",
+      "required": [
+        "ok",
+        "added"
+      ],
+      "properties": {
+        "added": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AdminAgentResp": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name",
+        "image",
+        "entrypoint",
+        "timeout",
+        "is_public",
+        "default_model_id",
+        "current_version",
+        "visible_user_ids"
+      ],
+      "properties": {
+        "accepted_file_types": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "current_version": {
+          "type": "integer"
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "description",
+              "required"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          },
+          "$ref": "#/definitions/ParamDef"
+        },
+        "estimated_manual_minutes": {
+          "type": "integer"
+        },
+        "image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "description",
+              "required"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          },
+          "$ref": "#/definitions/ParamDef"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "managed": {
+          "type": "object",
+          "required": [
+            "owner_id",
+            "engine",
+            "current_version_id",
+            "archived"
+          ],
+          "properties": {
+            "archived": {
+              "type": "boolean"
+            },
+            "credential_slots": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CredentialSlotDef"
+              }
+            },
+            "current_version_id": {
+              "type": "integer"
+            },
+            "default_bindings": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "default_model_id": {
+              "type": "string"
+            },
+            "engine": {
+              "type": "string"
+            },
+            "harness_image": {
+              "type": "string"
+            },
+            "instructions": {
+              "type": "string"
+            },
+            "mcp_bindings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/MCPBindingDef"
+              }
+            },
+            "owner_id": {
+              "type": "integer"
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SkillRef"
+              }
+            },
+            "start_prompt_template": {
+              "type": "string"
+            },
+            "subagents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SubagentRef"
+              }
+            }
+          },
+          "$ref": "#/definitions/AdminManagedAgent"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        },
+        "visible_user_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "AdminCheckResp": {
+      "type": "object",
+      "required": [
+        "is_admin"
+      ],
+      "properties": {
+        "is_admin": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AdminCreateAgentReq": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name",
+        "image",
+        "entrypoint",
+        "timeout"
+      ],
+      "properties": {
+        "accepted_file_types": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "estimated_manual_minutes": {
+          "type": "integer"
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "mcp_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPServerDef"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "AdminCreateAgentResp": {
+      "type": "object",
+      "required": [
+        "ok",
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AdminManagedAgent": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "engine",
+        "current_version_id",
+        "archived"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "current_version_id": {
+          "type": "integer"
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "owner_id": {
+          "type": "integer"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        }
+      }
+    },
+    "AdminStatsReq": {
+      "type": "object"
+    },
+    "AdminStatsResp": {
+      "type": "object",
+      "required": [
+        "total_tasks",
+        "completed_tasks",
+        "failed_tasks",
+        "running_tasks",
+        "active_users",
+        "total_time_saved_minutes",
+        "avg_duration_sec",
+        "daily_stats",
+        "user_stats",
+        "agent_stats"
+      ],
+      "properties": {
+        "active_users": {
+          "type": "integer"
+        },
+        "agent_stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentStatItem"
+          }
+        },
+        "avg_duration_sec": {
+          "type": "number"
+        },
+        "completed_tasks": {
+          "type": "integer"
+        },
+        "daily_stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DailyStatItem"
+          }
+        },
+        "failed_tasks": {
+          "type": "integer"
+        },
+        "running_tasks": {
+          "type": "integer"
+        },
+        "total_tasks": {
+          "type": "integer"
+        },
+        "total_time_saved_minutes": {
+          "type": "integer"
+        },
+        "user_stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UserStatItem"
+          }
+        }
+      }
+    },
+    "AdminUpdateAgentReq": {
+      "type": "object",
+      "properties": {
+        "accepted_file_types": {
+          "type": "string"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "estimated_manual_minutes": {
+          "type": "integer"
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "mcp_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPServerDef"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "AdminUserResp": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "username",
+        "is_admin",
+        "task_count",
+        "last_login_at",
+        "created_at"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "integer"
+        },
+        "is_admin": {
+          "type": "boolean"
+        },
+        "last_login_at": {
+          "type": "integer"
+        },
+        "task_count": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "Agent": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name",
+        "image",
+        "entrypoint",
+        "timeout",
+        "is_public",
+        "default_model_id"
+      ],
+      "properties": {
+        "accepted_file_types": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "description",
+              "required"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          },
+          "$ref": "#/definitions/ParamDef"
+        },
+        "estimated_manual_minutes": {
+          "type": "integer"
+        },
+        "image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "description",
+              "required"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          },
+          "$ref": "#/definitions/ParamDef"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "AgentMetricDef": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "config": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "AgentPathReq": {
+      "type": "object"
+    },
+    "AgentStatItem": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "agent_name",
+        "task_count",
+        "completed_count",
+        "avg_duration_sec",
+        "estimated_manual_minutes",
+        "total_time_saved_minutes"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_name": {
+          "type": "string"
+        },
+        "avg_duration_sec": {
+          "type": "number"
+        },
+        "completed_count": {
+          "type": "integer"
+        },
+        "estimated_manual_minutes": {
+          "type": "integer"
+        },
+        "task_count": {
+          "type": "integer"
+        },
+        "total_time_saved_minutes": {
+          "type": "integer"
+        }
+      }
+    },
+    "ArchiveAgentReq": {
+      "type": "object",
+      "required": [
+        "archived"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ArchiveAgentResp": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "archived"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "archived": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ArchiveMCPEntryReq": {
+      "type": "object",
+      "required": [
+        "archived"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ArchiveSkillReq": {
+      "type": "object",
+      "required": [
+        "archived"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ClaudeMessage": {
+      "type": "object",
+      "required": [
+        "ts",
+        "role",
+        "type",
+        "content"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "cost_info": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "tool_id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateCredentialReq": {
+      "type": "object",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateCredentialResp": {
+      "type": "object",
+      "required": [
+        "credential_id"
+      ],
+      "properties": {
+        "credential_id": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateDatasetReq": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateDatasetResp": {
+      "type": "object",
+      "required": [
+        "dataset_id"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "CreateMCPEntryReq": {
+      "type": "object",
+      "required": [
+        "slug",
+        "version"
+      ],
+      "properties": {
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "auth_header": {
+          "type": "string"
+        },
+        "auth_scheme": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "credential_env": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "requires_credential": {
+          "type": "boolean"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "transport": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateSessionReq": {
+      "type": "object",
+      "required": [
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "credential_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "input_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionFileInput"
+          }
+        },
+        "message": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "start_prompt_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "CreateSessionResp": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "status"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "CreateSkillResp": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "owner",
+        "slug",
+        "version",
+        "sha256"
+      ],
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "published_by": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "skill_id": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "CredentialAuditEntry": {
+      "type": "object",
+      "required": [
+        "slot",
+        "source",
+        "required",
+        "resolved"
+      ],
+      "properties": {
+        "credential_id": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "slot": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "CredentialPathReq": {
+      "type": "object"
+    },
+    "CredentialResp": {
+      "type": "object",
+      "required": [
+        "credential_id",
+        "name",
+        "kind",
+        "archived",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "credential_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "integer"
+        }
+      }
+    },
+    "CredentialSlotDef": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DailyStatItem": {
+      "type": "object",
+      "required": [
+        "date",
+        "task_count",
+        "completed_count",
+        "failed_count",
+        "time_saved_minutes"
+      ],
+      "properties": {
+        "completed_count": {
+          "type": "integer"
+        },
+        "date": {
+          "type": "string"
+        },
+        "failed_count": {
+          "type": "integer"
+        },
+        "task_count": {
+          "type": "integer"
+        },
+        "time_saved_minutes": {
+          "type": "integer"
+        }
+      }
+    },
+    "DatasetExportStatus": {
+      "type": "object",
+      "required": [
+        "export_id",
+        "dataset_id",
+        "status",
+        "total_items",
+        "exported_items",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "integer"
+        },
+        "dataset_id": {
+          "type": "integer"
+        },
+        "download_url": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "exported_items": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "total_items": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "type": "integer"
+        }
+      }
+    },
+    "DatasetItemResp": {
+      "type": "object",
+      "required": [
+        "id",
+        "task_id",
+        "agent_id",
+        "agent_version_id",
+        "model_id",
+        "input",
+        "output",
+        "session",
+        "feedback",
+        "metric_feedback",
+        "created_at"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "agent_metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "agent_version_id": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "feedback": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FeedbackEntry"
+          }
+        },
+        "id": {
+          "type": "integer"
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "metric_feedback": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MetricFeedbackEntry"
+          }
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "session": {},
+        "task_id": {
+          "type": "string"
+        }
+      }
+    },
+    "DatasetPathReq": {
+      "type": "object"
+    },
+    "DatasetResp": {
+      "type": "object",
+      "required": [
+        "dataset_id",
+        "name",
+        "description",
+        "user_id",
+        "is_public",
+        "item_count",
+        "total",
+        "limit",
+        "offset",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "integer"
+        },
+        "dataset_id": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "item_count": {
+          "type": "integer"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DatasetItemResp"
+          }
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "DeriveSkillPathReq": {
+      "type": "object"
+    },
+    "EndSessionResp": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "finalizing"
+      ],
+      "properties": {
+        "finalizing": {
+          "type": "boolean"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      }
+    },
+    "ExportDatasetResp": {
+      "type": "object",
+      "required": [
+        "export_id",
+        "status"
+      ],
+      "properties": {
+        "export_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "ExportPathReq": {
+      "type": "object"
+    },
+    "FeedbackEntry": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "username",
+        "rating",
+        "comment",
+        "created_at"
+      ],
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "rating": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "FollowUpReq": {
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "FollowUpResp": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "turn",
+        "status"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "turn": {
+          "type": "integer"
+        }
+      }
+    },
+    "GetDatasetReq": {
+      "type": "object"
+    },
+    "InterruptSessionResp": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "interrupt_requested"
+      ],
+      "properties": {
+        "interrupt_requested": {
+          "type": "boolean"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      }
+    },
+    "ListAgentsResp": {
+      "type": "object",
+      "required": [
+        "agents"
+      ],
+      "properties": {
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Agent"
+          }
+        }
+      }
+    },
+    "ListCredentialsResp": {
+      "type": "object",
+      "required": [
+        "credentials"
+      ],
+      "properties": {
+        "credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialResp"
+          }
+        }
+      }
+    },
+    "ListDatasetsResp": {
+      "type": "object",
+      "required": [
+        "datasets"
+      ],
+      "properties": {
+        "datasets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DatasetResp"
+          }
+        }
+      }
+    },
+    "ListExportsResp": {
+      "type": "object",
+      "required": [
+        "exports"
+      ],
+      "properties": {
+        "exports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DatasetExportStatus"
+          }
+        }
+      }
+    },
+    "ListFeedbackResp": {
+      "type": "object",
+      "required": [
+        "feedbacks"
+      ],
+      "properties": {
+        "feedbacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FeedbackEntry"
+          }
+        }
+      }
+    },
+    "ListMCPEntriesReq": {
+      "type": "object"
+    },
+    "ListMCPEntriesResp": {
+      "type": "object",
+      "required": [
+        "entries"
+      ],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPEntryResp"
+          }
+        }
+      }
+    },
+    "ListMetricFeedbackResp": {
+      "type": "object",
+      "required": [
+        "feedbacks"
+      ],
+      "properties": {
+        "feedbacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MetricFeedbackEntry"
+          }
+        }
+      }
+    },
+    "ListMyAgentsResp": {
+      "type": "object",
+      "required": [
+        "agents"
+      ],
+      "properties": {
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MyAgentResp"
+          }
+        }
+      }
+    },
+    "ListPlatformFeedbackReq": {
+      "type": "object"
+    },
+    "ListPlatformFeedbackResp": {
+      "type": "object",
+      "required": [
+        "feedbacks",
+        "total"
+      ],
+      "properties": {
+        "feedbacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlatformFeedbackItem"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "ListSessionsReq": {
+      "type": "object"
+    },
+    "ListSessionsResp": {
+      "type": "object",
+      "required": [
+        "sessions",
+        "total"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionResp"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "ListSkillFilesResp": {
+      "type": "object",
+      "required": [
+        "files"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillFileEntry"
+          }
+        }
+      }
+    },
+    "ListSkillsReq": {
+      "type": "object"
+    },
+    "ListSkillsResp": {
+      "type": "object",
+      "required": [
+        "skills"
+      ],
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillResp"
+          }
+        }
+      }
+    },
+    "ListTasksReq": {
+      "type": "object"
+    },
+    "ListTasksResp": {
+      "type": "object",
+      "required": [
+        "tasks",
+        "total"
+      ],
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TaskStatusResp"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "LoginReq": {
+      "type": "object",
+      "required": [
+        "username",
+        "password"
+      ],
+      "properties": {
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "LoginResp": {
+      "type": "object",
+      "required": [
+        "token",
+        "user_id",
+        "is_admin"
+      ],
+      "properties": {
+        "is_admin": {
+          "type": "boolean"
+        },
+        "token": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "MCPBindingDef": {
+      "type": "object",
+      "required": [
+        "slug",
+        "version"
+      ],
+      "properties": {
+        "credential_slot": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "MCPEntryResp": {
+      "type": "object",
+      "required": [
+        "entry_id",
+        "slug",
+        "version",
+        "name",
+        "transport",
+        "requires_credential",
+        "archived",
+        "created_at"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "auth_header": {
+          "type": "string"
+        },
+        "auth_scheme": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "credential_env": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "requires_credential": {
+          "type": "boolean"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "transport": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "MCPServerDef": {
+      "type": "object",
+      "required": [
+        "name",
+        "url"
+      ],
+      "properties": {
+        "auth_header": {
+          "type": "string"
+        },
+        "auth_scheme": {
+          "type": "string"
+        },
+        "credential_slot": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "MCPSlugVersionPathReq": {
+      "type": "object"
+    },
+    "MetricFeedbackEntry": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "username",
+        "metric_name",
+        "score",
+        "comment",
+        "created_at"
+      ],
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "metric_name": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "MetricFeedbackReq": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "MyAgentResp": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name",
+        "is_public",
+        "timeout",
+        "engine",
+        "current_version_id",
+        "archived"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "current_version_id": {
+          "type": "integer"
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "OkResp": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "OmniCreateAgentDraft": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name",
+        "description",
+        "instructions",
+        "start_prompt_template",
+        "default_model_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "start_prompt_template": {
+          "type": "string"
+        }
+      }
+    },
+    "OmniCreateSkillDraft": {
+      "type": "object",
+      "required": [
+        "slug",
+        "name",
+        "description",
+        "skill_md"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "skill_md": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        }
+      }
+    },
+    "OmniFeedbackDraft": {
+      "type": "object",
+      "required": [
+        "content"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "OmniInterpretReq": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "OmniInterpretResp": {
+      "type": "object",
+      "required": [
+        "interaction_id",
+        "kind"
+      ],
+      "properties": {
+        "create_agent": {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "name",
+            "description",
+            "instructions",
+            "start_prompt_template",
+            "default_model_id"
+          ],
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            },
+            "default_model_id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "instructions": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "start_prompt_template": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/OmniCreateAgentDraft"
+        },
+        "create_skill": {
+          "type": "object",
+          "required": [
+            "slug",
+            "name",
+            "description",
+            "skill_md"
+          ],
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "skill_md": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/OmniCreateSkillDraft"
+        },
+        "feedback": {
+          "type": "object",
+          "required": [
+            "content"
+          ],
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/OmniFeedbackDraft"
+        },
+        "interaction_id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "start_session": {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "agent_name",
+            "start_prompt_values",
+            "message"
+          ],
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            },
+            "agent_name": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "start_prompt_values": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "$ref": "#/definitions/OmniStartSessionDraft"
+        }
+      }
+    },
+    "OmniOutcomeReq": {
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string"
+        }
+      }
+    },
+    "OmniStartSessionDraft": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "agent_name",
+        "start_prompt_values",
+        "message"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_name": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "start_prompt_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "OpsActiveRun": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "kind",
+        "agent_id",
+        "user_id",
+        "status",
+        "created_at",
+        "last_progress_at"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "last_progress_at": {
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "sandbox_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsAnnotatedRun": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "kind",
+        "agent_id",
+        "user_id",
+        "status",
+        "created_at",
+        "last_progress_at",
+        "last_progress_age_sec",
+        "stalled"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "last_progress_age_sec": {
+          "type": "integer"
+        },
+        "last_progress_at": {
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "sandbox_id": {
+          "type": "string"
+        },
+        "stalled": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsBrowseFilesReq": {
+      "type": "object"
+    },
+    "OpsBrowseFilesResp": {
+      "type": "object",
+      "required": [
+        "dir",
+        "files"
+      ],
+      "properties": {
+        "dir": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpsWorkspaceEntry"
+          }
+        }
+      }
+    },
+    "OpsFileTail": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "content"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsHealthResp": {
+      "type": "object",
+      "required": [
+        "opensandbox",
+        "redis",
+        "queue",
+        "oss",
+        "runs"
+      ],
+      "properties": {
+        "opensandbox": {
+          "type": "object",
+          "required": [
+            "ok",
+            "sandbox_count"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "sandbox_count": {
+              "type": "integer"
+            }
+          },
+          "$ref": "#/definitions/OpsSandboxProbe"
+        },
+        "oss": {
+          "type": "object",
+          "required": [
+            "ok"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "$ref": "#/definitions/ProbeStatus"
+        },
+        "queue": {
+          "type": "object",
+          "required": [
+            "ok",
+            "queued",
+            "active",
+            "retry",
+            "dead"
+          ],
+          "properties": {
+            "active": {
+              "type": "integer"
+            },
+            "dead": {
+              "type": "integer"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "queued": {
+              "type": "integer"
+            },
+            "retry": {
+              "type": "integer"
+            }
+          },
+          "$ref": "#/definitions/OpsQueueProbe"
+        },
+        "redis": {
+          "type": "object",
+          "required": [
+            "ok"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "$ref": "#/definitions/ProbeStatus"
+        },
+        "runs": {
+          "type": "object",
+          "required": [
+            "total",
+            "stalled",
+            "by_status"
+          ],
+          "properties": {
+            "by_status": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "stalled": {
+              "type": "integer"
+            },
+            "total": {
+              "type": "integer"
+            }
+          },
+          "$ref": "#/definitions/OpsRunsSummary"
+        }
+      }
+    },
+    "OpsQueueProbe": {
+      "type": "object",
+      "required": [
+        "ok",
+        "queued",
+        "active",
+        "retry",
+        "dead"
+      ],
+      "properties": {
+        "active": {
+          "type": "integer"
+        },
+        "dead": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "queued": {
+          "type": "integer"
+        },
+        "retry": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsReadFileReq": {
+      "type": "object"
+    },
+    "OpsReconcileResp": {
+      "type": "object",
+      "required": [
+        "orphan_records",
+        "orphan_sandboxes"
+      ],
+      "properties": {
+        "orphan_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpsActiveRun"
+          }
+        },
+        "orphan_sandboxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpsSandboxSummary"
+          }
+        }
+      }
+    },
+    "OpsRunDiagnosisResp": {
+      "type": "object",
+      "required": [
+        "run",
+        "shape",
+        "evidence",
+        "tails"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "object",
+          "required": [
+            "sandbox_found",
+            "engine_started",
+            "engine_exited"
+          ],
+          "properties": {
+            "engine_exited": {
+              "type": "boolean"
+            },
+            "engine_started": {
+              "type": "boolean"
+            },
+            "sandbox_found": {
+              "type": "boolean"
+            },
+            "sandbox_query_failed": {
+              "type": "boolean"
+            },
+            "sandbox_state": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/OpsStallEvidence"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "run": {
+          "type": "object",
+          "required": [
+            "run_id",
+            "kind",
+            "agent_id",
+            "user_id",
+            "status",
+            "created_at",
+            "last_progress_at"
+          ],
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "last_progress_at": {
+              "type": "integer"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "sandbox_id": {
+              "type": "string"
+            },
+            "started_at": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "user_id": {
+              "type": "integer"
+            }
+          },
+          "$ref": "#/definitions/OpsActiveRun"
+        },
+        "sandbox": {
+          "type": "object",
+          "required": [
+            "id",
+            "state"
+          ],
+          "properties": {
+            "created_at": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/OpsSandboxCard"
+        },
+        "shape": {
+          "type": "string"
+        },
+        "tails": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpsFileTail"
+          }
+        }
+      }
+    },
+    "OpsRunPathReq": {
+      "type": "object"
+    },
+    "OpsRunsResp": {
+      "type": "object",
+      "required": [
+        "runs",
+        "staleness_threshold_s"
+      ],
+      "properties": {
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpsAnnotatedRun"
+          }
+        },
+        "staleness_threshold_s": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsRunsSummary": {
+      "type": "object",
+      "required": [
+        "total",
+        "stalled",
+        "by_status"
+      ],
+      "properties": {
+        "by_status": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "stalled": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsSandboxCard": {
+      "type": "object",
+      "required": [
+        "id",
+        "state"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      }
+    },
+    "OpsSandboxPathReq": {
+      "type": "object"
+    },
+    "OpsSandboxProbe": {
+      "type": "object",
+      "required": [
+        "ok",
+        "sandbox_count"
+      ],
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "sandbox_count": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsSandboxSummary": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "OpsStallEvidence": {
+      "type": "object",
+      "required": [
+        "sandbox_found",
+        "engine_started",
+        "engine_exited"
+      ],
+      "properties": {
+        "engine_exited": {
+          "type": "boolean"
+        },
+        "engine_started": {
+          "type": "boolean"
+        },
+        "sandbox_found": {
+          "type": "boolean"
+        },
+        "sandbox_query_failed": {
+          "type": "boolean"
+        },
+        "sandbox_state": {
+          "type": "string"
+        }
+      }
+    },
+    "OpsWorkspaceEntry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      }
+    },
+    "OpsWorkspaceFileResp": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "content",
+        "truncated"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ParamDef": {
+      "type": "object",
+      "required": [
+        "description",
+        "required"
+      ],
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PlatformFeedbackItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "user_id",
+        "username",
+        "content",
+        "page",
+        "created_at"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "page": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "PlatformFeedbackReq": {
+      "type": "object",
+      "required": [
+        "content"
+      ],
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "page": {
+          "type": "string"
+        }
+      }
+    },
+    "PlatformFeedbackResp": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      }
+    },
+    "PlatformSettingsResp": {
+      "type": "object",
+      "required": [
+        "default_harness_image",
+        "default_harness_image_codex",
+        "omni_model_base_url",
+        "omni_model_id",
+        "omni_api_key",
+        "idle_retention_ttl_sec",
+        "retained_sandbox_cap"
+      ],
+      "properties": {
+        "default_harness_image": {
+          "type": "string"
+        },
+        "default_harness_image_codex": {
+          "type": "string"
+        },
+        "idle_retention_ttl_sec": {
+          "type": "integer"
+        },
+        "omni_api_key": {
+          "type": "string"
+        },
+        "omni_model_base_url": {
+          "type": "string"
+        },
+        "omni_model_id": {
+          "type": "string"
+        },
+        "retained_sandbox_cap": {
+          "type": "integer"
+        }
+      }
+    },
+    "ProbeStatus": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RegisterAgentReq": {
+      "type": "object",
+      "properties": {
+        "accepted_file_types": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "mcp_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPServerDef"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "RegisterAgentResp": {
+      "type": "object",
+      "required": [
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "managed_version": {
+          "type": "integer"
+        }
+      }
+    },
+    "RemoveDatasetItemReq": {
+      "type": "object"
+    },
+    "RerunPrefillResp": {
+      "type": "object",
+      "required": [
+        "source_session_id",
+        "agent_id",
+        "agent_version_id",
+        "start_prompt_values"
+      ],
+      "properties": {
+        "agent_archived": {
+          "type": "boolean"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_version_id": {
+          "type": "integer"
+        },
+        "initial_message": {
+          "type": "string"
+        },
+        "input_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionFileInput"
+          }
+        },
+        "latest_agent_version_id": {
+          "type": "integer"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "source_session_id": {
+          "type": "string"
+        },
+        "start_prompt_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "SessionArchive": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionEventsReq": {
+      "type": "object"
+    },
+    "SessionFileInput": {
+      "type": "object",
+      "required": [
+        "oss_key"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "oss_key": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionMCPServer": {
+      "type": "object",
+      "required": [
+        "name",
+        "url"
+      ],
+      "properties": {
+        "egress_host": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionPathReq": {
+      "type": "object"
+    },
+    "SessionResource": {
+      "type": "object",
+      "required": [
+        "filename",
+        "mount_path"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "mount_path": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionResp": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "agent_id",
+        "agent_version_id",
+        "engine",
+        "model_id",
+        "initial_message",
+        "status",
+        "resumable",
+        "event_cursor",
+        "is_public",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_version_id": {
+          "type": "integer"
+        },
+        "archive": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "created_at": {
+              "type": "integer"
+            },
+            "error": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/SessionArchive"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "credential_audit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialAuditEntry"
+          }
+        },
+        "deliverables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "engine": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "event_cursor": {
+          "type": "integer"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThreadEvent"
+          }
+        },
+        "finished_at": {
+          "type": "integer"
+        },
+        "initial_message": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "mcp_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionMCPServer"
+          }
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionResource"
+          }
+        },
+        "resumable": {
+          "type": "boolean"
+        },
+        "retention_deadline": {
+          "type": "integer"
+        },
+        "sandbox_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionSkill"
+          }
+        },
+        "started_at": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stop_reason": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionSubagent"
+          }
+        },
+        "termination_reason": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionThread"
+          }
+        },
+        "turn_count": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      }
+    },
+    "SessionSkill": {
+      "type": "object",
+      "required": [
+        "slug",
+        "version"
+      ],
+      "properties": {
+        "mount_dir": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionSubagent": {
+      "type": "object",
+      "required": [
+        "name",
+        "agent_id",
+        "version"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
+    "SessionThread": {
+      "type": "object",
+      "required": [
+        "thread_id",
+        "role"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_version_id": {
+          "type": "integer"
+        },
+        "role": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string"
+        }
+      }
+    },
+    "SetAdminReq": {
+      "type": "object",
+      "required": [
+        "is_admin"
+      ],
+      "properties": {
+        "is_admin": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SetAgentVisibilityReq": {
+      "type": "object",
+      "required": [
+        "user_ids"
+      ],
+      "properties": {
+        "user_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "SetDatasetVisibilityReq": {
+      "type": "object",
+      "required": [
+        "user_ids"
+      ],
+      "properties": {
+        "user_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "SetPublicReq": {
+      "type": "object",
+      "required": [
+        "is_public"
+      ],
+      "properties": {
+        "is_public": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SetPublicResp": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SetTaskFeedbackReq": {
+      "type": "object",
+      "required": [
+        "rating"
+      ],
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "integer"
+        }
+      }
+    },
+    "SetTaskFeedbackResp": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SkillDetailReq": {
+      "type": "object"
+    },
+    "SkillDetailResp": {
+      "type": "object",
+      "required": [
+        "owner",
+        "slug",
+        "can_publish",
+        "can_manage",
+        "versions"
+      ],
+      "properties": {
+        "can_manage": {
+          "type": "boolean"
+        },
+        "can_publish": {
+          "type": "boolean"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillVersionResp"
+          }
+        }
+      }
+    },
+    "SkillFileEntry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "is_text",
+        "sha256"
+      ],
+      "properties": {
+        "is_text": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "SkillFileReq": {
+      "type": "object"
+    },
+    "SkillRef": {
+      "type": "object",
+      "required": [
+        "slug",
+        "version"
+      ],
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "SkillRefAgentResp": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "name"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "SkillResp": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "slug",
+        "version",
+        "name",
+        "sha256",
+        "size_bytes",
+        "archived",
+        "created_at"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "published_by": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "skill_id": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "SkillSlugVersionPathReq": {
+      "type": "object"
+    },
+    "SkillUsedByResp": {
+      "type": "object",
+      "required": [
+        "total",
+        "agents"
+      ],
+      "properties": {
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRefAgentResp"
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "SkillVersionPathReq": {
+      "type": "object"
+    },
+    "SkillVersionResp": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "slug",
+        "version",
+        "name",
+        "sha256",
+        "size_bytes",
+        "archived",
+        "created_at",
+        "ref_count"
+      ],
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "published_by": {
+          "type": "string"
+        },
+        "ref_count": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "skill_id": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "SubagentRef": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "version"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
+    "SubmitTaskReq": {
+      "type": "object",
+      "required": [
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "input_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "SubmitTaskResp": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "status"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      }
+    },
+    "TaskArchiveResp": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "bucket": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "TaskCallbackReq": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "status"
+      ],
+      "properties": {
+        "claude_messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClaudeMessage"
+          }
+        },
+        "error": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "output_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      }
+    },
+    "TaskCallbackResp": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "TaskEventsReq": {
+      "type": "object"
+    },
+    "TaskPathReq": {
+      "type": "object"
+    },
+    "TaskStatusResp": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "agent_id",
+        "agent_version_id",
+        "model_id",
+        "status",
+        "is_public",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentMetricDef"
+          }
+        },
+        "agent_version_id": {
+          "type": "integer"
+        },
+        "archive": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "bucket": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "error": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "$ref": "#/definitions/TaskArchiveResp"
+        },
+        "claude_messages": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "duration_sec": {
+          "type": "integer"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "feedback_comment": {
+          "type": "string"
+        },
+        "feedback_rating": {
+          "type": "integer"
+        },
+        "finished_at": {
+          "type": "integer"
+        },
+        "image_digest": {
+          "type": "string"
+        },
+        "image_uri": {
+          "type": "string"
+        },
+        "input_files": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "output_files": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "progress": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "sandbox_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stop_reason": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "ThreadEvent": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "actor_user_id": {
+          "type": "integer"
+        },
+        "api_error_status": {
+          "type": "integer"
+        },
+        "cost_usd": {
+          "type": "number"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "engine_session_id": {
+          "type": "string"
+        },
+        "is_error": {
+          "type": "boolean"
+        },
+        "parent_tool_use_id": {
+          "type": "string"
+        },
+        "raw": {},
+        "role": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "tool_input": {},
+        "tool_name": {
+          "type": "string"
+        },
+        "tool_use_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "UpdateAgentTimeSavedReq": {
+      "type": "object",
+      "required": [
+        "estimated_manual_minutes"
+      ],
+      "properties": {
+        "estimated_manual_minutes": {
+          "type": "integer"
+        }
+      }
+    },
+    "UpdateDatasetReq": {
+      "type": "object",
+      "required": [
+        "name",
+        "is_public"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "is_public": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "UpdateMyAgentReq": {
+      "type": "object",
+      "properties": {
+        "credential_slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CredentialSlotDef"
+          }
+        },
+        "default_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "default_model_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "harness_image": {
+          "type": "string"
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "mcp_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MCPBindingDef"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillRef"
+          }
+        },
+        "start_prompt_template": {
+          "type": "string"
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SubagentRef"
+          }
+        }
+      }
+    },
+    "UpdatePlatformSettingsReq": {
+      "type": "object",
+      "properties": {
+        "default_harness_image": {
+          "type": "string"
+        },
+        "default_harness_image_codex": {
+          "type": "string"
+        },
+        "idle_retention_ttl_sec": {
+          "type": "integer"
+        },
+        "omni_api_key": {
+          "type": "string"
+        },
+        "omni_model_base_url": {
+          "type": "string"
+        },
+        "omni_model_id": {
+          "type": "string"
+        },
+        "retained_sandbox_cap": {
+          "type": "integer"
+        }
+      }
+    },
+    "UploadFileResp": {
+      "type": "object",
+      "required": [
+        "oss_key",
+        "url"
+      ],
+      "properties": {
+        "oss_key": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "UserStatItem": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "username",
+        "task_count",
+        "completed_count",
+        "time_saved_minutes",
+        "last_active_at"
+      ],
+      "properties": {
+        "completed_count": {
+          "type": "integer"
+        },
+        "last_active_at": {
+          "type": "integer"
+        },
+        "task_count": {
+          "type": "integer"
+        },
+        "time_saved_minutes": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "apiKey": {
+      "description": "Bearer token from POST /api/auth/login. Format: 'Bearer \u003ctoken\u003e'. SSE endpoints alternatively accept '?token=\u003ctoken\u003e' as a query parameter.",
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header"
+    }
+  },
+  "x-date": "2026-06-17 12:00:01",
+  "x-description": "This is a goctl generated swagger file.",
+  "x-github": "https://github.com/zeromicro/go-zero",
+  "x-go-zero-doc": "https://go-zero.dev/",
+  "x-goctl-version": "1.10.1"
+}
