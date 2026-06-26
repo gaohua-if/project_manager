@@ -1,0 +1,15 @@
+{
+  "step": 20,
+  "label": "case6_employeeA_unfollow_task",
+  "method": "DELETE",
+  "url": "http://localhost:18090/api/v1/follows/task/53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+  "request_body": null,
+  "status": 200,
+  "response": {
+    "favorited": false,
+    "target_id": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+    "target_type": "task"
+  },
+  "raw_response": "{\"favorited\":false,\"target_id\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"target_type\":\"task\"}\n",
+  "error": null
+}

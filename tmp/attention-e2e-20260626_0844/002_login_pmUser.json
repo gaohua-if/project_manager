@@ -1,0 +1,25 @@
+{
+  "step": 2,
+  "label": "login_pmUser",
+  "method": "POST",
+  "url": "http://localhost:18090/api/v1/auth/login",
+  "request_body": {
+    "employee_id": "chen_pm",
+    "password": "123"
+  },
+  "status": 200,
+  "response": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImNoZW5fcG0iLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJiMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi6ZmIUE0iLCJyb2xlIjoicG0iLCJ0ZWFtX2lkIjoiIn0.33w7KAp7Xc1oFoiG8CsTj-o_zyY2JAFhMiU5oRn_U5g",
+    "user": {
+      "id": "b0000000-0000-0000-0000-000000000002",
+      "employee_id": "chen_pm",
+      "email": "chen_pm@example.com",
+      "name": "陈PM",
+      "role": "pm",
+      "team_name": "",
+      "created_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  "raw_response": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImNoZW5fcG0iLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJiMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi6ZmIUE0iLCJyb2xlIjoicG0iLCJ0ZWFtX2lkIjoiIn0.33w7KAp7Xc1oFoiG8CsTj-o_zyY2JAFhMiU5oRn_U5g\",\"user\":{\"id\":\"b0000000-0000-0000-0000-000000000002\",\"employee_id\":\"chen_pm\",\"email\":\"chen_pm@example.com\",\"name\":\"陈PM\",\"role\":\"pm\",\"team_name\":\"\",\"created_at\":\"0001-01-01T00:00:00Z\"}}\n",
+  "error": null
+}

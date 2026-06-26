@@ -1,0 +1,69 @@
+{
+  "step": 41,
+  "label": "case11_pmUser_dashboard_follows",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/dashboard/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "key": "requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "type": "需求",
+      "title": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-07-10",
+      "risk": "1 个任务已超期",
+      "activity": "今天更新",
+      "attentionScore": 190,
+      "attentionLevel": "high",
+      "riskPriority": 100,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55"
+      }
+    },
+    {
+      "key": "task:7c4abc3e-3cdd-4ce6-946c-35692fe81d93",
+      "type": "任务",
+      "title": "ATTN_E2E_20260626_0844_TASK_RISK_LOW_SORT",
+      "requirement": "ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT",
+      "requirementId": "fcf1203a-42a0-44e0-872c-37e3355e4297",
+      "taskId": "7c4abc3e-3cdd-4ce6-946c-35692fe81d93",
+      "owner": "张三",
+      "status": "待办",
+      "deadline": "2026-06-25",
+      "risk": "已超期",
+      "activity": "今天更新",
+      "attentionScore": 50,
+      "attentionLevel": "notable",
+      "riskPriority": 100,
+      "navigation": {
+        "requirementId": "fcf1203a-42a0-44e0-872c-37e3355e4297",
+        "taskId": "7c4abc3e-3cdd-4ce6-946c-35692fe81d93",
+        "url": "/requirements?requirementId=fcf1203a-42a0-44e0-872c-37e3355e4297&taskId=7c4abc3e-3cdd-4ce6-946c-35692fe81d93"
+      }
+    },
+    {
+      "key": "requirement:fcf1203a-42a0-44e0-872c-37e3355e4297",
+      "type": "需求",
+      "title": "ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT",
+      "requirementId": "fcf1203a-42a0-44e0-872c-37e3355e4297",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-07-10",
+      "risk": "1 个任务已超期",
+      "activity": "今天更新",
+      "attentionScore": 40,
+      "attentionLevel": "notable",
+      "riskPriority": 100,
+      "navigation": {
+        "requirementId": "fcf1203a-42a0-44e0-872c-37e3355e4297",
+        "url": "/requirements?requirementId=fcf1203a-42a0-44e0-872c-37e3355e4297"
+      }
+    }
+  ],
+  "raw_response": "[{\"key\":\"requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"type\":\"需求\",\"title\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-07-10\",\"risk\":\"1 个任务已超期\",\"activity\":\"今天更新\",\"attentionScore\":190,\"attentionLevel\":\"high\",\"riskPriority\":100,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\"}},{\"key\":\"task:7c4abc3e-3cdd-4ce6-946c-35692fe81d93\",\"type\":\"任务\",\"title\":\"ATTN_E2E_20260626_0844_TASK_RISK_LOW_SORT\",\"requirement\":\"ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT\",\"requirementId\":\"fcf1203a-42a0-44e0-872c-37e3355e4297\",\"taskId\":\"7c4abc3e-3cdd-4ce6-946c-35692fe81d93\",\"owner\":\"张三\",\"status\":\"待办\",\"deadline\":\"2026-06-25\",\"risk\":\"已超期\",\"activity\":\"今天更新\",\"attentionScore\":50,\"attentionLevel\":\"notable\",\"riskPriority\":100,\"navigation\":{\"requirementId\":\"fcf1203a-42a0-44e0-872c-37e3355e4297\",\"taskId\":\"7c4abc3e-3cdd-4ce6-946c-35692fe81d93\",\"url\":\"/requirements?requirementId=fcf1203a-42a0-44e0-872c-37e3355e4297\\u0026taskId=7c4abc3e-3cdd-4ce6-946c-35692fe81d93\"}},{\"key\":\"requirement:fcf1203a-42a0-44e0-872c-37e3355e4297\",\"type\":\"需求\",\"title\":\"ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT\",\"requirementId\":\"fcf1203a-42a0-44e0-872c-37e3355e4297\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-07-10\",\"risk\":\"1 个任务已超期\",\"activity\":\"今天更新\",\"attentionScore\":40,\"attentionLevel\":\"notable\",\"riskPriority\":100,\"navigation\":{\"requirementId\":\"fcf1203a-42a0-44e0-872c-37e3355e4297\",\"url\":\"/requirements?requirementId=fcf1203a-42a0-44e0-872c-37e3355e4297\"}}]\n",
+  "error": null
+}

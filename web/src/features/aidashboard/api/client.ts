@@ -1,11 +1,11 @@
 import { runtimeConfig } from "@/config/runtimeConfig";
 import { api } from "@/shared/request/httpClient";
 import { getAuthSession } from "@/shared/auth/session";
-import type { User } from "@/shared/auth/types";
 import { HttpError } from "@/shared/request/types";
-
+import type { User } from "@/shared/auth/types";
 import type {
   ACStatus,
+  DashboardFollowFollowerDTO,
   DashboardFollowItemDTO,
   DashboardRiskItemDTO,
   DailyReport,
@@ -147,6 +147,13 @@ export const unfollowTarget = (targetType: "requirement" | "task", targetId: str
       `/follows/${targetType}/${targetId}`
     )
   );
+export const fetchFollowFollowers = (targetType: "requirement" | "task", targetId: string) =>
+  unwrap(
+    api.get<DashboardFollowFollowerDTO[]>("/follows/followers", {
+      target_type: targetType,
+      target_id: targetId
+    })
+  );
 export const fetchDashboardFollows = () =>
   unwrap(api.get<DashboardFollowItemDTO[]>("/dashboard/follows"));
 export const fetchDashboardRisks = () =>
@@ -208,7 +215,8 @@ export const fetchPaginatedReports = (params?: Record<string, string>) =>
 export const fetchMyReports = (params?: Record<string, string>) =>
   unwrap(api.get<PaginatedDailyReports>("/reports/mine", params));
 export const fetchReports = async (params?: Record<string, string>) => {
-  const page = params?.scope === "mine" ? await fetchMyReports(params) : await fetchPaginatedReports(params);
+  const page =
+    params?.scope === "mine" ? await fetchMyReports(params) : await fetchPaginatedReports(params);
   return page.items.map((item) => ({
     id: item.id,
     user_id: item.user_id,
@@ -242,10 +250,8 @@ export const updateReport = (
   data: { content?: string; feishu_doc_url?: string; session_ids?: string[] }
 ) => unwrap(api.put<DailyReport>(`/reports/${id}`, data));
 export const saveReport = updateReport;
-export const submitReport = (
-  id: string,
-  data: { content?: string; session_ids?: string[] }
-) => unwrap(api.post<DailyReport>(`/reports/${id}/submit`, data));
+export const submitReport = (id: string, data: { content?: string; session_ids?: string[] }) =>
+  unwrap(api.post<DailyReport>(`/reports/${id}/submit`, data));
 
 export const fetchTeamMemberReports = (date: string) =>
   unwrap(api.get<TeamMemberReport[]>(`/reports/team/members`, { date }));
@@ -257,11 +263,17 @@ export const fetchTeamReportSources = (date: string, teamId?: string) =>
     )
   );
 export const fetchTeamReportToday = (reportDate?: string) =>
-  unwrap(api.get<TeamReport>("/reports/team/today", reportDate ? { report_date: reportDate } : undefined));
+  unwrap(
+    api.get<TeamReport>("/reports/team/today", reportDate ? { report_date: reportDate } : undefined)
+  );
 export async function fetchTeamReportTodayOrNull(reportDate?: string) {
   try {
     return await unwrap(
-      api.get<TeamReport>("/reports/team/today", reportDate ? { report_date: reportDate } : undefined, { skipErrorHandler: true })
+      api.get<TeamReport>(
+        "/reports/team/today",
+        reportDate ? { report_date: reportDate } : undefined,
+        { skipErrorHandler: true }
+      )
     );
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
@@ -288,11 +300,20 @@ export const submitTeamReport = (id: string, data?: { content?: string }) =>
 export const fetchDepartmentReportSources = (date: string) =>
   unwrap(api.get<DepartmentReportSources>("/reports/department/sources", { date }));
 export const fetchDepartmentReportToday = (reportDate?: string) =>
-  unwrap(api.get<DepartmentReport>("/reports/department/today", reportDate ? { report_date: reportDate } : undefined));
+  unwrap(
+    api.get<DepartmentReport>(
+      "/reports/department/today",
+      reportDate ? { report_date: reportDate } : undefined
+    )
+  );
 export async function fetchDepartmentReportTodayOrNull(reportDate?: string) {
   try {
     return await unwrap(
-      api.get<DepartmentReport>("/reports/department/today", reportDate ? { report_date: reportDate } : undefined, { skipErrorHandler: true })
+      api.get<DepartmentReport>(
+        "/reports/department/today",
+        reportDate ? { report_date: reportDate } : undefined,
+        { skipErrorHandler: true }
+      )
     );
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
@@ -319,13 +340,17 @@ export const updateDepartmentReport = (id: string, data: { content?: string; arc
 export const fetchPersonalWeeklyReports = (params?: Record<string, string>) =>
   unwrap(api.get<PaginatedPersonalWeeklyReports>("/reports/weekly/mine", params));
 export const fetchPersonalWeeklyReportSources = (weekStart: string) =>
-  unwrap(api.get<PersonalWeeklyReportSources>("/reports/weekly/mine/sources", { week_start: weekStart }));
+  unwrap(
+    api.get<PersonalWeeklyReportSources>("/reports/weekly/mine/sources", { week_start: weekStart })
+  );
 export const fetchPersonalWeeklyReportCurrent = (weekStart: string) =>
-  unwrap(api.get<PersonalWeeklyReport>("/reports/weekly/mine/current", { week_start: weekStart }));
+  unwrap(
+    api.get<PersonalWeeklyReport | null>("/reports/weekly/mine/current", { week_start: weekStart })
+  );
 export async function fetchPersonalWeeklyReportCurrentOrNull(weekStart: string) {
   try {
     return await unwrap(
-      api.get<PersonalWeeklyReport>(
+      api.get<PersonalWeeklyReport | null>(
         "/reports/weekly/mine/current",
         { week_start: weekStart },
         { skipErrorHandler: true }
@@ -390,7 +415,11 @@ export async function fetchTeamWeeklyReportCurrentOrNull(weekStart: string, team
   }
 }
 export const generateTeamWeeklyReport = (weekStart: string) =>
-  unwrap(api.post<TeamWeeklyReport>("/reports/team/weekly/current/generate", undefined, { params: { week_start: weekStart } }));
+  unwrap(
+    api.post<TeamWeeklyReport>("/reports/team/weekly/current/generate", undefined, {
+      params: { week_start: weekStart }
+    })
+  );
 export const updateTeamWeeklyReport = (id: string, data: { content?: string }) =>
   unwrap(api.put<TeamWeeklyReport>(`/reports/team/weekly/${id}`, data));
 export const submitTeamWeeklyReport = (id: string) =>
@@ -399,9 +428,15 @@ export const fetchTeamWeeklyReports = (params?: Record<string, string>) =>
   unwrap(api.get<TeamWeeklyReport[]>("/reports/team/weekly", params));
 
 export const fetchDepartmentWeeklyReportSources = (weekStart: string) =>
-  unwrap(api.get<DepartmentWeeklyReportSources>("/reports/department/weekly/sources", { week_start: weekStart }));
+  unwrap(
+    api.get<DepartmentWeeklyReportSources>("/reports/department/weekly/sources", {
+      week_start: weekStart
+    })
+  );
 export const fetchDepartmentWeeklyReportCurrent = (weekStart: string) =>
-  unwrap(api.get<DepartmentWeeklyReport>("/reports/department/weekly/current", { week_start: weekStart }));
+  unwrap(
+    api.get<DepartmentWeeklyReport>("/reports/department/weekly/current", { week_start: weekStart })
+  );
 export async function fetchDepartmentWeeklyReportCurrentOrNull(weekStart: string) {
   try {
     return await unwrap(
@@ -419,9 +454,15 @@ export async function fetchDepartmentWeeklyReportCurrentOrNull(weekStart: string
   }
 }
 export const generateDepartmentWeeklyReport = (weekStart: string) =>
-  unwrap(api.post<DepartmentWeeklyReport>("/reports/department/weekly/current/generate", undefined, { params: { week_start: weekStart } }));
-export const updateDepartmentWeeklyReport = (id: string, data: { content?: string; archive?: boolean }) =>
-  unwrap(api.put<DepartmentWeeklyReport>(`/reports/department/weekly/${id}`, data));
+  unwrap(
+    api.post<DepartmentWeeklyReport>("/reports/department/weekly/current/generate", undefined, {
+      params: { week_start: weekStart }
+    })
+  );
+export const updateDepartmentWeeklyReport = (
+  id: string,
+  data: { content?: string; archive?: boolean }
+) => unwrap(api.put<DepartmentWeeklyReport>(`/reports/department/weekly/${id}`, data));
 export const fetchDepartmentWeeklyReports = (params?: Record<string, string>) =>
   unwrap(api.get<DepartmentWeeklyReport[]>("/reports/department/weekly", params));
 
@@ -446,7 +487,11 @@ export const fetchSessionTokens = (params: {
   page_size?: string;
 }) => unwrap(api.get<PaginatedSessionTokens>("/tokens/sessions", params));
 
-export async function fetchAllSessionTokens(params: { from: string; to: string; scope?: "mine" | "team" }) {
+export async function fetchAllSessionTokens(params: {
+  from: string;
+  to: string;
+  scope?: "mine" | "team";
+}) {
   const pageSize = 100;
   const firstPage = await fetchSessionTokens({
     ...params,

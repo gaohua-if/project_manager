@@ -1,0 +1,87 @@
+{
+  "step": 32,
+  "label": "case8_tl_dashboard_follows",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/dashboard/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "key": "requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "type": "需求",
+      "title": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-07-10",
+      "risk": "正常推进",
+      "activity": "今天更新",
+      "attentionScore": 190,
+      "attentionLevel": "high",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55"
+      }
+    },
+    {
+      "key": "task:53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "type": "任务",
+      "title": "ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED",
+      "requirement": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "owner": "张三",
+      "status": "待办",
+      "deadline": "2026-07-03",
+      "risk": "正常推进",
+      "activity": "今天更新",
+      "attentionScore": 70,
+      "attentionLevel": "notable",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55&taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2"
+      }
+    },
+    {
+      "key": "requirement:207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1",
+      "type": "需求",
+      "title": "PERM-E2E-20260625071823 REQ_DELETE_FOLLOW_ONLY",
+      "requirementId": "207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-12-31",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 50,
+      "attentionLevel": "notable",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1",
+        "url": "/requirements?requirementId=207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1"
+      }
+    },
+    {
+      "key": "requirement:d963045a-2394-4a0b-826a-12795ff4f479",
+      "type": "需求",
+      "title": "PERM-E2E-20260625071823 EMPTY AC INLINE",
+      "requirementId": "d963045a-2394-4a0b-826a-12795ff4f479",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "未设置",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 50,
+      "attentionLevel": "notable",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "d963045a-2394-4a0b-826a-12795ff4f479",
+        "url": "/requirements?requirementId=d963045a-2394-4a0b-826a-12795ff4f479"
+      }
+    }
+  ],
+  "raw_response": "[{\"key\":\"requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"type\":\"需求\",\"title\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-07-10\",\"risk\":\"正常推进\",\"activity\":\"今天更新\",\"attentionScore\":190,\"attentionLevel\":\"high\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\"}},{\"key\":\"task:53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"type\":\"任务\",\"title\":\"ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED\",\"requirement\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"owner\":\"张三\",\"status\":\"待办\",\"deadline\":\"2026-07-03\",\"risk\":\"正常推进\",\"activity\":\"今天更新\",\"attentionScore\":70,\"attentionLevel\":\"notable\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\\u0026taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2\"}},{\"key\":\"requirement:207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1\",\"type\":\"需求\",\"title\":\"PERM-E2E-20260625071823 REQ_DELETE_FOLLOW_ONLY\",\"requirementId\":\"207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-12-31\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":50,\"attentionLevel\":\"notable\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1\",\"url\":\"/requirements?requirementId=207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1\"}},{\"key\":\"requirement:d963045a-2394-4a0b-826a-12795ff4f479\",\"type\":\"需求\",\"title\":\"PERM-E2E-20260625071823 EMPTY AC INLINE\",\"requirementId\":\"d963045a-2394-4a0b-826a-12795ff4f479\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"未设置\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":50,\"attentionLevel\":\"notable\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"d963045a-2394-4a0b-826a-12795ff4f479\",\"url\":\"/requirements?requirementId=d963045a-2394-4a0b-826a-12795ff4f479\"}}]\n",
+  "error": null
+}

@@ -1,0 +1,30 @@
+{
+  "step": 12,
+  "label": "case2_pm_dashboard_follows",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/dashboard/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "key": "requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "type": "需求",
+      "title": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-07-10",
+      "risk": "正常推进",
+      "activity": "今天更新",
+      "attentionScore": 140,
+      "attentionLevel": "important",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55"
+      }
+    }
+  ],
+  "raw_response": "[{\"key\":\"requirement:99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"type\":\"需求\",\"title\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-07-10\",\"risk\":\"正常推进\",\"activity\":\"今天更新\",\"attentionScore\":140,\"attentionLevel\":\"important\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\"}}]\n",
+  "error": null
+}

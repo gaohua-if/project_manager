@@ -1,0 +1,26 @@
+{
+  "step": 5,
+  "label": "login_employeeB",
+  "method": "POST",
+  "url": "http://localhost:18090/api/v1/auth/login",
+  "request_body": {
+    "employee_id": "lisi",
+    "password": "123"
+  },
+  "status": 200,
+  "response": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6Imxpc2kiLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJjMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi5p2O5ZubIiwicm9sZSI6ImVtcGxveWVlIiwidGVhbV9pZCI6ImEwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMSJ9.oPsN0_r378Iufv9WmJT7qalV55E9eGpmNPCkc1AAKXI",
+    "user": {
+      "id": "c0000000-0000-0000-0000-000000000002",
+      "employee_id": "lisi",
+      "email": "lisi@example.com",
+      "name": "李四",
+      "role": "employee",
+      "team_id": "a0000000-0000-0000-0000-000000000001",
+      "team_name": "AI工程",
+      "created_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  "raw_response": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6Imxpc2kiLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJjMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi5p2O5ZubIiwicm9sZSI6ImVtcGxveWVlIiwidGVhbV9pZCI6ImEwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMSJ9.oPsN0_r378Iufv9WmJT7qalV55E9eGpmNPCkc1AAKXI\",\"user\":{\"id\":\"c0000000-0000-0000-0000-000000000002\",\"employee_id\":\"lisi\",\"email\":\"lisi@example.com\",\"name\":\"李四\",\"role\":\"employee\",\"team_id\":\"a0000000-0000-0000-0000-000000000001\",\"team_name\":\"AI工程\",\"created_at\":\"0001-01-01T00:00:00Z\"}}\n",
+  "error": null
+}

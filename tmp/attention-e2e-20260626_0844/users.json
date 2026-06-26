@@ -1,0 +1,65 @@
+{
+  "directorUser": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImxpX2RpcmVjdG9yIiwiZXhwIjoxNzgzMDY4MjQzLCJpYXQiOjE3ODI0NjM0NDMsImlkIjoiYjAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwibmFtZSI6IuadjuaAu-ebkSIsInJvbGUiOiJkaXJlY3RvciIsInRlYW1faWQiOiIifQ.Lb38U00GtpVDsP_Pv3fOJSMhrXDz_lyECr1nrGIeAqk",
+    "id": "b0000000-0000-0000-0000-000000000001",
+    "employee_id": "li_director",
+    "email": "li_director@example.com",
+    "name": "李总监",
+    "role": "director",
+    "team_name": "",
+    "created_at": "0001-01-01T00:00:00Z"
+  },
+  "pmUser": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImNoZW5fcG0iLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJiMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi6ZmIUE0iLCJyb2xlIjoicG0iLCJ0ZWFtX2lkIjoiIn0.33w7KAp7Xc1oFoiG8CsTj-o_zyY2JAFhMiU5oRn_U5g",
+    "id": "b0000000-0000-0000-0000-000000000002",
+    "employee_id": "chen_pm",
+    "email": "chen_pm@example.com",
+    "name": "陈PM",
+    "role": "pm",
+    "team_name": "",
+    "created_at": "0001-01-01T00:00:00Z"
+  },
+  "tlUser": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImxpdV90bCIsImV4cCI6MTc4MzA2ODI0MywiaWF0IjoxNzgyNDYzNDQzLCJpZCI6ImIwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAxMCIsIm5hbWUiOiLliJhUTCIsInJvbGUiOiJ0ZWFtX2xlYWRlciIsInRlYW1faWQiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEifQ.KS5YhOzz2oOU4-rL0Ri53PBIxZkJBgqlhAyMOe5kRxU",
+    "id": "b0000000-0000-0000-0000-000000000010",
+    "employee_id": "liu_tl",
+    "email": "liu_tl@example.com",
+    "name": "刘TL",
+    "role": "team_leader",
+    "team_id": "a0000000-0000-0000-0000-000000000001",
+    "team_name": "AI工程",
+    "created_at": "0001-01-01T00:00:00Z"
+  },
+  "employeeA": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6InpoYW5nc2FuIiwiZXhwIjoxNzgzMDY4MjQzLCJpYXQiOjE3ODI0NjM0NDMsImlkIjoiYzAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwibmFtZSI6IuW8oOS4iSIsInJvbGUiOiJlbXBsb3llZSIsInRlYW1faWQiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEifQ.yv-C1ABgg4A77vHp9wYHUjpP2oMJ5nXXrdOi-EsY_ww",
+    "id": "c0000000-0000-0000-0000-000000000001",
+    "employee_id": "zhangsan",
+    "email": "zhangsan@example.com",
+    "name": "张三",
+    "role": "employee",
+    "team_id": "a0000000-0000-0000-0000-000000000001",
+    "team_name": "AI工程",
+    "created_at": "0001-01-01T00:00:00Z"
+  },
+  "employeeB": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6Imxpc2kiLCJleHAiOjE3ODMwNjgyNDMsImlhdCI6MTc4MjQ2MzQ0MywiaWQiOiJjMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDIiLCJuYW1lIjoi5p2O5ZubIiwicm9sZSI6ImVtcGxveWVlIiwidGVhbV9pZCI6ImEwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMSJ9.oPsN0_r378Iufv9WmJT7qalV55E9eGpmNPCkc1AAKXI",
+    "id": "c0000000-0000-0000-0000-000000000002",
+    "employee_id": "lisi",
+    "email": "lisi@example.com",
+    "name": "李四",
+    "role": "employee",
+    "team_id": "a0000000-0000-0000-0000-000000000001",
+    "team_name": "AI工程",
+    "created_at": "0001-01-01T00:00:00Z"
+  },
+  "adminUser": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbXBsb3llZV9pZCI6ImFkbWluIiwiZXhwIjoxNzgzMDY4MjQzLCJpYXQiOjE3ODI0NjM0NDMsImlkIjoiYjAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDk5IiwibmFtZSI6IueuoeeQhuWRmCIsInJvbGUiOiJhZG1pbiIsInRlYW1faWQiOiIifQ.Qv7wy44KpYINc4wKvA1q3wfUc7WglOOfOPxAawT30Sg",
+    "id": "b0000000-0000-0000-0000-000000000099",
+    "employee_id": "admin",
+    "email": "admin@example.com",
+    "name": "管理员",
+    "role": "admin",
+    "team_name": "",
+    "created_at": "0001-01-01T00:00:00Z"
+  }
+}

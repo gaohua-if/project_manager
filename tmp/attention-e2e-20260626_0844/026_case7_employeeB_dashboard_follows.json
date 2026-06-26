@@ -1,0 +1,33 @@
+{
+  "step": 26,
+  "label": "case7_employeeB_dashboard_follows",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/dashboard/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "key": "task:53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "type": "任务",
+      "title": "ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED",
+      "requirement": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "owner": "李四",
+      "status": "待办",
+      "deadline": "2026-07-03",
+      "risk": "正常推进",
+      "activity": "今天更新",
+      "attentionScore": 60,
+      "attentionLevel": "notable",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55&taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2"
+      }
+    }
+  ],
+  "raw_response": "[{\"key\":\"task:53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"type\":\"任务\",\"title\":\"ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED\",\"requirement\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"owner\":\"李四\",\"status\":\"待办\",\"deadline\":\"2026-07-03\",\"risk\":\"正常推进\",\"activity\":\"今天更新\",\"attentionScore\":60,\"attentionLevel\":\"notable\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\\u0026taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2\"}}]\n",
+  "error": null
+}

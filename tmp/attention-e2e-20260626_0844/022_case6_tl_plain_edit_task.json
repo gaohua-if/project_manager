@@ -1,0 +1,41 @@
+{
+  "step": 22,
+  "label": "case6_tl_plain_edit_task",
+  "method": "PUT",
+  "url": "http://localhost:18090/api/v1/tasks/53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+  "request_body": {
+    "title": "ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED",
+    "progress": 20
+  },
+  "status": 200,
+  "response": {
+    "id": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+    "requirement_id": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+    "requirement_title": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+    "title": "ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED",
+    "acceptance_criteria": [
+      "验证任务关注规则"
+    ],
+    "assignee_id": "c0000000-0000-0000-0000-000000000001",
+    "assignee_name": "张三",
+    "creator_tl_id": "b0000000-0000-0000-0000-000000000010",
+    "status": "todo",
+    "display_status": "todo",
+    "priority": "medium",
+    "progress": 20,
+    "due_date": "2026-07-03T00:00:00Z",
+    "risk_types": [],
+    "token_source_ids": null,
+    "is_followed": true,
+    "can_update_meta": true,
+    "can_reassign": true,
+    "can_update_status": true,
+    "can_update_progress": true,
+    "can_manage_dependencies": true,
+    "can_delete": true,
+    "created_at": "2026-06-26T08:44:03.545143Z",
+    "updated_at": "2026-06-26T08:44:03.611183Z"
+  },
+  "raw_response": "{\"id\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"requirement_id\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"requirement_title\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"title\":\"ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED\",\"acceptance_criteria\":[\"验证任务关注规则\"],\"assignee_id\":\"c0000000-0000-0000-0000-000000000001\",\"assignee_name\":\"张三\",\"creator_tl_id\":\"b0000000-0000-0000-0000-000000000010\",\"status\":\"todo\",\"display_status\":\"todo\",\"priority\":\"medium\",\"progress\":20,\"due_date\":\"2026-07-03T00:00:00Z\",\"risk_types\":[],\"token_source_ids\":null,\"is_followed\":true,\"can_update_meta\":true,\"can_reassign\":true,\"can_update_status\":true,\"can_update_progress\":true,\"can_manage_dependencies\":true,\"can_delete\":true,\"created_at\":\"2026-06-26T08:44:03.545143Z\",\"updated_at\":\"2026-06-26T08:44:03.611183Z\"}\n",
+  "error": null
+}

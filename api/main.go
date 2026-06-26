@@ -99,6 +99,7 @@ func main() {
 		r.Delete("/tasks/{id}/dependencies/{dep_id}", taskH.RemoveDependency)
 
 		r.Get("/follows", followH.List)
+		r.Get("/follows/followers", followH.Followers)
 		r.Post("/follows", followH.Follow)
 		r.Delete("/follows/{target_type}/{target_id}", followH.Unfollow)
 		r.Get("/dashboard/follows", dashboardH.Follows)

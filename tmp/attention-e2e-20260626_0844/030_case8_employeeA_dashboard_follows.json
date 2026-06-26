@@ -1,0 +1,111 @@
+{
+  "step": 30,
+  "label": "case8_employeeA_dashboard_follows",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/dashboard/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "key": "task:53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "type": "任务",
+      "title": "ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED",
+      "requirement": "ATTN_E2E_20260626_0844_REQ_PM_CREATE",
+      "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "owner": "张三",
+      "status": "待办",
+      "deadline": "2026-07-03",
+      "risk": "正常推进",
+      "activity": "今天更新",
+      "attentionScore": 70,
+      "attentionLevel": "notable",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+        "taskId": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+        "url": "/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55&taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2"
+      }
+    },
+    {
+      "key": "requirement:1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+      "type": "需求",
+      "title": "PERM-E2E-20260625071823 REQ_ADMIN_AI",
+      "requirementId": "1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+      "owner": "管理员",
+      "status": "待开始",
+      "deadline": "2026-12-31",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 10,
+      "attentionLevel": "normal",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+        "url": "/requirements?requirementId=1d14552d-4827-471b-89b9-1bb8ab4eb69d"
+      }
+    },
+    {
+      "key": "requirement:3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+      "type": "需求",
+      "title": "PERM-E2E-20260625071823 REQ_PM_ACCEL",
+      "requirementId": "3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+      "owner": "陈PM",
+      "status": "待开始",
+      "deadline": "2026-12-31",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 10,
+      "attentionLevel": "normal",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+        "url": "/requirements?requirementId=3b3d1698-dbf5-491e-be74-3cc6e608ade5"
+      }
+    },
+    {
+      "key": "task:14b58ecc-6d4d-4677-92d6-49860e70f149",
+      "type": "任务",
+      "title": "PERM-E2E-20260625071823 TASK_ACCEL_SUNBA",
+      "requirement": "PERM-E2E-20260625071823 REQ_PM_ACCEL",
+      "requirementId": "3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+      "taskId": "14b58ecc-6d4d-4677-92d6-49860e70f149",
+      "owner": "孙八",
+      "status": "待办",
+      "deadline": "2026-12-31",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 10,
+      "attentionLevel": "normal",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+        "taskId": "14b58ecc-6d4d-4677-92d6-49860e70f149",
+        "url": "/requirements?requirementId=3b3d1698-dbf5-491e-be74-3cc6e608ade5&taskId=14b58ecc-6d4d-4677-92d6-49860e70f149"
+      }
+    },
+    {
+      "key": "task:21e35d91-fbb3-4eb1-aaf0-a0485b04a83f",
+      "type": "任务",
+      "title": "PERM-E2E-20260625071823 TASK_AI_LISI",
+      "requirement": "PERM-E2E-20260625071823 REQ_ADMIN_AI",
+      "requirementId": "1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+      "taskId": "21e35d91-fbb3-4eb1-aaf0-a0485b04a83f",
+      "owner": "李四",
+      "status": "待办",
+      "deadline": "2026-12-31",
+      "risk": "正常推进",
+      "activity": "昨天更新",
+      "attentionScore": 10,
+      "attentionLevel": "normal",
+      "riskPriority": 0,
+      "navigation": {
+        "requirementId": "1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+        "taskId": "21e35d91-fbb3-4eb1-aaf0-a0485b04a83f",
+        "url": "/requirements?requirementId=1d14552d-4827-471b-89b9-1bb8ab4eb69d&taskId=21e35d91-fbb3-4eb1-aaf0-a0485b04a83f"
+      }
+    }
+  ],
+  "raw_response": "[{\"key\":\"task:53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"type\":\"任务\",\"title\":\"ATTN_E2E_20260626_0844_TASK_TL_ASSIGN_A_EDITED\",\"requirement\":\"ATTN_E2E_20260626_0844_REQ_PM_CREATE\",\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"owner\":\"张三\",\"status\":\"待办\",\"deadline\":\"2026-07-03\",\"risk\":\"正常推进\",\"activity\":\"今天更新\",\"attentionScore\":70,\"attentionLevel\":\"notable\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"taskId\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"url\":\"/requirements?requirementId=99c14c82-2a26-424b-a4d5-c563e62f7e55\\u0026taskId=53b1a850-cdd2-4e0f-9831-7955f15c45f2\"}},{\"key\":\"requirement:1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"type\":\"需求\",\"title\":\"PERM-E2E-20260625071823 REQ_ADMIN_AI\",\"requirementId\":\"1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"owner\":\"管理员\",\"status\":\"待开始\",\"deadline\":\"2026-12-31\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":10,\"attentionLevel\":\"normal\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"url\":\"/requirements?requirementId=1d14552d-4827-471b-89b9-1bb8ab4eb69d\"}},{\"key\":\"requirement:3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"type\":\"需求\",\"title\":\"PERM-E2E-20260625071823 REQ_PM_ACCEL\",\"requirementId\":\"3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"owner\":\"陈PM\",\"status\":\"待开始\",\"deadline\":\"2026-12-31\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":10,\"attentionLevel\":\"normal\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"url\":\"/requirements?requirementId=3b3d1698-dbf5-491e-be74-3cc6e608ade5\"}},{\"key\":\"task:14b58ecc-6d4d-4677-92d6-49860e70f149\",\"type\":\"任务\",\"title\":\"PERM-E2E-20260625071823 TASK_ACCEL_SUNBA\",\"requirement\":\"PERM-E2E-20260625071823 REQ_PM_ACCEL\",\"requirementId\":\"3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"taskId\":\"14b58ecc-6d4d-4677-92d6-49860e70f149\",\"owner\":\"孙八\",\"status\":\"待办\",\"deadline\":\"2026-12-31\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":10,\"attentionLevel\":\"normal\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"taskId\":\"14b58ecc-6d4d-4677-92d6-49860e70f149\",\"url\":\"/requirements?requirementId=3b3d1698-dbf5-491e-be74-3cc6e608ade5\\u0026taskId=14b58ecc-6d4d-4677-92d6-49860e70f149\"}},{\"key\":\"task:21e35d91-fbb3-4eb1-aaf0-a0485b04a83f\",\"type\":\"任务\",\"title\":\"PERM-E2E-20260625071823 TASK_AI_LISI\",\"requirement\":\"PERM-E2E-20260625071823 REQ_ADMIN_AI\",\"requirementId\":\"1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"taskId\":\"21e35d91-fbb3-4eb1-aaf0-a0485b04a83f\",\"owner\":\"李四\",\"status\":\"待办\",\"deadline\":\"2026-12-31\",\"risk\":\"正常推进\",\"activity\":\"昨天更新\",\"attentionScore\":10,\"attentionLevel\":\"normal\",\"riskPriority\":0,\"navigation\":{\"requirementId\":\"1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"taskId\":\"21e35d91-fbb3-4eb1-aaf0-a0485b04a83f\",\"url\":\"/requirements?requirementId=1d14552d-4827-471b-89b9-1bb8ab4eb69d\\u0026taskId=21e35d91-fbb3-4eb1-aaf0-a0485b04a83f\"}}]\n",
+  "error": null
+}

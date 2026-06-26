@@ -1,0 +1,62 @@
+{
+  "step": 38,
+  "label": "create_req_ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT",
+  "method": "POST",
+  "url": "http://localhost:18090/api/v1/requirements",
+  "request_body": {
+    "title": "ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT",
+    "description": "关注度 P0 接口测试：低关注风险排序",
+    "priority": "medium",
+    "team_ids": [
+      "a0000000-0000-0000-0000-000000000001"
+    ],
+    "acceptance_criteria": [
+      "验证关注度规则"
+    ],
+    "deadline": "2026-07-10"
+  },
+  "status": 201,
+  "response": {
+    "id": "fcf1203a-42a0-44e0-872c-37e3355e4297",
+    "title": "ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT",
+    "description": "关注度 P0 接口测试：低关注风险排序",
+    "acceptance_criteria": [
+      "验证关注度规则"
+    ],
+    "creator_id": "b0000000-0000-0000-0000-000000000002",
+    "creator_name": "陈PM",
+    "creator_role": "pm",
+    "status": "todo",
+    "priority": "medium",
+    "progress": 0,
+    "deadline": "2026-07-10T00:00:00Z",
+    "team_ids": [
+      "a0000000-0000-0000-0000-000000000001"
+    ],
+    "team_names": [
+      "AI工程"
+    ],
+    "token_source_ids": null,
+    "task_summary": {
+      "total": 0,
+      "done": 0,
+      "blocked": 0
+    },
+    "risk_summary": {
+      "blocked": 0,
+      "overdue": 0
+    },
+    "is_followed": true,
+    "can_update": true,
+    "can_change_status": true,
+    "can_cancel": true,
+    "can_restore": false,
+    "can_delete": true,
+    "can_manage_ac": true,
+    "can_create_task": true,
+    "created_at": "2026-06-26T08:44:03.788258Z",
+    "updated_at": "2026-06-26T08:44:03.788258Z"
+  },
+  "raw_response": "{\"id\":\"fcf1203a-42a0-44e0-872c-37e3355e4297\",\"title\":\"ATTN_E2E_20260626_0844_REQ_LOW_RISK_SORT\",\"description\":\"关注度 P0 接口测试：低关注风险排序\",\"acceptance_criteria\":[\"验证关注度规则\"],\"creator_id\":\"b0000000-0000-0000-0000-000000000002\",\"creator_name\":\"陈PM\",\"creator_role\":\"pm\",\"status\":\"todo\",\"priority\":\"medium\",\"progress\":0,\"deadline\":\"2026-07-10T00:00:00Z\",\"team_ids\":[\"a0000000-0000-0000-0000-000000000001\"],\"team_names\":[\"AI工程\"],\"token_source_ids\":null,\"task_summary\":{\"total\":0,\"done\":0,\"blocked\":0},\"risk_summary\":{\"blocked\":0,\"overdue\":0},\"is_followed\":true,\"can_update\":true,\"can_change_status\":true,\"can_cancel\":true,\"can_restore\":false,\"can_delete\":true,\"can_manage_ac\":true,\"can_create_task\":true,\"created_at\":\"2026-06-26T08:44:03.788258Z\",\"updated_at\":\"2026-06-26T08:44:03.788258Z\"}\n",
+  "error": null
+}

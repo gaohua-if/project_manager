@@ -1,0 +1,48 @@
+{
+  "step": 37,
+  "label": "list_follows_employeeA_task_a10e73fc",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "task",
+      "target_id": "a10e73fc-ecfe-44d5-b10b-46a6517f2147",
+      "created_at": "2026-06-26T08:44:03.734702Z"
+    },
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "task",
+      "target_id": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "created_at": "2026-06-26T08:44:03.687024Z"
+    },
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "task",
+      "target_id": "14b58ecc-6d4d-4677-92d6-49860e70f149",
+      "created_at": "2026-06-25T07:18:24.694159Z"
+    },
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "task",
+      "target_id": "21e35d91-fbb3-4eb1-aaf0-a0485b04a83f",
+      "created_at": "2026-06-25T07:18:24.69217Z"
+    },
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "requirement",
+      "target_id": "3b3d1698-dbf5-491e-be74-3cc6e608ade5",
+      "created_at": "2026-06-25T07:18:24.688462Z"
+    },
+    {
+      "user_id": "c0000000-0000-0000-0000-000000000001",
+      "target_type": "requirement",
+      "target_id": "1d14552d-4827-471b-89b9-1bb8ab4eb69d",
+      "created_at": "2026-06-25T07:18:24.685232Z"
+    }
+  ],
+  "raw_response": "[{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"task\",\"target_id\":\"a10e73fc-ecfe-44d5-b10b-46a6517f2147\",\"created_at\":\"2026-06-26T08:44:03.734702Z\"},{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"task\",\"target_id\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"created_at\":\"2026-06-26T08:44:03.687024Z\"},{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"task\",\"target_id\":\"14b58ecc-6d4d-4677-92d6-49860e70f149\",\"created_at\":\"2026-06-25T07:18:24.694159Z\"},{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"task\",\"target_id\":\"21e35d91-fbb3-4eb1-aaf0-a0485b04a83f\",\"created_at\":\"2026-06-25T07:18:24.69217Z\"},{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"requirement\",\"target_id\":\"3b3d1698-dbf5-491e-be74-3cc6e608ade5\",\"created_at\":\"2026-06-25T07:18:24.688462Z\"},{\"user_id\":\"c0000000-0000-0000-0000-000000000001\",\"target_type\":\"requirement\",\"target_id\":\"1d14552d-4827-471b-89b9-1bb8ab4eb69d\",\"created_at\":\"2026-06-25T07:18:24.685232Z\"}]\n",
+  "error": null
+}

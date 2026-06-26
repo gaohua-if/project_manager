@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
+import { queryClient } from "@/shared/query/queryClientInstance";
+
 import { AuthRequestError, fetchCurrentUser, loginWithPassword, registerUser } from "./authApi";
 import { AuthContext } from "./authContext";
 import {
@@ -21,6 +23,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
 
   const resetToAnonymous = useCallback(() => {
+    queryClient.clear();
     setUser(null);
     setError(null);
     setStatus("anonymous");
@@ -67,6 +70,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (!isAuthSessionStorageKey(event.key)) return;
+      queryClient.clear();
       const token = getAuthSession().token;
       if (!token) {
         resetToAnonymous();
@@ -91,6 +95,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError(null);
 
     try {
+      queryClient.clear();
       const { token, user: loginUser } = await loginWithPassword(credentials);
       setAuthSession({ token });
       setUser(loginUser);
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError(null);
 
     try {
+      queryClient.clear();
       const { token, user: registeredUser } = await registerUser(payload);
       setAuthSession({ token });
       setUser(registeredUser);
@@ -142,6 +148,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       register,
       logout: () => {
         clearAuthSession();
+        queryClient.clear();
         setUser(null);
         setError(null);
         setStatus("anonymous");

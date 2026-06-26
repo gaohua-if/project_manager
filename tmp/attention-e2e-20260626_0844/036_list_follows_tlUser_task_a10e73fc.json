@@ -1,0 +1,42 @@
+{
+  "step": 36,
+  "label": "list_follows_tlUser_task_a10e73fc",
+  "method": "GET",
+  "url": "http://localhost:18090/api/v1/follows",
+  "request_body": null,
+  "status": 200,
+  "response": [
+    {
+      "user_id": "b0000000-0000-0000-0000-000000000010",
+      "target_type": "task",
+      "target_id": "a10e73fc-ecfe-44d5-b10b-46a6517f2147",
+      "created_at": "2026-06-26T08:44:03.732344Z"
+    },
+    {
+      "user_id": "b0000000-0000-0000-0000-000000000010",
+      "target_type": "task",
+      "target_id": "53b1a850-cdd2-4e0f-9831-7955f15c45f2",
+      "created_at": "2026-06-26T08:44:03.549494Z"
+    },
+    {
+      "user_id": "b0000000-0000-0000-0000-000000000010",
+      "target_type": "requirement",
+      "target_id": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+      "created_at": "2026-06-26T08:44:03.537316Z"
+    },
+    {
+      "user_id": "b0000000-0000-0000-0000-000000000010",
+      "target_type": "requirement",
+      "target_id": "207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1",
+      "created_at": "2026-06-25T09:08:49.91058Z"
+    },
+    {
+      "user_id": "b0000000-0000-0000-0000-000000000010",
+      "target_type": "requirement",
+      "target_id": "d963045a-2394-4a0b-826a-12795ff4f479",
+      "created_at": "2026-06-25T09:08:48.080222Z"
+    }
+  ],
+  "raw_response": "[{\"user_id\":\"b0000000-0000-0000-0000-000000000010\",\"target_type\":\"task\",\"target_id\":\"a10e73fc-ecfe-44d5-b10b-46a6517f2147\",\"created_at\":\"2026-06-26T08:44:03.732344Z\"},{\"user_id\":\"b0000000-0000-0000-0000-000000000010\",\"target_type\":\"task\",\"target_id\":\"53b1a850-cdd2-4e0f-9831-7955f15c45f2\",\"created_at\":\"2026-06-26T08:44:03.549494Z\"},{\"user_id\":\"b0000000-0000-0000-0000-000000000010\",\"target_type\":\"requirement\",\"target_id\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"created_at\":\"2026-06-26T08:44:03.537316Z\"},{\"user_id\":\"b0000000-0000-0000-0000-000000000010\",\"target_type\":\"requirement\",\"target_id\":\"207932f2-fbd2-4ed7-8a4c-70bb6fc9e4f1\",\"created_at\":\"2026-06-25T09:08:49.91058Z\"},{\"user_id\":\"b0000000-0000-0000-0000-000000000010\",\"target_type\":\"requirement\",\"target_id\":\"d963045a-2394-4a0b-826a-12795ff4f479\",\"created_at\":\"2026-06-25T09:08:48.080222Z\"}]\n",
+  "error": null
+}

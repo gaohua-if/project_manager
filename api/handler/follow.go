@@ -41,6 +41,56 @@ func (h *FollowHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, follows)
 }
 
+func (h *FollowHandler) Followers(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	targetType := r.URL.Query().Get("target_type")
+	targetID := r.URL.Query().Get("target_id")
+	if !isFollowTargetType(targetType) || targetID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_type and target_id are required"})
+		return
+	}
+	visible, err := h.targetVisible(u, targetType, targetID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !visible {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "target not found or not visible"})
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT u.id, u.name, u.role, u.team_id, t.name, f.created_at
+		FROM user_follows f
+		JOIN users u ON u.id = f.user_id
+		LEFT JOIN teams t ON t.id = u.team_id
+		WHERE f.target_type = $1 AND f.target_id = $2
+		ORDER BY f.created_at ASC`, targetType, targetID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	followers := []model.FollowFollower{}
+	for rows.Next() {
+		var follower model.FollowFollower
+		var teamID, teamName sql.NullString
+		if err := rows.Scan(&follower.ID, &follower.Name, &follower.Role, &teamID, &teamName, &follower.FollowedAt); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		follower.TeamID = nullStringPtr(teamID)
+		follower.TeamName = nullStringPtr(teamName)
+		followers = append(followers, follower)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, followers)
+}
+
 func (h *FollowHandler) Follow(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	var req model.FollowRequest

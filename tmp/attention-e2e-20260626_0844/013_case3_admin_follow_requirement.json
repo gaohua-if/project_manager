@@ -1,0 +1,18 @@
+{
+  "step": 13,
+  "label": "case3_admin_follow_requirement",
+  "method": "POST",
+  "url": "http://localhost:18090/api/v1/follows",
+  "request_body": {
+    "target_type": "requirement",
+    "target_id": "99c14c82-2a26-424b-a4d5-c563e62f7e55"
+  },
+  "status": 200,
+  "response": {
+    "favorited": true,
+    "target_id": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+    "target_type": "requirement"
+  },
+  "raw_response": "{\"favorited\":true,\"target_id\":\"99c14c82-2a26-424b-a4d5-c563e62f7e55\",\"target_type\":\"requirement\"}\n",
+  "error": null
+}

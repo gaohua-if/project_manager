@@ -118,6 +118,15 @@ export interface DashboardNavigationTargetDTO {
 
 export type AttentionLevel = "normal" | "notable" | "important" | "high";
 
+export interface DashboardFollowFollowerDTO {
+  id: string;
+  name: string;
+  role: string;
+  teamId?: string;
+  teamName?: string;
+  followedAt: string;
+}
+
 export interface DashboardFollowItemDTO {
   key: string;
   type: "需求" | "任务";
@@ -133,6 +142,7 @@ export interface DashboardFollowItemDTO {
   activity?: string;
   attentionScore: number;
   attentionLevel: AttentionLevel;
+  followerCount: number;
   riskPriority: number;
   navigation: DashboardNavigationTargetDTO;
 }

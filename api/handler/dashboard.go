@@ -132,7 +132,7 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 	}
 	req.Deadline = nullStringPtr(deadline)
 	NewRequirementHandler(h.db, nil).loadProjection(&req, &model.User{ID: userID})
-	attentionScore := h.attentionScore("requirement", req.ID)
+	attention := h.followAttention("requirement", req.ID)
 	url := fmt.Sprintf("/requirements?requirementId=%s", req.ID)
 	return model.DashboardFollowItem{
 		Key:            "requirement:" + req.ID,
@@ -144,8 +144,9 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 		Deadline:       displayDate(req.Deadline),
 		Risk:           requirementRiskLabel(req.RiskSummary),
 		Activity:       recentUpdateLabel(updatedAt),
-		AttentionScore: attentionScore,
-		AttentionLevel: attentionLevel(attentionScore),
+		AttentionScore: attention.score,
+		AttentionLevel: attentionLevel(attention.score),
+		FollowerCount:  attention.count,
 		RiskPriority:   requirementRiskPriority(req.RiskSummary),
 		SortDueDate:    req.Deadline,
 		SortUpdatedAt:  updatedAt,
@@ -173,7 +174,7 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 	if task.DisplayStatus == "blocked" {
 		dependency = unfinishedDependencyNames(task)
 	}
-	attentionScore := h.attentionScore("task", task.ID)
+	attention := h.followAttention("task", task.ID)
 	return model.DashboardFollowItem{
 		Key:            "task:" + task.ID,
 		Type:           "任务",
@@ -187,8 +188,9 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 		Risk:           taskRiskLabel(task.RiskTypes),
 		Dependency:     dependency,
 		Activity:       recentUpdateLabel(task.UpdatedAt),
-		AttentionScore: attentionScore,
-		AttentionLevel: attentionLevel(attentionScore),
+		AttentionScore: attention.score,
+		AttentionLevel: attentionLevel(attention.score),
+		FollowerCount:  attention.count,
 		RiskPriority:   taskRiskPriority(task.RiskTypes),
 		SortDueDate:    task.DueDate,
 		SortUpdatedAt:  task.UpdatedAt,
@@ -284,6 +286,31 @@ func dashboardRiskItem(task model.Task, riskType string, attentionScore int) mod
 		item.RiskLevelPriority = 100
 	}
 	return item
+}
+
+type followAttention struct {
+	score int
+	count int
+}
+
+func (h *DashboardHandler) followAttention(targetType, targetID string) followAttention {
+	var attention followAttention
+	if err := h.db.QueryRow(`
+		SELECT
+			COALESCE(SUM(CASE u.role
+				WHEN 'director' THEN 100
+				WHEN 'team_leader' THEN 50
+				WHEN 'pm' THEN 40
+				WHEN 'employee' THEN 10
+				ELSE 0
+			END), 0),
+			COUNT(*)
+		FROM user_follows f
+		JOIN users u ON u.id = f.user_id
+		WHERE f.target_type = $1 AND f.target_id = $2`, targetType, targetID).Scan(&attention.score, &attention.count); err != nil {
+		return followAttention{}
+	}
+	return attention
 }
 
 func (h *DashboardHandler) attentionScore(targetType, targetID string) int {

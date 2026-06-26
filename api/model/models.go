@@ -118,6 +118,15 @@ type UserFollow struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type FollowFollower struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Role       string    `json:"role"`
+	TeamID     *string   `json:"teamId,omitempty"`
+	TeamName   *string   `json:"teamName,omitempty"`
+	FollowedAt time.Time `json:"followedAt"`
+}
+
 type FollowRequest struct {
 	TargetType string `json:"target_type"`
 	TargetID   string `json:"target_id"`
@@ -144,6 +153,7 @@ type DashboardFollowItem struct {
 	Activity       string                    `json:"activity,omitempty"`
 	AttentionScore int                       `json:"attentionScore"`
 	AttentionLevel string                    `json:"attentionLevel"`
+	FollowerCount  int                       `json:"followerCount"`
 	RiskPriority   int                       `json:"riskPriority"`
 	SortDueDate    *string                   `json:"-"`
 	SortUpdatedAt  time.Time                 `json:"-"`

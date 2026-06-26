@@ -1,0 +1,23 @@
+{
+  "step": 33,
+  "label": "create_task_ATTN_E2E_20260626_0844_TASK_RISK_HIGH_REQ",
+  "method": "POST",
+  "url": "http://localhost:18090/api/v1/tasks",
+  "request_body": {
+    "requirement_id": "99c14c82-2a26-424b-a4d5-c563e62f7e55",
+    "title": "ATTN_E2E_20260626_0844_TASK_RISK_HIGH_REQ",
+    "assignee_id": "c0000000-0000-0000-0000-000000000001",
+    "priority": "medium",
+    "acceptance_criteria": [
+      "验证任务关注规则"
+    ],
+    "due_date": "2026-06-25"
+  },
+  "status": 201,
+  "response": {
+    "id": "a10e73fc-ecfe-44d5-b10b-46a6517f2147",
+    "status": "created"
+  },
+  "raw_response": "{\"id\":\"a10e73fc-ecfe-44d5-b10b-46a6517f2147\",\"status\":\"created\"}\n",
+  "error": null
+}

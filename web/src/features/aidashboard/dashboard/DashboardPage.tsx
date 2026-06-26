@@ -8,10 +8,29 @@ import {
   FlagOutlined,
   LinkOutlined,
   RightOutlined,
-  UploadOutlined,
+  UploadOutlined
 } from "@ant-design/icons";
-import { Alert, App, Badge, Button, Checkbox, Col, Empty, Input, Modal, Popconfirm, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Alert,
+  App,
+  Badge,
+  Button,
+  Checkbox,
+  Col,
+  Empty,
+  Input,
+  Modal,
+  Popconfirm,
+  Popover,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Steps,
+  Tag,
+  Upload
+} from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as echarts from "echarts";
 import type { ECharts, EChartsOption } from "echarts";
 import type { ReactNode } from "react";
@@ -29,23 +48,24 @@ import {
   fetchDepartmentReportSources,
   fetchDepartmentReportTodayOrNull,
   fetchPersonalWeeklyReportCurrentOrNull,
-	fetchDashboardFollows,
-	fetchDashboardRisks,
+  fetchDashboardFollows,
+  fetchFollowFollowers,
+  fetchDashboardRisks,
   fetchReports,
-	fetchSessions,
+  fetchSessions,
   fetchTeamReportSources,
   fetchTeamReportTodayOrNull,
-	fetchTodayReport,
+  fetchTodayReport,
   fetchTokens,
   generateDepartmentReport,
   generateTeamReport,
-	generateTodayReportDraft,
+  generateTodayReportDraft,
   updateDepartmentReport,
-	updateReport as updateDailyReport,
+  updateReport as updateDailyReport,
   submitTeamReport,
   updateTeamReport,
-	updateTaskProgress,
-	updateTaskStatus
+  updateTaskProgress,
+  updateTaskStatus
 } from "../api/client";
 import type {
   DailyReport,
@@ -53,6 +73,7 @@ import type {
   DepartmentReportSources,
   GenerateReportDraftPayload,
   AttentionLevel,
+  DashboardFollowFollowerDTO,
   PersonalWeeklyReport,
   Session,
   TaskProgressSuggestion as DraftTaskProgressSuggestion,
@@ -74,7 +95,15 @@ import { PersonalWeeklyReportsView } from "../reports/pages/WeeklyReportsPage";
 import "./console-dashboard.css";
 
 type DashboardRole = "employee" | "team_leader" | "director" | "pm";
-type ReportStatus = "待生成" | "生成中" | "草稿待确认" | "已保存" | "已发送" | "已保存，未发送最新修改" | "已归档" | "生成失败";
+type ReportStatus =
+  | "待生成"
+  | "生成中"
+  | "草稿待确认"
+  | "已保存"
+  | "已发送"
+  | "已保存，未发送最新修改"
+  | "已归档"
+  | "生成失败";
 type ReportGenerateMode = "系统自动生成" | "手动生成";
 type ReportModalStep = "sessions" | "source" | "editor";
 type ReportKind =
@@ -90,7 +119,12 @@ type FollowType = "需求" | "任务";
 type RiskType = "deadline" | "dependency_blocker";
 type RiskRelatedObjectType = "requirement" | "task";
 type TokenRange = DashboardTokenRange;
-type ReportSkillOption = { label: string; value: string; source?: "system" | "upload"; content?: string };
+type ReportSkillOption = {
+  label: string;
+  value: string;
+  source?: "system" | "upload";
+  content?: string;
+};
 type DraftTaskStatus = "todo" | "in_progress" | "done";
 
 interface SessionOption {
@@ -116,6 +150,7 @@ interface FollowItem {
   activity?: string;
   attentionScore?: number;
   attentionLevel?: AttentionLevel;
+  followerCount?: number;
   riskPriority?: number;
 }
 
@@ -219,7 +254,10 @@ const DEFAULT_MARKDOWN = `# 6 月 22 日日报
 * 继续完善控制台日报生成弹窗和 Markdown 编辑流程。
 * 对齐需求看板定位规则。`;
 
-function createReport(overrides: Omit<ReportItem, "sessionCount" | "generateMode" | "skill" | "updatedAt"> & Partial<ReportItem>): ReportItem {
+function createReport(
+  overrides: Omit<ReportItem, "sessionCount" | "generateMode" | "skill" | "updatedAt"> &
+    Partial<ReportItem>
+): ReportItem {
   return {
     sessionCount: 0,
     generateMode: "系统自动生成",
@@ -229,7 +267,11 @@ function createReport(overrides: Omit<ReportItem, "sessionCount" | "generateMode
   };
 }
 
-function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport | undefined, loaded: boolean): ReportItem {
+function applyTodayDailyReportState(
+  report: ReportItem,
+  dailyReport: DailyReport | undefined,
+  loaded: boolean
+): ReportItem {
   if (!loaded) return report;
   if (!dailyReport) {
     return {
@@ -258,7 +300,11 @@ function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport
   };
 }
 
-function applyPersonalWeeklyReportState(report: ReportItem, weeklyReport: PersonalWeeklyReport | null | undefined, loaded: boolean): ReportItem {
+function applyPersonalWeeklyReportState(
+  report: ReportItem,
+  weeklyReport: PersonalWeeklyReport | null | undefined,
+  loaded: boolean
+): ReportItem {
   if (!loaded) return report;
   if (!weeklyReport) {
     return {
@@ -277,7 +323,11 @@ function applyPersonalWeeklyReportState(report: ReportItem, weeklyReport: Person
   };
 }
 
-function applyTeamDailyReportState(report: ReportItem, teamReport: TeamReport | null | undefined, loaded: boolean): ReportItem {
+function applyTeamDailyReportState(
+  report: ReportItem,
+  teamReport: TeamReport | null | undefined,
+  loaded: boolean
+): ReportItem {
   if (!loaded) return report;
   if (!teamReport) {
     return {
@@ -320,7 +370,12 @@ function applyDepartmentDailyReportState(
 
   return {
     ...report,
-    status: departmentReport.status === "saved" || departmentReport.status === "archived" || departmentReport.archived_at ? "已归档" : "待生成",
+    status:
+      departmentReport.status === "saved" ||
+      departmentReport.status === "archived" ||
+      departmentReport.archived_at
+        ? "已归档"
+        : "待生成",
     sessionCount: departmentReport.source_team_report_ids.length,
     generateMode: "系统自动生成",
     skill: "部门日报 Agent",
@@ -426,7 +481,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         level: "高",
         tone: "red",
         actionText: "查看依赖",
-        targetUrl: "/requirements?requirementId=req-daily-send&taskId=task-feishu-integration&focus=dependency"
+        targetUrl:
+          "/requirements?requirementId=req-daily-send&taskId=task-feishu-integration&focus=dependency"
       },
       {
         key: "employee-risk-2",
@@ -493,7 +549,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         name: "本周组周报",
         status: "待生成",
         description: "可基于组内成员本周报告和需求看板数据生成组周报草稿。",
-        sourceSummary: "组内成员本周个人日报、个人周报、需求看板数据、本周风险与阻塞、完成/延期/下周计划",
+        sourceSummary:
+          "组内成员本周个人日报、个人周报、需求看板数据、本周风险与阻塞、完成/延期/下周计划",
         updatedAt: "-"
       })
     ],
@@ -564,7 +621,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         level: "高",
         tone: "red",
         actionText: "查看任务",
-        targetUrl: "/requirements?requirementId=req-session-import&taskId=task-session-parser&focus=deadline"
+        targetUrl:
+          "/requirements?requirementId=req-session-import&taskId=task-session-parser&focus=deadline"
       },
       {
         key: "tl-risk-2",
@@ -581,7 +639,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         level: "高",
         tone: "red",
         actionText: "查看依赖",
-        targetUrl: "/requirements?requirementId=req-daily-send&taskId=task-feishu-integration&focus=dependency"
+        targetUrl:
+          "/requirements?requirementId=req-daily-send&taskId=task-feishu-integration&focus=dependency"
       }
     ]
   },
@@ -696,7 +755,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         level: "高",
         tone: "red",
         actionText: "查看依赖",
-        targetUrl: "/requirements?requirementId=req-ai-daily&taskId=task-daily-send&focus=dependency"
+        targetUrl:
+          "/requirements?requirementId=req-ai-daily&taskId=task-daily-send&focus=dependency"
       },
       {
         key: "director-risk-2",
@@ -807,7 +867,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         level: "高",
         tone: "red",
         actionText: "查看依赖",
-        targetUrl: "/requirements?requirementId=req-ai-daily&taskId=task-feishu-integration&focus=dependency"
+        targetUrl:
+          "/requirements?requirementId=req-ai-daily&taskId=task-feishu-integration&focus=dependency"
       },
       {
         key: "pm-risk-2",
@@ -839,19 +900,21 @@ export function DashboardPage() {
   const reportDate = today.format("YYYY-MM-DD");
   const weekStart = today.subtract((today.day() + 6) % 7, "day").format("YYYY-MM-DD");
   const weekEnd = dayjs(weekStart).add(6, "day").format("YYYY-MM-DD");
-	const followsQuery = useQuery({
-		queryKey: ["dashboard", "follows"],
-		queryFn: fetchDashboardFollows,
-		staleTime: 30_000
-	});
-	const risksQuery = useQuery({
-		queryKey: ["dashboard", "risks"],
-		queryFn: fetchDashboardRisks,
-		staleTime: 30_000
-	});
+  const currentUserId = user?.id ?? "";
+  const followsQuery = useQuery({
+    queryKey: ["dashboard", currentUserId, "follows"],
+    queryFn: fetchDashboardFollows,
+    staleTime: 30_000
+  });
+  const risksQuery = useQuery({
+    queryKey: ["dashboard", currentUserId, "risks"],
+    queryFn: fetchDashboardRisks,
+    staleTime: 30_000
+  });
   const todayReportsQuery = useQuery({
-    queryKey: ["reports", "dashboard-today", reportDate],
-    queryFn: () => fetchReports({ scope: "mine", from: reportDate, to: reportDate, page: "1", page_size: "1" }),
+    queryKey: ["reports", "dashboard-today", currentUserId, reportDate],
+    queryFn: () =>
+      fetchReports({ scope: "mine", from: reportDate, to: reportDate, page: "1", page_size: "1" }),
     staleTime: 30_000
   });
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -871,35 +934,38 @@ export function DashboardPage() {
   const [editingTaskKey, setEditingTaskKey] = useState<string | null>(null);
   const [editingTaskDraft, setEditingTaskDraft] = useState<TaskProgressSuggestion | null>(null);
   const [tokenRange, setTokenRange] = useState<TokenRange>("last3days");
-  const [dailyGenerateTarget, setDailyGenerateTarget] = useState<{ scope: DailyGenerateScope; reportDate?: string } | null>(null);
+  const [dailyGenerateTarget, setDailyGenerateTarget] = useState<{
+    scope: DailyGenerateScope;
+    reportDate?: string;
+  } | null>(null);
   const [weeklyMineOpen, setWeeklyMineOpen] = useState(false);
   const dashboardRole = getDashboardRole(user?.role);
   const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
   const personalWeeklyQuery = useQuery({
-    queryKey: ["reports", "weekly", "mine", "dashboard-current", weekStart],
+    queryKey: ["reports", "weekly", "mine", "dashboard-current", currentUserId, weekStart],
     queryFn: () => fetchPersonalWeeklyReportCurrentOrNull(weekStart),
     staleTime: 30_000
   });
   const departmentSourcesQuery = useQuery({
-    queryKey: ["department-report-sources", reportDate],
+    queryKey: ["department-report-sources", currentUserId, reportDate],
     queryFn: () => fetchDepartmentReportSources(reportDate),
     enabled: dashboardRole === "director",
     staleTime: 30_000
   });
   const teamSourcesQuery = useQuery({
-    queryKey: ["team-report-sources", reportDate],
+    queryKey: ["team-report-sources", currentUserId, reportDate],
     queryFn: () => fetchTeamReportSources(reportDate),
     enabled: dashboardRole === "team_leader",
     staleTime: 30_000
   });
   const teamReportQuery = useQuery({
-    queryKey: ["team-report-today", reportDate],
+    queryKey: ["team-report-today", currentUserId, reportDate],
     queryFn: () => fetchTeamReportTodayOrNull(reportDate),
     enabled: dashboardRole === "team_leader",
     staleTime: 30_000
   });
   const departmentReportQuery = useQuery({
-    queryKey: ["department-report-today", reportDate],
+    queryKey: ["department-report-today", currentUserId, reportDate],
     queryFn: () => fetchDepartmentReportTodayOrNull(reportDate),
     enabled: dashboardRole === "director",
     staleTime: 30_000
@@ -907,18 +973,32 @@ export function DashboardPage() {
   const todayDailyReport = todayReportsQuery.data?.[0];
   const personalReports = data.personalReports.map((reportItem) => {
     if (reportItem.kind === "personal_weekly") {
-      return applyPersonalWeeklyReportState(reportItem, personalWeeklyQuery.data, personalWeeklyQuery.isSuccess);
+      return applyPersonalWeeklyReportState(
+        reportItem,
+        personalWeeklyQuery.data,
+        personalWeeklyQuery.isSuccess
+      );
     }
     if (reportItem.kind !== "personal_daily") return reportItem;
     return applyTodayDailyReportState(reportItem, todayDailyReport, todayReportsQuery.isSuccess);
   });
   const summaryReports = (data.summaryReports ?? [])
-    .filter((reportItem) => reportItem.kind === "team_daily" || reportItem.kind === "department_daily")
+    .filter(
+      (reportItem) => reportItem.kind === "team_daily" || reportItem.kind === "department_daily"
+    )
     .map((reportItem) => {
       if (reportItem.kind === "team_daily") {
-        return applyTeamDailyReportState(reportItem, teamReportQuery.data, teamReportQuery.isSuccess);
+        return applyTeamDailyReportState(
+          reportItem,
+          teamReportQuery.data,
+          teamReportQuery.isSuccess
+        );
       }
-      return applyDepartmentDailyReportState(reportItem, departmentReportQuery.data, departmentReportQuery.isSuccess);
+      return applyDepartmentDailyReportState(
+        reportItem,
+        departmentReportQuery.data,
+        departmentReportQuery.isSuccess
+      );
     });
   const effectiveCoverage =
     dashboardRole === "director" && departmentSourcesQuery.data
@@ -935,32 +1015,61 @@ export function DashboardPage() {
             missing: teamSourcesQuery.data.missing,
             failed: 0
           }
-      : data.coverage;
-  const dailyReport = personalReports.find((reportItem) => reportItem.kind === "personal_daily") ?? personalReports[0];
-  const availableReportIds = new Set([...personalReports, ...summaryReports].map((reportItem) => reportItem.id));
+        : data.coverage;
+  const dailyReport =
+    personalReports.find((reportItem) => reportItem.kind === "personal_daily") ??
+    personalReports[0];
+  const availableReportIds = new Set(
+    [...personalReports, ...summaryReports].map((reportItem) => reportItem.id)
+  );
   const allVisibleReports = [...personalReports, ...summaryReports];
   const activeReport = availableReportIds.has(activeReportId)
-    ? allVisibleReports.find((reportItem) => reportItem.id === activeReportId) ?? dailyReport
+    ? (allVisibleReports.find((reportItem) => reportItem.id === activeReportId) ?? dailyReport)
     : dailyReport;
   const tokenDateRange = useMemo(() => getDashboardTokenDateRange(tokenRange), [tokenRange]);
   const tokenScope = dashboardRole === "employee" ? "mine" : "team";
   const shouldLoadMineTokens = dashboardRole !== "employee";
   const shouldLoadTeamTokenGroups = dashboardRole === "director";
   const tokenSessionsQuery = useQuery({
-    queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, tokenScope],
-    queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: tokenScope }),
-    placeholderData: keepPreviousData,
+    queryKey: [
+      "dashboard",
+      currentUserId,
+      "token-sessions",
+      tokenDateRange.from,
+      tokenDateRange.to,
+      tokenScope
+    ],
+    queryFn: () =>
+      fetchAllSessionTokens({
+        from: tokenDateRange.from,
+        to: tokenDateRange.to,
+        scope: tokenScope
+      }),
     staleTime: 60_000
   });
   const mineTokenSessionsQuery = useQuery({
-    queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, "mine"],
-    queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
+    queryKey: [
+      "dashboard",
+      currentUserId,
+      "token-sessions",
+      tokenDateRange.from,
+      tokenDateRange.to,
+      "mine"
+    ],
+    queryFn: () =>
+      fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
     enabled: shouldLoadMineTokens,
-    placeholderData: keepPreviousData,
     staleTime: 60_000
   });
   const teamTokenGroupsQuery = useQuery({
-    queryKey: ["dashboard", "token-groups", tokenDateRange.from, tokenDateRange.to, "team"],
+    queryKey: [
+      "dashboard",
+      currentUserId,
+      "token-groups",
+      tokenDateRange.from,
+      tokenDateRange.to,
+      "team"
+    ],
     queryFn: () =>
       fetchTokens({
         period: "range",
@@ -969,7 +1078,6 @@ export function DashboardPage() {
         group_by: "team"
       }),
     enabled: shouldLoadTeamTokenGroups,
-    placeholderData: keepPreviousData,
     staleTime: 60_000
   });
   const reportSkillOptions = useMemo(
@@ -979,8 +1087,8 @@ export function DashboardPage() {
   const tokenReport = useMemo(
     () =>
       aggregateDashboardTokenReport(tokenSessionsQuery.data ?? [], tokenDateRange, {
-        mineSessions: shouldLoadMineTokens ? mineTokenSessionsQuery.data ?? [] : undefined,
-        teamAggregation: shouldLoadTeamTokenGroups ? teamTokenGroupsQuery.data ?? null : null,
+        mineSessions: shouldLoadMineTokens ? (mineTokenSessionsQuery.data ?? []) : undefined,
+        teamAggregation: shouldLoadTeamTokenGroups ? (teamTokenGroupsQuery.data ?? null) : null,
         showUploaders: dashboardRole !== "employee"
       }),
     [
@@ -1001,13 +1109,15 @@ export function DashboardPage() {
     tokenSessionsQuery.isError ||
     (shouldLoadMineTokens && mineTokenSessionsQuery.isError) ||
     (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isError);
-		const followItems: FollowItem[] = followsQuery.data ?? [];
-		const riskItems: RiskItem[] = risksQuery.data ?? [];
+  const followItems: FollowItem[] = followsQuery.data ?? [];
+  const riskItems: RiskItem[] = risksQuery.data ?? [];
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
-  const followBlockedCount = followItems.filter((item) => item.risk.includes("阻塞") || item.status === "阻塞").length;
+  const followBlockedCount = followItems.filter(
+    (item) => item.risk.includes("阻塞") || item.status === "阻塞"
+  ).length;
   const followUrgentCount = followItems.filter((item) => item.risk.includes("超期")).length;
   const reportSessionsQuery = useQuery({
-    queryKey: ["dashboard", "daily-report-sessions", reportDate],
+    queryKey: ["dashboard", currentUserId, "daily-report-sessions", reportDate],
     queryFn: () =>
       fetchSessions({
         started_from: today.startOf("day").toISOString(),
@@ -1018,7 +1128,6 @@ export function DashboardPage() {
     enabled: isReportModalOpen && activeReport.kind === "personal_daily",
     staleTime: 30_000
   });
-  const currentUserId = user?.id;
   const reportSessionItems = reportSessionsQuery.data?.items;
   const reportSessions = useMemo(() => {
     const items = reportSessionItems ?? [];
@@ -1055,10 +1164,10 @@ export function DashboardPage() {
     // Dashboard 状态只来自接口；旧弹窗分支保留时不再写本地假状态。
   };
 
-	  const draftMutation = useMutation({
-	    mutationFn: (payload: GenerateReportDraftPayload) => generateTodayReportDraft(payload),
-	    onSuccess: (draft) => {
-	      setDraftMarkdown(draft.report_markdown);
+  const draftMutation = useMutation({
+    mutationFn: (payload: GenerateReportDraftPayload) => generateTodayReportDraft(payload),
+    onSuccess: (draft) => {
+      setDraftMarkdown(draft.report_markdown);
       setDraftMarkdownTouched(false);
       setSelectedSessionIds(draft.selected_session_ids);
       setValidatedDraftSessionIds(draft.selected_session_ids);
@@ -1068,18 +1177,18 @@ export function DashboardPage() {
         sessionCount: draft.selected_session_ids.length,
         generateMode: "手动生成",
         skill: draft.skill_name,
-	        updatedAt: "刚刚",
-	        nextAt: "19:00"
-	      });
-	      setReportModalStep("editor");
-	      void queryClient.invalidateQueries({ queryKey: ["reports"] });
-	    },
+        updatedAt: "刚刚",
+        nextAt: "19:00"
+      });
+      setReportModalStep("editor");
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
     onError: (error: unknown) => {
       const text = error instanceof Error ? error.message : "日报草稿生成失败";
       setDraftError(text);
       message.error(text);
-	    }
-	  });
+    }
+  });
 
   const departmentGenerateMutation = useMutation({
     mutationFn: () => generateDepartmentReport(),
@@ -1142,7 +1251,12 @@ export function DashboardPage() {
       setTeamDraft(report);
       setDraftMarkdown(report.content);
       updateReport(activeReport.id, {
-        status: report.status === "submitted" ? "已发送" : report.status === "saved" && report.submitted_at ? "已保存，未发送最新修改" : "已保存",
+        status:
+          report.status === "submitted"
+            ? "已发送"
+            : report.status === "saved" && report.submitted_at
+              ? "已保存，未发送最新修改"
+              : "已保存",
         sessionCount: report.source_daily_report_ids.length || report.member_report_ids.length,
         generateMode: "系统自动生成",
         skill: "小组日报 Agent",
@@ -1196,7 +1310,10 @@ export function DashboardPage() {
   const saveReportMutation = useMutation({
     mutationFn: async ({ closeAfterSave }: { closeAfterSave: boolean }) => {
       const report = await fetchTodayReport();
-      const sessionIDs = validatedDraftSessionIds.length > 0 ? validatedDraftSessionIds : effectiveSelectedSessionIds;
+      const sessionIDs =
+        validatedDraftSessionIds.length > 0
+          ? validatedDraftSessionIds
+          : effectiveSelectedSessionIds;
       const saved = await updateDailyReport(report.id, {
         content: draftMarkdown,
         session_ids: sessionIDs
@@ -1299,7 +1416,11 @@ export function DashboardPage() {
         ? reportItem.skill
         : REPORT_SKILL_OPTIONS[0].value
     );
-    if (nextStep !== "sessions" && reportItem.kind !== "department_daily" && reportItem.kind !== "team_daily") {
+    if (
+      nextStep !== "sessions" &&
+      reportItem.kind !== "department_daily" &&
+      reportItem.kind !== "team_daily"
+    ) {
       setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
     }
     setDraftError(null);
@@ -1313,18 +1434,24 @@ export function DashboardPage() {
       return false;
     }
 
-    void file.text().then((content) => {
-      const uploadedSkillName = getUploadedSkillName(file.name, content);
-      const uploadedSkillValue = `upload:${uploadedSkillName}`;
-      setUploadedReportSkills((current) => {
-        const next = current.filter((item) => item.value !== uploadedSkillValue);
-        return [...next, { label: uploadedSkillName, value: uploadedSkillValue, source: "upload", content }];
+    void file
+      .text()
+      .then((content) => {
+        const uploadedSkillName = getUploadedSkillName(file.name, content);
+        const uploadedSkillValue = `upload:${uploadedSkillName}`;
+        setUploadedReportSkills((current) => {
+          const next = current.filter((item) => item.value !== uploadedSkillValue);
+          return [
+            ...next,
+            { label: uploadedSkillName, value: uploadedSkillValue, source: "upload", content }
+          ];
+        });
+        setReportSkillDraft(uploadedSkillValue);
+        message.success("Skill 已载入，本次生成将作为补充约束");
+      })
+      .catch(() => {
+        message.error("Skill 文件读取失败");
       });
-      setReportSkillDraft(uploadedSkillValue);
-      message.success("Skill 已载入，本次生成将作为补充约束");
-    }).catch(() => {
-      message.error("Skill 文件读取失败");
-    });
 
     return false;
   };
@@ -1454,23 +1581,27 @@ export function DashboardPage() {
           />
           <div className="console-follow-list">
             {followItems.length > 0 ? (
-				followItems.map((item) => (
-					<FollowCard key={item.key} item={item} onView={handleFollowAction} />
-				))
-			) : (
-				<div className="console-report-status-card">
-					<p>{followsQuery.isError ? "关注事项加载失败" : "暂无关注事项"}</p>
-					<Button type="link" onClick={() => navigate("/requirements")}>前往需求看板关注</Button>
-				</div>
-			)}
+              followItems.map((item) => (
+                <FollowCard
+                  key={item.key}
+                  item={item}
+                  showAttention={dashboardRole !== "director"}
+                  onView={handleFollowAction}
+                />
+              ))
+            ) : (
+              <div className="console-report-status-card">
+                <p>{followsQuery.isError ? "关注事项加载失败" : "暂无关注事项"}</p>
+                <Button type="link" onClick={() => navigate("/requirements")}>
+                  前往需求看板关注
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="console-panel">
-          <PanelHeader
-            icon={<AlertOutlined />}
-            title={`待处理风险 ${riskItems.length}`}
-          />
+          <PanelHeader icon={<AlertOutlined />} title={`待处理风险 ${riskItems.length}`} />
           <div className="console-risk-list">
             {riskItems.length > 0 ? (
               riskItems.map((item) => (
@@ -1478,8 +1609,10 @@ export function DashboardPage() {
               ))
             ) : (
               <div className="console-report-status-card">
-				<p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要关注的风险"}</p>
-                <Button type="link" onClick={() => navigate("/requirements")}>查看需求看板</Button>
+                <p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要关注的风险"}</p>
+                <Button type="link" onClick={() => navigate("/requirements")}>
+                  查看需求看板
+                </Button>
               </div>
             )}
           </div>
@@ -1487,12 +1620,12 @@ export function DashboardPage() {
 
         <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
           <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
-	          <ReportSection
-	              title="今日报告"
-	              icon={<FileTextOutlined />}
-	              reports={personalReports}
-	              summaryReports={summaryReports}
-	              coverage={effectiveCoverage}
+            <ReportSection
+              title="今日报告"
+              icon={<FileTextOutlined />}
+              reports={personalReports}
+              summaryReports={summaryReports}
+              coverage={effectiveCoverage}
               variant="personal"
               onOpen={openReportModal}
               onViewReports={(scope) => navigate(`/reports/daily?tab=${scope}`)}
@@ -1520,7 +1653,9 @@ export function DashboardPage() {
           onClose={() => setDailyGenerateTarget(null)}
           onDone={() => {
             void queryClient.invalidateQueries({ queryKey: ["reports"] });
-            void queryClient.invalidateQueries({ queryKey: ["reports", "dashboard-today", reportDate] });
+            void queryClient.invalidateQueries({
+              queryKey: ["reports", "dashboard-today", reportDate]
+            });
             void queryClient.invalidateQueries({ queryKey: ["team-report-today"] });
             void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
             void queryClient.invalidateQueries({ queryKey: ["team-report-sources"] });
@@ -1559,8 +1694,14 @@ export function DashboardPage() {
           departmentSubmittedCount: departmentSourcesQuery.data?.submitted_team_count ?? 0,
           modifiedTaskCount,
           isSessionLoading: reportSessionsQuery.isLoading,
-          isGenerating: draftMutation.isPending || teamGenerateMutation.isPending || departmentGenerateMutation.isPending,
-          isSaving: saveReportMutation.isPending || saveTeamMutation.isPending || saveDepartmentMutation.isPending,
+          isGenerating:
+            draftMutation.isPending ||
+            teamGenerateMutation.isPending ||
+            departmentGenerateMutation.isPending,
+          isSaving:
+            saveReportMutation.isPending ||
+            saveTeamMutation.isPending ||
+            saveDepartmentMutation.isPending,
           onCancel: () => setIsReportModalOpen(false),
           onNext: startGenerateDraft,
           onGenerate: startGenerateDraft,
@@ -1579,7 +1720,9 @@ export function DashboardPage() {
           teamSourcesError={teamSourcesQuery.isError ? "成员日报收集情况加载失败" : null}
           departmentSources={departmentSourcesQuery.data ?? null}
           departmentSourcesLoading={departmentSourcesQuery.isLoading}
-          departmentSourcesError={departmentSourcesQuery.isError ? "小组日报收集情况加载失败" : null}
+          departmentSourcesError={
+            departmentSourcesQuery.isError ? "小组日报收集情况加载失败" : null
+          }
           selectedSessionIds={effectiveSelectedSessionIds}
           selectedSkill={reportSkillDraft}
           skillOptions={reportSkillOptions}
@@ -1613,7 +1756,15 @@ export function DashboardPage() {
   );
 }
 
-function PanelHeader({ icon, title, extra }: { icon: ReactNode; title: string; extra?: ReactNode }) {
+function PanelHeader({
+  icon,
+  title,
+  extra
+}: {
+  icon: ReactNode;
+  title: string;
+  extra?: ReactNode;
+}) {
   return (
     <div className="console-panel__header">
       <div>
@@ -1674,7 +1825,11 @@ function ReportSection({
             />
           ) : null}
           <div className="console-report-shortcuts" aria-label="报告入口">
-            <button type="button" className="console-report-shortcut" onClick={() => onViewReports("personal")}>
+            <button
+              type="button"
+              className="console-report-shortcut"
+              onClick={() => onViewReports("personal")}
+            >
               <span>
                 <FileTextOutlined />
                 <strong>日报记录</strong>
@@ -1692,7 +1847,11 @@ function ReportSection({
                   <FileDoneOutlined />
                   <strong>{getSummaryRecordLabel(summaryDailyReport)}</strong>
                 </span>
-                <em>{summaryWeeklyReport ? getSummaryWeeklyRecordCopy(summaryWeeklyReport) : "汇总与历史报告"}</em>
+                <em>
+                  {summaryWeeklyReport
+                    ? getSummaryWeeklyRecordCopy(summaryWeeklyReport)
+                    : "汇总与历史报告"}
+                </em>
                 <RightOutlined />
               </button>
             ) : null}
@@ -1759,8 +1918,16 @@ function renderReportActions(
 ) {
   if (report.status === "待生成") {
     return (
-      <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
-        {report.scope === "team" ? "查看并生成组日报" : report.scope === "department" ? "查看并生成部门日报" : "查看并生成"}
+      <Button
+        type="primary"
+        icon={<FileDoneOutlined />}
+        onClick={() => onOpen(report, getGenerateStepForReport(report))}
+      >
+        {report.scope === "team"
+          ? "查看并生成组日报"
+          : report.scope === "department"
+            ? "查看并生成部门日报"
+            : "查看并生成"}
       </Button>
     );
   }
@@ -1771,13 +1938,22 @@ function renderReportActions(
 
   if (report.status === "生成失败") {
     return (
-      <Button type="primary" icon={<FileDoneOutlined />} onClick={() => onOpen(report, getGenerateStepForReport(report))}>
+      <Button
+        type="primary"
+        icon={<FileDoneOutlined />}
+        onClick={() => onOpen(report, getGenerateStepForReport(report))}
+      >
         查看并生成
       </Button>
     );
   }
 
-  if (report.status === "草稿待确认" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
+  if (
+    report.status === "草稿待确认" ||
+    report.status === "已保存" ||
+    report.status === "已发送" ||
+    report.status === "已保存，未发送最新修改"
+  ) {
     return (
       <>
         <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
@@ -1808,13 +1984,21 @@ function renderPrimaryReportAction(
 ) {
   if (report.status === "生成中") {
     return (
-      <Button className="console-report-primary-action console-report-primary-action--loading" disabled>
+      <Button
+        className="console-report-primary-action console-report-primary-action--loading"
+        disabled
+      >
         生成中
       </Button>
     );
   }
 
-  if (report.status === "草稿待确认" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
+  if (
+    report.status === "草稿待确认" ||
+    report.status === "已保存" ||
+    report.status === "已发送" ||
+    report.status === "已保存，未发送最新修改"
+  ) {
     return (
       <Button
         className="console-report-primary-action console-report-primary-action--confirm"
@@ -1954,7 +2138,13 @@ function getSummaryWeeklyRecordCopy(report: ReportItem) {
 }
 
 function getInitialReportModalStep(report: ReportItem): ReportModalStep {
-  if (report.status === "草稿待确认" || report.status === "已归档" || report.status === "已保存" || report.status === "已发送" || report.status === "已保存，未发送最新修改") {
+  if (
+    report.status === "草稿待确认" ||
+    report.status === "已归档" ||
+    report.status === "已保存" ||
+    report.status === "已发送" ||
+    report.status === "已保存，未发送最新修改"
+  ) {
     return "editor";
   }
 
@@ -2049,7 +2239,9 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
           <div className="console-token-scope-head">
             <span>各组 Token</span>
             <strong>{report.total}</strong>
-            <em>{report.sessions} 个 session · {report.groups.length} 个组已上报</em>
+            <em>
+              {report.sessions} 个 session · {report.groups.length} 个组已上报
+            </em>
           </div>
           <TokenVerticalBars
             ariaLabel="各组 Token 分布"
@@ -2069,7 +2261,9 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
           <div className="console-token-scope-head">
             <span>本组 Token</span>
             <strong>{report.total}</strong>
-            <em>{report.sessions} 个 session · {report.uploaders} 人已上报</em>
+            <em>
+              {report.sessions} 个 session · {report.uploaders} 人已上报
+            </em>
           </div>
           <TokenVerticalBars
             ariaLabel="组内成员 Token 分布"
@@ -2089,7 +2283,9 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
           <div className="console-token-scope-head">
             <span>本组 Token</span>
             <strong>{report.total}</strong>
-            <em>{report.sessions} 个 session · {report.uploaders} 人已上报</em>
+            <em>
+              {report.sessions} 个 session · {report.uploaders} 人已上报
+            </em>
           </div>
           <TokenMetricBars bars={report.bars} />
         </div>
@@ -2117,7 +2313,9 @@ function TokenPersonalSummary({ range, report }: { range: TokenRange; report: To
     <div className="console-token-personal">
       <span>
         <strong>我的 Token</strong>
-        <em>{getTokenRangeLabel(range)} · {sessions} 个 session</em>
+        <em>
+          {getTokenRangeLabel(range)} · {sessions} 个 session
+        </em>
       </span>
       <b>{total}</b>
     </div>
@@ -2176,7 +2374,9 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
           fontSize: 11,
           interval: 0,
           formatter: (value: string, index: number) =>
-            bars.length <= 3 || index === 0 || index === middleIndex || index === bars.length - 1 ? value : ""
+            bars.length <= 3 || index === 0 || index === middleIndex || index === bars.length - 1
+              ? value
+              : ""
         }
       },
       series: [
@@ -2306,7 +2506,9 @@ function TokenVerticalBars({
               ? Number((item as { dataIndex: number }).dataIndex)
               : 0;
           const datum = items[index] ?? items[0];
-          return datum ? `${datum.name}<br />${datum.total}${datum.note ? `<br />${datum.note}` : ""}` : "";
+          return datum
+            ? `${datum.name}<br />${datum.total}${datum.note ? `<br />${datum.note}` : ""}`
+            : "";
         }
       },
       dataZoom: hasOverflow
@@ -2552,7 +2754,8 @@ function getEditorMeta(report: ReportItem) {
 }
 
 function getSendButtonText(report: ReportItem) {
-  if (report.scope === "team") return report.kind.includes("weekly") ? "归档组周报" : "保存并发送给总监";
+  if (report.scope === "team")
+    return report.kind.includes("weekly") ? "归档组周报" : "保存并发送给总监";
   if (report.scope === "department") return "保存归档";
   return report.kind.includes("weekly") ? "归档周报" : "保存日报";
 }
@@ -2593,7 +2796,9 @@ function renderReportModalFooter({
   if (step === "sessions") {
     return (
       <Space>
-        <Button onClick={onCancel} disabled={isGenerating}>稍后处理</Button>
+        <Button onClick={onCancel} disabled={isGenerating}>
+          稍后处理
+        </Button>
         <Button
           type="primary"
           disabled={selectedCount === 0 || isSessionLoading}
@@ -2636,7 +2841,9 @@ function renderReportModalFooter({
           已修改 {modifiedTaskCount} 个任务，保存日报后同步任务进展。
         </span>
       ) : null}
-      <Button onClick={onBack} disabled={isSaving}>上一步</Button>
+      <Button onClick={onBack} disabled={isSaving}>
+        上一步
+      </Button>
       {report.scope === "department" ? null : (
         <Button onClick={onSave} loading={isSaving}>
           {report.scope === "team" ? "保存组日报" : "保存日报"}
@@ -2658,7 +2865,9 @@ function TaskProgressSuggestionList({
   sessionOptions: SessionOption[];
   onEditTask: (task: TaskProgressSuggestion) => void;
 }) {
-  const sessionTitleById = new Map(sessionOptions.map((session) => [session.value, `${session.tool} ${session.timeRange}`]));
+  const sessionTitleById = new Map(
+    sessionOptions.map((session) => [session.value, `${session.tool} ${session.timeRange}`])
+  );
   return (
     <aside className="console-task-suggestion-list">
       <div className="console-session-modal__section">
@@ -2670,28 +2879,38 @@ function TaskProgressSuggestionList({
           <div className="console-task-suggestion-empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务进展建议" />
           </div>
-        ) : tasks.map((task) => (
-          <article key={task.key} className="console-task-suggestion-card">
-            <div className="console-task-suggestion-card__top">
-              <strong>{task.taskName}</strong>
-              <Button size="small" onClick={() => onEditTask(task)}>编辑任务</Button>
-            </div>
-            <div className="console-task-suggestion-card__meta">
-              <Tag color="blue">{getTaskStatusLabel(task.status)}</Tag>
-              <span>建议进度 {task.progress}%</span>
-              <span>{task.sessionIds.length} 个 session</span>
-            </div>
-            <ul>
-              {task.sessionIds.map((sessionId, index) => (
-                <li key={sessionId}>
-                  {task.evidenceSessionTitles[index] ?? sessionTitleById.get(sessionId) ?? sessionId}
-                </li>
-              ))}
-            </ul>
-            {task.note ? <p>{task.note}</p> : null}
-            {task.syncState ? <Tag className="console-task-suggestion-card__sync" color="blue">{task.syncState}</Tag> : null}
-          </article>
-        ))}
+        ) : (
+          tasks.map((task) => (
+            <article key={task.key} className="console-task-suggestion-card">
+              <div className="console-task-suggestion-card__top">
+                <strong>{task.taskName}</strong>
+                <Button size="small" onClick={() => onEditTask(task)}>
+                  编辑任务
+                </Button>
+              </div>
+              <div className="console-task-suggestion-card__meta">
+                <Tag color="blue">{getTaskStatusLabel(task.status)}</Tag>
+                <span>建议进度 {task.progress}%</span>
+                <span>{task.sessionIds.length} 个 session</span>
+              </div>
+              <ul>
+                {task.sessionIds.map((sessionId, index) => (
+                  <li key={sessionId}>
+                    {task.evidenceSessionTitles[index] ??
+                      sessionTitleById.get(sessionId) ??
+                      sessionId}
+                  </li>
+                ))}
+              </ul>
+              {task.note ? <p>{task.note}</p> : null}
+              {task.syncState ? (
+                <Tag className="console-task-suggestion-card__sync" color="blue">
+                  {task.syncState}
+                </Tag>
+              ) : null}
+            </article>
+          ))
+        )}
       </div>
     </aside>
   );
@@ -2699,7 +2918,10 @@ function TaskProgressSuggestionList({
 
 function getUploadedSkillName(fileName: string, content: string) {
   const frontmatterName = content.match(/^\s*name:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim();
-  const baseName = fileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+  const baseName = fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
   const rawName = frontmatterName || baseName || "上传 Skill";
 
   return /skill/i.test(rawName) || rawName.includes("Skill") ? rawName : `${rawName} Skill`;
@@ -2707,7 +2929,8 @@ function getUploadedSkillName(fileName: string, content: string) {
 
 function getDashboardRole(role?: UserRole | null): DashboardRole {
   if (role === "admin") return "director";
-  if (role === "director" || role === "pm" || role === "team_leader" || role === "employee") return role;
+  if (role === "director" || role === "pm" || role === "team_leader" || role === "employee")
+    return role;
   return "employee";
 }
 
@@ -2781,7 +3004,9 @@ function TaskProgressEditModal({
       onCancel={onCancel}
       footer={
         <Space>
-          <Button onClick={onCancel} disabled={confirmLoading}>取消</Button>
+          <Button onClick={onCancel} disabled={confirmLoading}>
+            取消
+          </Button>
           <Popconfirm
             title="确认更新任务进展？"
             description="确认后会调用任务接口更新状态或进度。"
@@ -2789,7 +3014,9 @@ function TaskProgressEditModal({
             cancelText="取消"
             onConfirm={onSave}
           >
-            <Button type="primary" loading={confirmLoading}>确认更新任务</Button>
+            <Button type="primary" loading={confirmLoading}>
+              确认更新任务
+            </Button>
           </Popconfirm>
         </Space>
       }
@@ -2882,17 +3109,17 @@ function ReportModalContent({
   onSkillUpload,
   onEditTask,
   onDraftMarkdownChange
-	}: {
-	  step: ReportModalStep;
-	  report: ReportItem;
-	  coverage: ReportCoverage;
+}: {
+  step: ReportModalStep;
+  report: ReportItem;
+  coverage: ReportCoverage;
   teamSources: TeamReportSources | null;
   teamSourcesLoading: boolean;
   teamSourcesError: string | null;
   departmentSources: DepartmentReportSources | null;
   departmentSourcesLoading: boolean;
   departmentSourcesError: string | null;
-	  selectedSessionIds: string[];
+  selectedSessionIds: string[];
   selectedSkill: string;
   skillOptions: ReportSkillOption[];
   uploadedSkills: ReportSkillOption[];
@@ -2905,8 +3132,8 @@ function ReportModalContent({
   onSelectedSessionIdsChange: (value: string[]) => void;
   onSelectedSkillChange: (value: string) => void;
   onSkillUpload: (file: File) => boolean;
-	  onEditTask: (task: TaskProgressSuggestion) => void;
-	  onDraftMarkdownChange: (value: string) => void;
+  onEditTask: (task: TaskProgressSuggestion) => void;
+  onDraftMarkdownChange: (value: string) => void;
 }) {
   const [expandedTeamReportUserId, setExpandedTeamReportUserId] = useState<string | null>(null);
   const [expandedDepartmentReportId, setExpandedDepartmentReportId] = useState<string | null>(null);
@@ -2914,11 +3141,7 @@ function ReportModalContent({
   if (step === "sessions") {
     return (
       <div className="console-report-modal">
-        <Steps
-          size="small"
-          current={0}
-          items={getReportSourceSteps(report)}
-        />
+        <Steps size="small" current={0} items={getReportSourceSteps(report)} />
         <div className="console-session-modal__section">
           <strong>选择生成来源</strong>
           <span>
@@ -2927,13 +3150,14 @@ function ReportModalContent({
               : `已找到 ${sessionOptions.length} 个 session，默认勾选今日全部记录。`}
           </span>
         </div>
-        {sessionError ? (
-          <Alert type="error" showIcon message={sessionError} />
-        ) : null}
+        {sessionError ? <Alert type="error" showIcon message={sessionError} /> : null}
         {draftError ? (
           <Alert type="error" showIcon message="日报草稿生成失败" description={draftError} />
         ) : null}
-        <Checkbox.Group value={selectedSessionIds} onChange={(value) => onSelectedSessionIdsChange(value as string[])}>
+        <Checkbox.Group
+          value={selectedSessionIds}
+          onChange={(value) => onSelectedSessionIdsChange(value as string[])}
+        >
           <div className="console-session-list">
             {isSessionLoading ? (
               <div className="console-session-empty">正在加载 session...</div>
@@ -2941,16 +3165,20 @@ function ReportModalContent({
               <div className="console-session-empty">
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今日暂无已上传 session" />
               </div>
-            ) : sessionOptions.map((session) => (
-              <label key={session.value} className="console-session-item">
-                <Checkbox value={session.value} />
-                <span>
-                  <strong>{session.tool}</strong>
-                  <em>{session.timeRange} · {session.summary}</em>
-                </span>
-                {session.recommended ? <Tag color="blue">默认勾选</Tag> : null}
-              </label>
-            ))}
+            ) : (
+              sessionOptions.map((session) => (
+                <label key={session.value} className="console-session-item">
+                  <Checkbox value={session.value} />
+                  <span>
+                    <strong>{session.tool}</strong>
+                    <em>
+                      {session.timeRange} · {session.summary}
+                    </em>
+                  </span>
+                  {session.recommended ? <Tag color="blue">默认勾选</Tag> : null}
+                </label>
+              ))
+            )}
           </div>
         </Checkbox.Group>
         <GenerationSettingsPanel
@@ -2964,15 +3192,11 @@ function ReportModalContent({
     );
   }
 
-	  if (step === "source") {
+  if (step === "source") {
     if (report.kind === "department_daily") {
       return (
         <div className="console-report-modal">
-          <Steps
-            size="small"
-            current={0}
-            items={getReportSourceSteps(report)}
-          />
+          <Steps size="small" current={0} items={getReportSourceSteps(report)} />
           <DepartmentSourceReview
             sources={departmentSources}
             loading={departmentSourcesLoading}
@@ -2990,11 +3214,7 @@ function ReportModalContent({
     if (report.kind === "team_daily") {
       return (
         <div className="console-report-modal">
-          <Steps
-            size="small"
-            current={0}
-            items={getReportSourceSteps(report)}
-          />
+          <Steps size="small" current={0} items={getReportSourceSteps(report)} />
           <TeamSourceReview
             sources={teamSources}
             loading={teamSourcesLoading}
@@ -3020,13 +3240,9 @@ function ReportModalContent({
       );
     }
 
-	    return (
+    return (
       <div className="console-report-modal">
-        <Steps
-          size="small"
-          current={0}
-          items={getReportSourceSteps(report)}
-        />
+        <Steps size="small" current={0} items={getReportSourceSteps(report)} />
         <div className="console-session-modal__section">
           <strong>{getReportSourceTitle(report)}</strong>
           <span>{report.sourceSummary}</span>
@@ -3049,13 +3265,11 @@ function ReportModalContent({
 
   return (
     <div className="console-report-modal">
-      <Steps
-        size="small"
-        current={1}
-        items={getReportSourceSteps(report)}
-      />
+      <Steps size="small" current={1} items={getReportSourceSteps(report)} />
       <div className="console-editor-shell__meta">
-        <Tag color={report.generateMode === "系统自动生成" ? "blue" : "gold"}>{report.generateMode}</Tag>
+        <Tag color={report.generateMode === "系统自动生成" ? "blue" : "gold"}>
+          {report.generateMode}
+        </Tag>
         {getEditorMeta(report).map((meta) => (
           <span key={meta}>{meta}</span>
         ))}
@@ -3077,7 +3291,7 @@ function ReportModalContent({
       </div>
     </div>
   );
-	}
+}
 
 function TeamSourceReview({
   sources,
@@ -3108,7 +3322,9 @@ function TeamSourceReview({
   const total = members.length;
   const submitted = sources.submitted ?? members.filter((member) => member.has_report).length;
   const missing = sources.missing ?? total - submitted;
-  const edited = members.filter((member) => member.has_report && member.content.trim().length > 0).length;
+  const edited = members.filter(
+    (member) => member.has_report && member.content.trim().length > 0
+  ).length;
 
   return (
     <div className="console-department-source">
@@ -3121,16 +3337,30 @@ function TeamSourceReview({
       </div>
 
       <div className="console-team-source__stats" aria-label="成员日报发送统计">
-        <span><strong>{total}</strong><em>成员总数</em></span>
-        <span><strong>{submitted}</strong><em>已发送</em></span>
-        <span><strong>{missing}</strong><em>未发送</em></span>
-        <span><strong>{edited}</strong><em>已编辑</em></span>
+        <span>
+          <strong>{total}</strong>
+          <em>成员总数</em>
+        </span>
+        <span>
+          <strong>{submitted}</strong>
+          <em>已发送</em>
+        </span>
+        <span>
+          <strong>{missing}</strong>
+          <em>未发送</em>
+        </span>
+        <span>
+          <strong>{edited}</strong>
+          <em>已编辑</em>
+        </span>
       </div>
 
       <section className="console-department-source__block console-team-source__block">
         <div className="console-department-source__head">
           <strong>成员原始日报</strong>
-          <Tag color={missing > 0 ? "gold" : "green"}>{submitted}/{total} 已发送</Tag>
+          <Tag color={missing > 0 ? "gold" : "green"}>
+            {submitted}/{total} 已发送
+          </Tag>
         </div>
         {members.length === 0 ? (
           <div className="console-session-empty">暂无团队成员</div>
@@ -3152,7 +3382,11 @@ function TeamSourceReview({
                       </Tag>
                     </div>
                     <div className="console-team-source__actions">
-                      <time>{member.submitted_at ? formatDateTime(member.submitted_at, "HH:mm") : "未发送"}</time>
+                      <time>
+                        {member.submitted_at
+                          ? formatDateTime(member.submitted_at, "HH:mm")
+                          : "未发送"}
+                      </time>
                       {member.has_report ? (
                         <Button
                           size="small"
@@ -3238,7 +3472,9 @@ function DepartmentSourceReview({
                       <em>{item.team_leader_name || item.leader_name || "未记录 TL"}</em>
                     </span>
                     <span>
-                      <time>{item.submitted_at ? formatDateTime(item.submitted_at, "HH:mm") : "-"}</time>
+                      <time>
+                        {item.submitted_at ? formatDateTime(item.submitted_at, "HH:mm") : "-"}
+                      </time>
                       <Button
                         size="small"
                         onClick={() => onExpandedReportIdChange(expanded ? null : reportId)}
@@ -3248,7 +3484,9 @@ function DepartmentSourceReview({
                     </span>
                   </div>
                   {expanded ? (
-                    <pre className="console-department-source__content">{item.content || "暂无内容"}</pre>
+                    <pre className="console-department-source__content">
+                      {item.content || "暂无内容"}
+                    </pre>
                   ) : null}
                 </article>
               );
@@ -3267,7 +3505,9 @@ function DepartmentSourceReview({
         ) : (
           <div className="console-department-source__missing">
             {missing.map((team) => (
-              <Tag key={team.team_id} color="gold">{team.team_name}</Tag>
+              <Tag key={team.team_id} color="gold">
+                {team.team_name}
+              </Tag>
             ))}
           </div>
         )}
@@ -3291,9 +3531,12 @@ function GenerationSettingsPanel({
   onSkillUpload: (file: File) => boolean;
   compact?: boolean;
 }) {
-  const selectedSkillLabel = skillOptions.find((option) => option.value === selectedSkill)?.label ?? selectedSkill;
+  const selectedSkillLabel =
+    skillOptions.find((option) => option.value === selectedSkill)?.label ?? selectedSkill;
   return (
-    <section className={`console-generation-settings${compact ? " console-generation-settings--compact" : ""}`}>
+    <section
+      className={`console-generation-settings${compact ? " console-generation-settings--compact" : ""}`}
+    >
       <div className="console-generation-settings__head">
         <span>
           <strong>Skill 预设</strong>
@@ -3352,25 +3595,44 @@ function ReportStatusTag({ status }: { status: ReportStatus }) {
   return <Tag color={color}>{label}</Tag>;
 }
 
-function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowItem) => void }) {
+function FollowCard({
+  item,
+  showAttention,
+  onView
+}: {
+  item: FollowItem;
+  showAttention: boolean;
+  onView: (item: FollowItem) => void;
+}) {
   const isTask = item.type === "任务";
-  const tone = getFollowTone(item);
+  const riskHint = getFollowRiskHint(item);
+  const tone = riskHint?.tone ?? "muted";
+  const className = [
+    "console-follow-card",
+    `console-follow-card--${tone}`,
+    !showAttention ? "console-follow-card--no-attention" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <article className={`console-follow-card console-follow-card--${tone}`}>
+    <article className={className}>
       <span className="console-follow-card__rail" aria-hidden="true" />
       <div className="console-follow-card__main">
-        <Space size={8} wrap>
-          <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
-          <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
-          <AttentionTag level={item.attentionLevel ?? "normal"} />
-        </Space>
+        <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
+        <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
       </div>
-      <strong className="console-follow-card__title">{item.title}</strong>
-      <div className="console-follow-card__change">
-        <Tag color={tone === "red" ? "red" : "blue"}>{item.risk}</Tag>
-        {item.activity ? <span>{item.activity}</span> : null}
+      <strong className="console-follow-card__title" title={item.title}>
+        {item.title}
+      </strong>
+      <div className="console-follow-card__risk">
+        {riskHint ? <Tag color={riskHint.color}>{riskHint.label}</Tag> : null}
       </div>
+      {showAttention ? (
+        <div className="console-follow-card__followers">
+          <FollowFollowersPopover item={item} />
+        </div>
+      ) : null}
       <div className="console-follow-card__meta">
         <span>
           <ClockCircleOutlined /> {item.owner} · {item.deadline}
@@ -3388,10 +3650,101 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
   );
 }
 
-function getFollowTone(item: FollowItem): "red" | "orange" | "blue" {
-  if (item.risk.includes("阻塞") || item.status === "阻塞" || item.risk.includes("超期")) return "red";
-  if (item.risk.includes("依赖")) return "orange";
-  return "blue";
+type FollowRiskHint = { label: string; color: string; tone: "red" | "orange" | "blue" };
+
+function getFollowRiskHint(item: FollowItem): FollowRiskHint | null {
+  if (item.status === "阻塞" || item.risk.includes("阻塞"))
+    return { label: "阻塞", color: "red", tone: "red" };
+  if (item.risk.includes("超期") || item.risk.includes("逾期"))
+    return { label: "逾期", color: "red", tone: "red" };
+  if (item.risk.includes("依赖")) return { label: "有风险", color: "orange", tone: "orange" };
+  if (item.status === "待办" || item.status === "待开始")
+    return { label: "待处理", color: "blue", tone: "blue" };
+  return null;
+}
+
+function FollowFollowersPopover({ item }: { item: FollowItem }) {
+  const [open, setOpen] = useState(false);
+  if ((item.followerCount ?? 0) <= 1) return null;
+
+  return (
+    <Popover
+      trigger={["hover", "click"]}
+      placement="leftTop"
+      open={open}
+      onOpenChange={setOpen}
+      content={<FollowFollowersContent item={item} enabled={open} />}
+    >
+      <span>
+        <FollowCountTag count={item.followerCount ?? 0} level={item.attentionLevel ?? "normal"} />
+      </span>
+    </Popover>
+  );
+}
+
+function FollowCountTag({ count, level }: { count: number; level: AttentionLevel }) {
+  return <Tag color={followCountTagColor(level)}>{count}人关注</Tag>;
+}
+
+function followCountTagColor(level: AttentionLevel) {
+  if (level === "high") return "purple";
+  if (level === "important") return "orange";
+  if (level === "notable") return "blue";
+  return "default";
+}
+
+function FollowFollowersContent({ item, enabled }: { item: FollowItem; enabled: boolean }) {
+  const targetType = item.type === "任务" ? "task" : "requirement";
+  const targetId = item.type === "任务" ? item.taskId : item.requirementId;
+  const followersQuery = useQuery({
+    queryKey: ["follows", "followers", targetType, targetId],
+    queryFn: () => fetchFollowFollowers(targetType, targetId ?? ""),
+    enabled: enabled && Boolean(targetId),
+    staleTime: 30_000
+  });
+
+  if (!enabled) return <span className="console-follow-followers__state">悬停查看关注人</span>;
+  if (followersQuery.isLoading)
+    return <span className="console-follow-followers__state">加载中...</span>;
+  if (followersQuery.isError)
+    return <span className="console-follow-followers__state">关注人加载失败</span>;
+
+  const groups = groupFollowersByRole(followersQuery.data ?? []);
+  return (
+    <div className="console-follow-followers">
+      {groups.map((group) => (
+        <div key={group.role} className="console-follow-followers__group">
+          <strong>{group.label}</strong>
+          <div className="console-follow-followers__users">
+            {group.followers.map((follower) => (
+              <span key={follower.id}>
+                {follower.name}
+                {follower.teamName ? ` · ${follower.teamName}` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function groupFollowersByRole(followers: DashboardFollowFollowerDTO[]) {
+  const roleOrder = ["director", "team_leader", "pm", "employee", "admin"];
+  const roleLabels: Record<string, string> = {
+    director: "总监",
+    team_leader: "TL",
+    pm: "PM",
+    employee: "员工",
+    admin: "管理员"
+  };
+  return roleOrder
+    .map((role) => ({
+      role,
+      label: roleLabels[role] ?? role,
+      followers: followers.filter((follower) => follower.role === role)
+    }))
+    .filter((group) => group.followers.length > 0);
 }
 
 function AttentionTag({ level }: { level: AttentionLevel }) {
@@ -3410,7 +3763,9 @@ function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskIte
       <span className="console-risk-card__rail" aria-hidden="true" />
       <div className="console-risk-card__main">
         <Space size={6} wrap>
-          <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
+          <span className={`console-risk-tag console-risk-tag--${item.tone}`}>
+            {item.level} · {item.source}
+          </span>
           <AttentionTag level={item.attentionLevel ?? "normal"} />
         </Space>
         <strong>{item.title}</strong>

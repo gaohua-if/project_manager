@@ -746,8 +746,12 @@ func (h *ReportHandler) GetPersonalWeeklyReportCurrent(w http.ResponseWriter, r 
 		return
 	}
 	report, err := h.getPersonalWeeklyReportByUserWeek(u.ID, weekStart)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, report)
