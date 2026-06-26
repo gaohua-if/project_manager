@@ -40,6 +40,14 @@ type reportDraftGenerateRequest struct {
 	IncludeTaskProgress bool                       `json:"include_task_progress"`
 }
 
+type personalWeeklyReportGenerateRequest struct {
+	UserID               string   `json:"user_id"`
+	WeekStart            string   `json:"week_start"`
+	SourceSessionIDs     []string `json:"source_session_ids"`
+	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
+	SourceTaskIDs        []string `json:"source_task_ids"`
+}
+
 type reportDraftSession struct {
 	ID               string         `json:"id"`
 	SessionRef       string         `json:"session_ref"`
@@ -242,6 +250,33 @@ func cmdServeReports(args []string) {
 			return
 		}
 		writePlainJSON(w, http.StatusOK, draft)
+	})
+
+	mux.HandleFunc("/reports/weekly/generate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req personalWeeklyReportGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+			return
+		}
+		if req.UserID == "" {
+			writePlainJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+			return
+		}
+		if req.WeekStart == "" {
+			req.WeekStart = currentWeekStart().Format("2006-01-02")
+		}
+		content, err := generateServerPersonalWeeklyReportPreview(db, cfg, req)
+		if err != nil {
+			writePlainJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writePlainJSON(w, http.StatusOK, map[string]any{
+			"report_markdown": content,
+		})
 	})
 
 	mux.HandleFunc("/reports/team/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -613,6 +648,172 @@ func buildTeamReportFallback(reportDate, teamName string, leader reportUser, ses
 
 	b.WriteString("## 问题与风险\n\n暂无。\n\n")
 	b.WriteString("## 明日计划\n\n暂无。\n")
+	return b.String()
+}
+
+func generateServerPersonalWeeklyReportPreview(db *sql.DB, cfg ConsumerConfig, req personalWeeklyReportGenerateRequest) (string, error) {
+	start, err := time.Parse("2006-01-02", req.WeekStart)
+	if err != nil {
+		return "", fmt.Errorf("invalid week_start: %w", err)
+	}
+	weekEnd := start.AddDate(0, 0, 6).Format("2006-01-02")
+	user, err := getReportUser(db, req.UserID)
+	if err != nil {
+		return "", err
+	}
+	sessions, err := listUserReportSessionsRange(db, req.UserID, req.WeekStart, weekEnd, cfg.TimeZone)
+	if err != nil {
+		return "", err
+	}
+	if len(req.SourceSessionIDs) > 0 {
+		sessions = filterReportSessionsByID(sessions, req.SourceSessionIDs)
+	}
+	dailyReports, err := listPersonalWeeklyDailyReports(db, req.UserID, req.WeekStart, weekEnd, req.SourceDailyReportIDs)
+	if err != nil {
+		return "", err
+	}
+	tasks, err := listPersonalWeeklyTaskSummaries(db, req.UserID, req.WeekStart, weekEnd, req.SourceTaskIDs)
+	if err != nil {
+		return "", err
+	}
+	prompt := buildPersonalWeeklyReportPrompt(*user, req.WeekStart, weekEnd, sessions, dailyReports, tasks)
+	weeklyCfg := cfg
+	if weeklyCfg.ClaudeTimeout > 30*time.Second {
+		weeklyCfg.ClaudeTimeout = 30 * time.Second
+	}
+	content, err := generateDailyReportWithClaude(weeklyCfg, prompt)
+	if err != nil {
+		fmt.Printf("[report-generator] claude personal weekly generation failed, using fallback: %v\n", err)
+		content = buildPersonalWeeklyReportFallback(*user, req.WeekStart, weekEnd, sessions, dailyReports, tasks)
+	}
+	if strings.TrimSpace(content) == "" {
+		content = buildPersonalWeeklyReportFallback(*user, req.WeekStart, weekEnd, sessions, dailyReports, tasks)
+	}
+	return content, nil
+}
+
+func filterReportSessionsByID(sessions []reportSession, ids []string) []reportSession {
+	allowed := map[string]bool{}
+	for _, id := range ids {
+		allowed[id] = true
+	}
+	filtered := []reportSession{}
+	for _, session := range sessions {
+		if allowed[session.ID] {
+			filtered = append(filtered, session)
+		}
+	}
+	return filtered
+}
+
+func listPersonalWeeklyDailyReports(db *sql.DB, userID, weekStart, weekEnd string, ids []string) ([]weeklyDailyReport, error) {
+	query := `
+		SELECT dr.id::text, u.name, dr.report_date, dr.content
+		FROM daily_reports dr
+		JOIN users u ON u.id = dr.user_id
+		WHERE dr.user_id = $1 AND dr.report_date BETWEEN $2 AND $3 AND dr.status IS NOT NULL`
+	args := []any{userID, weekStart, weekEnd}
+	if len(ids) > 0 {
+		query += " AND dr.id = ANY($4)"
+		args = append(args, pq.Array(ids))
+	}
+	query += " ORDER BY dr.report_date"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []weeklyDailyReport{}
+	for rows.Next() {
+		var item weeklyDailyReport
+		if err := rows.Scan(&item.ID, &item.UserName, &item.ReportDate, &item.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func listPersonalWeeklyTaskSummaries(db *sql.DB, userID, weekStart, weekEnd string, ids []string) ([]weeklyTaskSummary, error) {
+	query := `
+		SELECT DISTINCT task.id::text, task.title, req.title, COALESCE(assignee.name, ''), task.status, task.priority
+		FROM tasks task
+		JOIN requirements req ON req.id = task.requirement_id
+		LEFT JOIN users assignee ON assignee.id = task.assignee_id
+		WHERE (task.assignee_id = $1 OR task.creator_tl_id = $1)
+		  AND (DATE(task.updated_at) BETWEEN $2 AND $3 OR task.status = 'blocked' OR task.priority = 'high')`
+	args := []any{userID, weekStart, weekEnd}
+	if len(ids) > 0 {
+		query += " AND task.id = ANY($4)"
+		args = append(args, pq.Array(ids))
+	}
+	query += " ORDER BY task.status, task.priority DESC, task.title"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []weeklyTaskSummary{}
+	for rows.Next() {
+		var item weeklyTaskSummary
+		if err := rows.Scan(&item.ID, &item.Title, &item.RequirementTitle, &item.AssigneeName, &item.Status, &item.Priority); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func buildPersonalWeeklyReportPrompt(user reportUser, weekStart, weekEnd string, sessions []reportSession, dailyReports []weeklyDailyReport, tasks []weeklyTaskSummary) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "你是个人研发周报生成助手。请为用户“%s”生成 %s 至 %s 的个人周报。\n", user.Name, weekStart, weekEnd)
+	b.WriteString("要求：只输出 Markdown；使用中文；只基于传入来源归纳，不要编造。结构包含：本周完成、关键进展、风险与阻塞、下周计划、来源覆盖情况。\n\n")
+	b.WriteString("## 本周 Session\n\n")
+	for _, s := range sessions {
+		fmt.Fprintf(&b, "- %s %s tokens=%d summary=%s\n", s.SessionRef, s.StartedAt.Format(time.RFC3339), s.TotalTokens, nullStringValue(s.Summary, ""))
+	}
+	b.WriteString("\n## 本周个人日报\n\n")
+	for _, report := range dailyReports {
+		fmt.Fprintf(&b, "### %s\n\n%s\n\n", report.ReportDate, strings.TrimSpace(report.Content))
+	}
+	b.WriteString("## 本周任务/风险\n\n")
+	for _, task := range tasks {
+		fmt.Fprintf(&b, "- [%s/%s] %s（需求：%s，负责人：%s）\n", task.Status, task.Priority, task.Title, task.RequirementTitle, task.AssigneeName)
+	}
+	return b.String()
+}
+
+func buildPersonalWeeklyReportFallback(user reportUser, weekStart, weekEnd string, sessions []reportSession, dailyReports []weeklyDailyReport, tasks []weeklyTaskSummary) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s 的个人周报（%s 至 %s）\n\n", user.Name, weekStart, weekEnd)
+	fmt.Fprintf(&b, "## 本周完成\n\n本周共汇总 %d 条 session、%d 份个人日报。\n\n", len(sessions), len(dailyReports))
+	if len(dailyReports) == 0 {
+		b.WriteString("暂无已保存或已发送的个人日报。\n\n")
+	} else {
+		for _, report := range dailyReports {
+			fmt.Fprintf(&b, "- %s：%s\n", report.ReportDate, firstLine(report.Content))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("## 关键进展\n\n")
+	if len(sessions) == 0 {
+		b.WriteString("暂无 session 来源。\n\n")
+	} else {
+		for _, session := range sessions {
+			fmt.Fprintf(&b, "- %s\n", nullStringValue(session.Summary, session.SessionRef))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("## 风险与阻塞\n\n")
+	if len(tasks) == 0 {
+		b.WriteString("暂无。\n\n")
+	} else {
+		for _, task := range tasks {
+			fmt.Fprintf(&b, "- [%s/%s] %s\n", task.Status, task.Priority, task.Title)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("## 下周计划\n\n暂无。\n")
 	return b.String()
 }
 

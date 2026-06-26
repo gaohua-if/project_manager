@@ -122,6 +122,12 @@ func main() {
 		r.Get("/reports/today", reportH.GetOrCreateToday)
 		r.Post("/reports/today/draft", reportH.GenerateTodayDraft)
 		r.Post("/reports/today/generate", reportH.GenerateToday)
+		r.Get("/reports/weekly/mine", reportH.ListPersonalWeeklyReports)
+		r.Get("/reports/weekly/mine/current", reportH.GetPersonalWeeklyReportCurrent)
+		r.Get("/reports/weekly/mine/sources", reportH.GetPersonalWeeklyReportSources)
+		r.Post("/reports/weekly/mine/current/generate", reportH.GeneratePersonalWeeklyReportPreview)
+		r.Put("/reports/weekly/mine/current", reportH.SavePersonalWeeklyReportCurrent)
+		r.Post("/reports/weekly/mine/current/submit", reportH.SubmitPersonalWeeklyReportCurrent)
 
 		r.Get("/reports/team/members", reportH.ListTeamMemberReports)
 		r.Get("/reports/team/sources", reportH.GetTeamReportSources)

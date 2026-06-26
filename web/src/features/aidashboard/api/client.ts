@@ -18,9 +18,13 @@ import type {
   GenerateReportDraftResponse,
   PaginatedDailyReports,
   PaginatedDepartmentReports,
+  PaginatedPersonalWeeklyReports,
   PaginatedSessions,
   PaginatedSessionTokens,
   PaginatedTeamReports,
+  PersonalWeeklyReport,
+  PersonalWeeklyReportPreview,
+  PersonalWeeklyReportSources,
   Requirement,
   RequirementFollowStateDTO,
   Session,
@@ -311,6 +315,49 @@ export const fetchDepartmentReport = (id: string) =>
   unwrap(api.get<DepartmentReport>(`/reports/department/${id}`));
 export const updateDepartmentReport = (id: string, data: { content?: string; archive?: boolean }) =>
   unwrap(api.put<DepartmentReport>(`/reports/department/${id}`, data));
+
+export const fetchPersonalWeeklyReports = (params?: Record<string, string>) =>
+  unwrap(api.get<PaginatedPersonalWeeklyReports>("/reports/weekly/mine", params));
+export const fetchPersonalWeeklyReportSources = (weekStart: string) =>
+  unwrap(api.get<PersonalWeeklyReportSources>("/reports/weekly/mine/sources", { week_start: weekStart }));
+export const fetchPersonalWeeklyReportCurrent = (weekStart: string) =>
+  unwrap(api.get<PersonalWeeklyReport>("/reports/weekly/mine/current", { week_start: weekStart }));
+export async function fetchPersonalWeeklyReportCurrentOrNull(weekStart: string) {
+  try {
+    return await unwrap(
+      api.get<PersonalWeeklyReport>(
+        "/reports/weekly/mine/current",
+        { week_start: weekStart },
+        { skipErrorHandler: true }
+      )
+    );
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+export const generatePersonalWeeklyReport = (data: {
+  week_start: string;
+  source_session_ids?: string[];
+  source_daily_report_ids?: string[];
+  source_task_ids?: string[];
+}) => unwrap(api.post<PersonalWeeklyReportPreview>("/reports/weekly/mine/current/generate", data));
+export const savePersonalWeeklyReport = (data: {
+  week_start: string;
+  content: string;
+  source_session_ids?: string[];
+  source_daily_report_ids?: string[];
+  source_task_ids?: string[];
+}) => unwrap(api.put<PersonalWeeklyReport>("/reports/weekly/mine/current", data));
+export const submitPersonalWeeklyReport = (data: {
+  week_start: string;
+  content: string;
+  source_session_ids?: string[];
+  source_daily_report_ids?: string[];
+  source_task_ids?: string[];
+}) => unwrap(api.post<PersonalWeeklyReport>("/reports/weekly/mine/current/submit", data));
 
 export const fetchTeamWeeklyReportSources = (weekStart: string, teamId?: string) =>
   unwrap(

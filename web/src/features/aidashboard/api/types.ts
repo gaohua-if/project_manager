@@ -116,6 +116,8 @@ export interface DashboardNavigationTargetDTO {
   url: string;
 }
 
+export type AttentionLevel = "normal" | "notable" | "important" | "high";
+
 export interface DashboardFollowItemDTO {
   key: string;
   type: "需求" | "任务";
@@ -129,6 +131,9 @@ export interface DashboardFollowItemDTO {
   risk: string;
   dependency?: string;
   activity?: string;
+  attentionScore: number;
+  attentionLevel: AttentionLevel;
+  riskPriority: number;
   navigation: DashboardNavigationTargetDTO;
 }
 
@@ -148,6 +153,8 @@ export interface DashboardRiskItemDTO {
   tone: "red" | "orange" | "gold" | "blue";
   actionText: string;
   targetUrl: string;
+  attentionScore: number;
+  attentionLevel: AttentionLevel;
   navigation: DashboardNavigationTargetDTO;
 }
 
@@ -375,6 +382,20 @@ export interface PaginatedDepartmentReports {
   page_size: number;
 }
 
+export interface WeeklySessionSource {
+  session_id: string;
+  session_ref: string;
+  agent_type: string;
+  started_at: string;
+  ended_at?: string;
+  summary: string;
+  task_id?: string;
+  task_title?: string;
+  requirement_id?: string;
+  requirement_title?: string;
+  total_tokens: number;
+}
+
 export interface WeeklyDailyReportSource {
   report_id: string;
   user_id: string;
@@ -404,6 +425,71 @@ export interface WeeklyTaskSource {
   status: string;
   priority: string;
   due_date?: string;
+}
+
+export interface PersonalWeeklyReportSources {
+  user_id: string;
+  user_name: string;
+  week_start: string;
+  week_end: string;
+  sessions: WeeklySessionSource[];
+  daily_reports: WeeklyDailyReportSource[];
+  tasks: WeeklyTaskSource[];
+  session_count: number;
+  daily_count: number;
+  task_count: number;
+}
+
+export interface PersonalWeeklyReport {
+  id: string;
+  user_id: string;
+  user_name: string;
+  week_start: string;
+  week_end: string;
+  content: string;
+  submitted_content?: string;
+  status: "saved" | "submitted";
+  saved_at?: string;
+  submitted_at?: string;
+  submitted_to?: "team_leader" | "director";
+  source_daily_report_ids: string[];
+  source_session_ids: string[];
+  source_task_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalWeeklyReportListItem {
+  id: string;
+  user_id: string;
+  user_name: string;
+  week_start: string;
+  week_end: string;
+  status: "saved" | "submitted";
+  saved_at?: string;
+  submitted_at?: string;
+  submitted_to?: "team_leader" | "director";
+  source_daily_count: number;
+  source_session_count: number;
+  source_task_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedPersonalWeeklyReports {
+  items: PersonalWeeklyReportListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface PersonalWeeklyReportPreview {
+  report_markdown: string;
+  week_start: string;
+  week_end: string;
+  source_session_ids: string[];
+  source_daily_report_ids: string[];
+  source_task_ids: string[];
 }
 
 export interface TeamWeeklyReportSources {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 
 	"github.com/aidashboard/api/model"
@@ -111,8 +112,10 @@ func autoFollow(db *sql.DB, userID, targetType, targetID string) {
 	if userID == "" || targetID == "" {
 		return
 	}
-	_, _ = db.Exec(`
+	if _, err := db.Exec(`
 		INSERT INTO user_follows (user_id, target_type, target_id)
 		VALUES ($1, $2, $3)
-		ON CONFLICT DO NOTHING`, userID, targetType, targetID)
+		ON CONFLICT DO NOTHING`, userID, targetType, targetID); err != nil {
+		log.Printf("warn: autoFollow failed user_id=%s target_type=%s target_id=%s error=%v", userID, targetType, targetID, err)
+	}
 }

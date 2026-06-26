@@ -171,7 +171,7 @@ export const appRoutes: AppRoute[] = [
     icon: <FileTextOutlined />,
     menuGroup: "报告",
     menuOrder: 71,
-    roles: ["admin", "director", "team_leader"],
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <WeeklyReportsPage />
   },
   {

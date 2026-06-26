@@ -15,11 +15,17 @@ import {
   fetchDepartmentWeeklyReportCurrentOrNull,
   fetchDepartmentWeeklyReports,
   fetchDepartmentWeeklyReportSources,
+  fetchPersonalWeeklyReportCurrentOrNull,
+  fetchPersonalWeeklyReports,
+  fetchPersonalWeeklyReportSources,
   fetchTeamWeeklyReportCurrentOrNull,
   fetchTeamWeeklyReports,
   fetchTeamWeeklyReportSources,
   generateDepartmentWeeklyReport,
+  generatePersonalWeeklyReport,
   generateTeamWeeklyReport,
+  savePersonalWeeklyReport,
+  submitPersonalWeeklyReport,
   submitTeamWeeklyReport,
   updateDepartmentWeeklyReport,
   updateTeamWeeklyReport
@@ -27,6 +33,10 @@ import {
 import type {
   DepartmentWeeklyReport,
   DepartmentWeeklyReportSources,
+  PaginatedPersonalWeeklyReports,
+  PersonalWeeklyReport,
+  PersonalWeeklyReportPreview,
+  PersonalWeeklyReportSources,
   TeamWeeklyReport,
   TeamWeeklyReportSources
 } from "../../api/types";
@@ -71,9 +81,233 @@ function ReportsEmpty({ description }: { description: string }) {
   );
 }
 
+function sourceIdsFromSources(sources?: PersonalWeeklyReportSources | null) {
+  return {
+    source_session_ids: sources?.sessions.map((item) => item.session_id) ?? [],
+    source_daily_report_ids: sources?.daily_reports.map((item) => item.report_id) ?? [],
+    source_task_ids: sources?.tasks.map((item) => item.task_id) ?? []
+  };
+}
+
+export function PersonalWeeklyReportsView({
+  weekStart,
+  weekEnd,
+  weekPicker,
+  scopeTabs
+}: {
+  weekStart: string;
+  weekEnd: string;
+  weekPicker: ReactNode;
+  scopeTabs?: ReactNode;
+}) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const [tab, setTab] = useState<"sources" | "draft" | "history">("sources");
+  const [tabTouched, setTabTouched] = useState(false);
+  const [preview, setPreview] = useState<PersonalWeeklyReportPreview | null>(null);
+  const [content, setContent] = useState("");
+  const [contentTouched, setContentTouched] = useState(false);
+
+  const sourcesQuery = useQuery<PersonalWeeklyReportSources>({
+    queryKey: ["reports", "weekly", "mine", "sources", weekStart],
+    queryFn: () => fetchPersonalWeeklyReportSources(weekStart),
+    staleTime: 30_000
+  });
+  const reportQuery = useQuery<PersonalWeeklyReport | null>({
+    queryKey: ["reports", "weekly", "mine", "current", weekStart],
+    queryFn: () => fetchPersonalWeeklyReportCurrentOrNull(weekStart),
+    staleTime: 30_000
+  });
+  const historyQuery = useQuery<PaginatedPersonalWeeklyReports>({
+    queryKey: ["reports", "weekly", "mine", "history"],
+    queryFn: () => fetchPersonalWeeklyReports({ page: "1", page_size: "20" }),
+    staleTime: 30_000
+  });
+
+  const report = reportQuery.data ?? null;
+  const effectiveTab = !tabTouched && report && !preview ? "draft" : tab;
+  const editorContent = contentTouched ? content : preview?.report_markdown ?? report?.content ?? "";
+  const sourceIDs = preview
+    ? {
+        source_session_ids: preview.source_session_ids,
+        source_daily_report_ids: preview.source_daily_report_ids,
+        source_task_ids: preview.source_task_ids
+      }
+    : report
+      ? {
+          source_session_ids: report.source_session_ids,
+          source_daily_report_ids: report.source_daily_report_ids,
+          source_task_ids: report.source_task_ids
+        }
+      : sourceIdsFromSources(sourcesQuery.data);
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "mine"] });
+  };
+
+  const generateMutation = useMutation({
+    mutationFn: () => generatePersonalWeeklyReport({ week_start: weekStart, ...sourceIdsFromSources(sourcesQuery.data) }),
+    onSuccess: (draft) => {
+      setPreview(draft);
+      setContent(draft.report_markdown);
+      setContentTouched(true);
+      setTab("draft");
+      setTabTouched(true);
+      message.success("个人周报预览已生成");
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+  const saveMutation = useMutation({
+    mutationFn: () => savePersonalWeeklyReport({ week_start: weekStart, content: editorContent, ...sourceIDs }),
+    onSuccess: (saved) => {
+      setPreview(null);
+      setContent(saved.content);
+      setContentTouched(true);
+      invalidate();
+      message.success("周报已保存");
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+  const submitMutation = useMutation({
+    mutationFn: () => submitPersonalWeeklyReport({ week_start: weekStart, content: editorContent, ...sourceIDs }),
+    onSuccess: (saved) => {
+      setPreview(null);
+      setContent(saved.content);
+      setContentTouched(true);
+      invalidate();
+      message.success(user?.role === "employee" ? "已发送给 TL" : "已发送给总监");
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const canSubmit = user?.role === "employee" || user?.role === "pm" || user?.role === "team_leader";
+  const submitLabel = user?.role === "employee" ? "保存并发送给 TL" : "保存并发送给总监";
+
+  return (
+    <PagePanel
+      title="我的周报"
+      description="先确认本周来源，再生成预览并保存或发送"
+      breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
+      className="reports-page aidashboard-list"
+      showNav={false}
+    >
+      <RequirementMetricGrid>
+        <RequirementMetricCard tone="primary" icon={<CalendarOutlined />} loading={sourcesQuery.isLoading} metric={{ key: "week", title: "周报周期", value: dayjs(weekStart).format("MM-DD"), description: `${weekStart} 至 ${weekEnd}` }} />
+        <RequirementMetricCard tone="success" icon={<FileTextOutlined />} loading={sourcesQuery.isLoading} metric={{ key: "daily", title: "个人日报", value: sourcesQuery.data?.daily_count ?? 0, description: "本周已保存/发送日报" }} />
+        <RequirementMetricCard tone="info" icon={<RobotOutlined />} loading={sourcesQuery.isLoading} metric={{ key: "sessions", title: "Session", value: sourcesQuery.data?.session_count ?? 0, description: "本周 AI 工作记录" }} />
+        <RequirementMetricCard tone="warning" icon={<CheckCircleOutlined />} loading={sourcesQuery.isLoading} metric={{ key: "tasks", title: "任务/风险", value: sourcesQuery.data?.task_count ?? 0, description: report?.status === "submitted" ? "已发送" : report?.status === "saved" ? "已保存" : "待生成" }} />
+      </RequirementMetricGrid>
+
+      <div className="reports-toolbar">
+        <div className="reports-toolbar__meta">
+          <strong>{effectiveTab === "sources" ? "本周来源确认" : effectiveTab === "draft" ? "确认我的周报" : "我的周报历史"}</strong>
+          <span>·</span>
+          <span>{weekStart} 至 {weekEnd}</span>
+        </div>
+        <div className="reports-toolbar__right">
+          {scopeTabs}
+          <Segmented
+            value={effectiveTab}
+            onChange={(v) => {
+              setTab(v as "sources" | "draft" | "history");
+              setTabTouched(true);
+            }}
+            options={[{ label: "来源确认", value: "sources" }, { label: "确认周报", value: "draft" }, { label: "历史", value: "history" }]}
+          />
+          {weekPicker}
+          {effectiveTab === "sources" ? <Button type="primary" icon={<RobotOutlined />} loading={generateMutation.isPending} onClick={() => generateMutation.mutate()}>生成周报预览</Button> : null}
+        </div>
+      </div>
+
+      {effectiveTab === "sources" ? (
+        <PersonalWeeklySources query={sourcesQuery} />
+      ) : effectiveTab === "history" ? (
+        <PersonalWeeklyHistory query={historyQuery} />
+      ) : reportQuery.isError ? (
+        <Alert type="error" showIcon message="我的周报加载失败" description={errorMessage(reportQuery.error)} />
+      ) : reportQuery.isLoading && !preview ? (
+        <ReportsSkeleton />
+      ) : !editorContent.trim() && !report && !preview ? (
+        <ReportsEmpty description="尚未生成或保存本周周报，请先确认来源。" />
+      ) : (
+        <section className="reports-team-card">
+          <header className="reports-team-card__head">
+            <span className="reports-team-card__title">我的周报</span>
+            <span className="reports-team-card__meta">
+              <span className={`reports-tag ${report?.status === "submitted" ? "is-submitted" : "is-team"}`}>{preview ? "预览未保存" : report?.status === "submitted" ? "已发送" : report?.status === "saved" ? "已保存" : "预览"}</span>
+              <span>{weekStart}</span>
+            </span>
+          </header>
+          <div className="reports-edit-shell">
+            <TextArea rows={14} value={editorContent} onChange={(e) => { setContent(e.target.value); setContentTouched(true); }} />
+            <div className="reports-edit-shell__actions">
+              <Button onClick={() => { setTab("sources"); setTabTouched(true); }}>上一步</Button>
+              <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>保存周报</Button>
+              {canSubmit ? <Button type="primary" loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>{submitLabel}</Button> : null}
+            </div>
+          </div>
+        </section>
+      )}
+    </PagePanel>
+  );
+}
+
+function PersonalWeeklySources({ query }: { query: UseQueryResult<PersonalWeeklyReportSources> }) {
+  const sources = query.data;
+  if (query.isError) return <Alert type="error" showIcon message="周报来源加载失败" description={errorMessage(query.error)} />;
+  if (query.isLoading) return <ReportsSkeleton />;
+  if (!sources) return <ReportsEmpty description="暂无来源" />;
+  const items = [
+    ...sources.sessions.map((item) => ({
+      key: `session-${item.session_id}`,
+      title: `${item.session_ref} · ${dayjs(item.started_at).format("MM-DD HH:mm")}`,
+      tag: "Session",
+      content: item.summary || item.task_title || "暂无摘要"
+    })),
+    ...sources.daily_reports.map((item) => ({
+      key: `daily-${item.report_id}`,
+      title: `${item.user_name} · ${item.report_date}`,
+      tag: "个人日报",
+      content: item.content
+    })),
+    ...sources.tasks.map((item) => ({
+      key: `task-${item.task_id}`,
+      title: item.task_title,
+      tag: `${item.status}/${item.priority}`,
+      content: `需求：${item.requirement_title}\n负责人：${item.assignee_name || "未分配"}`
+    }))
+  ];
+  if (items.length === 0) return <ReportsEmpty description="本周暂无可用于生成周报的来源" />;
+  return (
+    <div className="reports-member-grid">
+      {items.map((item) => (
+        <article key={item.key} className="reports-report-card is-auto">
+          <header className="reports-report-card__head">
+            <span className="reports-report-card__head-left">
+              <span className="reports-report-card__author">{item.title}</span>
+              <span className="reports-tag is-team">{item.tag}</span>
+            </span>
+          </header>
+          <p className="reports-report-card__content">{item.content}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function PersonalWeeklyHistory({ query }: { query: UseQueryResult<PaginatedPersonalWeeklyReports> }) {
+  const reports = query.data?.items ?? [];
+  if (query.isError) return <Alert type="error" showIcon message="我的周报历史加载失败" description={errorMessage(query.error)} />;
+  if (query.isLoading) return <ReportsSkeleton />;
+  if (reports.length === 0) return <ReportsEmpty description="暂无我的周报历史" />;
+  return <WeeklyReportCards reports={reports.map((r) => ({ id: r.id, title: "我的周报", date: r.week_start, content: `${r.week_start} 至 ${r.week_end}`, done: r.status === "submitted" }))} />;
+}
+
 export function WeeklyReportsPage() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => weekStartOf(dayjs()));
+  const [roleTab, setRoleTab] = useState<"mine" | "team" | "department">("mine");
 
   if (!user) return null;
 
@@ -86,40 +320,61 @@ export function WeeklyReportsPage() {
     />
   );
 
-  if (user.role === "director" || user.role === "admin") {
-    return <DirectorWeeklyReportsView weekStart={weekStart} weekEnd={weekEnd} weekPicker={picker} />;
-  }
   if (user.role === "team_leader") {
-    return <TeamWeeklyReportsView weekStart={weekStart} weekEnd={weekEnd} weekPicker={picker} canEdit />;
+    return roleTab === "team" ? (
+      <TeamWeeklyReportsView
+        key={`team-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={picker}
+        canEdit
+        scopeTabs={<Segmented value={roleTab} onChange={(v) => setRoleTab(v as "mine" | "team")} options={[{ label: "我的周报", value: "mine" }, { label: "小组周报", value: "team" }]} />}
+      />
+    ) : (
+      <PersonalWeeklyReportsView
+        key={`mine-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={picker}
+        scopeTabs={<Segmented value={roleTab} onChange={(v) => setRoleTab(v as "mine" | "team")} options={[{ label: "我的周报", value: "mine" }, { label: "小组周报", value: "team" }]} />}
+      />
+    );
   }
-  if (user.role === "pm") {
-    return <TeamWeeklyReportsView weekStart={weekStart} weekEnd={weekEnd} weekPicker={picker} />;
+  if (user.role === "director" || user.role === "admin") {
+    return roleTab === "department" ? (
+      <DirectorWeeklyReportsView
+        key={`department-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={picker}
+        scopeTabs={<Segmented value={roleTab} onChange={(v) => setRoleTab(v as "mine" | "department")} options={[{ label: "我的周报", value: "mine" }, { label: "部门周报", value: "department" }]} />}
+      />
+    ) : (
+      <PersonalWeeklyReportsView
+        key={`mine-${weekStart}`}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        weekPicker={picker}
+        scopeTabs={<Segmented value={roleTab} onChange={(v) => setRoleTab(v as "mine" | "department")} options={[{ label: "我的周报", value: "mine" }, { label: "部门周报", value: "department" }]} />}
+      />
+    );
   }
 
-  return (
-    <PagePanel
-      title="周报"
-      description="当前产品口径暂未开放个人周报"
-      breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
-      className="reports-page aidashboard-list"
-      showNav={false}
-      actions={picker}
-    >
-      <ReportsEmpty description="个人周报暂未开放。" />
-    </PagePanel>
-  );
+  return <PersonalWeeklyReportsView key={`mine-${weekStart}`} weekStart={weekStart} weekEnd={weekEnd} weekPicker={picker} />;
 }
 
 function TeamWeeklyReportsView({
   weekStart,
   weekEnd,
   weekPicker,
-  canEdit = false
+  canEdit = false,
+  scopeTabs
 }: {
   weekStart: string;
   weekEnd: string;
   weekPicker: ReactNode;
   canEdit?: boolean;
+  scopeTabs?: ReactNode;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -223,6 +478,7 @@ function TeamWeeklyReportsView({
           <span>{weekStart} 至 {weekEnd}</span>
         </div>
         <div className="reports-toolbar__right">
+          {scopeTabs}
           <Segmented
             value={tab}
             onChange={(v) => setTab(v as "sources" | "draft" | "history")}
@@ -314,7 +570,17 @@ function TeamWeeklyHistory({ query, reports }: { query: UseQueryResult<TeamWeekl
   return <WeeklyReportCards reports={reports.map((r) => ({ id: r.id, title: r.team_name, date: r.week_start, content: r.content, done: Boolean(r.submitted_at) }))} />;
 }
 
-function DirectorWeeklyReportsView({ weekStart, weekEnd, weekPicker }: { weekStart: string; weekEnd: string; weekPicker: React.ReactNode }) {
+function DirectorWeeklyReportsView({
+  weekStart,
+  weekEnd,
+  weekPicker,
+  scopeTabs
+}: {
+  weekStart: string;
+  weekEnd: string;
+  weekPicker: React.ReactNode;
+  scopeTabs?: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [tab, setTab] = useState<"sources" | "draft" | "history" | "teams">("sources");
@@ -379,6 +645,7 @@ function DirectorWeeklyReportsView({ weekStart, weekEnd, weekPicker }: { weekSta
       <div className="reports-toolbar">
         <div className="reports-toolbar__meta"><strong>{tab === "sources" ? "小组周报收集" : tab === "draft" ? "部门周报草稿" : tab === "teams" ? "小组周报记录" : "部门周报历史"}</strong><span>·</span><span>{weekStart} 至 {weekEnd}</span></div>
         <div className="reports-toolbar__right">
+          {scopeTabs}
           <Segmented value={tab} onChange={(v) => setTab(v as "sources" | "draft" | "history" | "teams")} options={[{ label: "来源确认", value: "sources" }, { label: "周报草稿", value: "draft" }, { label: "小组记录", value: "teams" }, { label: "部门历史", value: "history" }]} />
           {weekPicker}
           {tab === "sources" ? <Button type="primary" icon={<RobotOutlined />} loading={generateMutation.isPending} onClick={() => generateMutation.mutate()}>生成部门周报草稿</Button> : null}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,6 +58,7 @@ func (h *DashboardHandler) Follows(w http.ResponseWriter, r *http.Request) {
 			items = append(items, item)
 		}
 	}
+	sortDashboardFollowItems(items)
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -87,7 +89,6 @@ func (h *DashboardHandler) Risks(w http.ResponseWriter, r *http.Request) {
 		)`
 		args = append(args, *u.TeamID, u.ID)
 	}
-	query += " ORDER BY t.due_date NULLS LAST, t.updated_at DESC"
 
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
@@ -108,10 +109,12 @@ func (h *DashboardHandler) Risks(w http.ResponseWriter, r *http.Request) {
 
 	items := []model.DashboardRiskItem{}
 	for _, task := range tasks {
+		attentionScore := h.combinedTaskRiskAttentionScore(task.ID, task.RequirementID)
 		for _, riskType := range task.RiskTypes {
-			items = append(items, dashboardRiskItem(task, riskType))
+			items = append(items, dashboardRiskItem(task, riskType, attentionScore))
 		}
 	}
+	sortDashboardRiskItems(items)
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -129,17 +132,23 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 	}
 	req.Deadline = nullStringPtr(deadline)
 	NewRequirementHandler(h.db, nil).loadProjection(&req, &model.User{ID: userID})
+	attentionScore := h.attentionScore("requirement", req.ID)
 	url := fmt.Sprintf("/requirements?requirementId=%s", req.ID)
 	return model.DashboardFollowItem{
-		Key:           "requirement:" + req.ID,
-		Type:          "需求",
-		Title:         req.Title,
-		RequirementID: req.ID,
-		Owner:         fallback(req.CreatorName, "未分配"),
-		Status:        requirementStatusLabel(req.Status),
-		Deadline:      displayDate(req.Deadline),
-		Risk:          requirementRiskLabel(req.RiskSummary),
-		Activity:      recentUpdateLabel(updatedAt),
+		Key:            "requirement:" + req.ID,
+		Type:           "需求",
+		Title:          req.Title,
+		RequirementID:  req.ID,
+		Owner:          fallback(req.CreatorName, "未分配"),
+		Status:         requirementStatusLabel(req.Status),
+		Deadline:       displayDate(req.Deadline),
+		Risk:           requirementRiskLabel(req.RiskSummary),
+		Activity:       recentUpdateLabel(updatedAt),
+		AttentionScore: attentionScore,
+		AttentionLevel: attentionLevel(attentionScore),
+		RiskPriority:   requirementRiskPriority(req.RiskSummary),
+		SortDueDate:    req.Deadline,
+		SortUpdatedAt:  updatedAt,
 		Navigation: model.DashboardNavigationTarget{
 			RequirementID: req.ID,
 			URL:           url,
@@ -164,19 +173,25 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 	if task.DisplayStatus == "blocked" {
 		dependency = unfinishedDependencyNames(task)
 	}
+	attentionScore := h.attentionScore("task", task.ID)
 	return model.DashboardFollowItem{
-		Key:           "task:" + task.ID,
-		Type:          "任务",
-		Title:         task.Title,
-		Requirement:   task.RequirementTitle,
-		RequirementID: task.RequirementID,
-		TaskID:        &task.ID,
-		Owner:         pointerFallback(task.AssigneeName, "未分配"),
-		Status:        taskStatusLabel(task.DisplayStatus),
-		Deadline:      displayDate(task.DueDate),
-		Risk:          taskRiskLabel(task.RiskTypes),
-		Dependency:    dependency,
-		Activity:      recentUpdateLabel(task.UpdatedAt),
+		Key:            "task:" + task.ID,
+		Type:           "任务",
+		Title:          task.Title,
+		Requirement:    task.RequirementTitle,
+		RequirementID:  task.RequirementID,
+		TaskID:         &task.ID,
+		Owner:          pointerFallback(task.AssigneeName, "未分配"),
+		Status:         taskStatusLabel(task.DisplayStatus),
+		Deadline:       displayDate(task.DueDate),
+		Risk:           taskRiskLabel(task.RiskTypes),
+		Dependency:     dependency,
+		Activity:       recentUpdateLabel(task.UpdatedAt),
+		AttentionScore: attentionScore,
+		AttentionLevel: attentionLevel(attentionScore),
+		RiskPriority:   taskRiskPriority(task.RiskTypes),
+		SortDueDate:    task.DueDate,
+		SortUpdatedAt:  task.UpdatedAt,
 		Navigation: model.DashboardNavigationTarget{
 			RequirementID: task.RequirementID,
 			TaskID:        &task.ID,
@@ -229,7 +244,7 @@ func scanProjectionTask(row rowScanner) (model.Task, error) {
 	return task, nil
 }
 
-func dashboardRiskItem(task model.Task, riskType string) model.DashboardRiskItem {
+func dashboardRiskItem(task model.Task, riskType string, attentionScore int) model.DashboardRiskItem {
 	item := model.DashboardRiskItem{
 		Key:               task.ID + ":" + riskType,
 		RelatedObjectType: "task",
@@ -240,6 +255,10 @@ func dashboardRiskItem(task model.Task, riskType string) model.DashboardRiskItem
 		Deadline:          displayDate(task.DueDate),
 		ActionText:        "查看任务",
 		TargetURL:         fmt.Sprintf("/requirements?requirementId=%s&taskId=%s", task.RequirementID, task.ID),
+		AttentionScore:    attentionScore,
+		AttentionLevel:    attentionLevel(attentionScore),
+		SortDueDate:       task.DueDate,
+		SortUpdatedAt:     task.UpdatedAt,
 	}
 	item.Navigation = model.DashboardNavigationTarget{
 		RequirementID: task.RequirementID,
@@ -254,6 +273,7 @@ func dashboardRiskItem(task model.Task, riskType string) model.DashboardRiskItem
 		item.Reason = "等待上游任务完成：" + unfinishedDependencyNames(task)
 		item.Level = "高"
 		item.Tone = "red"
+		item.RiskLevelPriority = 90
 	case service.TaskRiskOverdue:
 		item.RiskType = "deadline"
 		item.Title = "任务已超过截止日期"
@@ -261,8 +281,125 @@ func dashboardRiskItem(task model.Task, riskType string) model.DashboardRiskItem
 		item.Reason = "任务尚未完成，需要更新计划或推进状态"
 		item.Level = "高"
 		item.Tone = "red"
+		item.RiskLevelPriority = 100
 	}
 	return item
+}
+
+func (h *DashboardHandler) attentionScore(targetType, targetID string) int {
+	var score int
+	if err := h.db.QueryRow(`
+		SELECT COALESCE(SUM(CASE u.role
+			WHEN 'director' THEN 100
+			WHEN 'team_leader' THEN 50
+			WHEN 'pm' THEN 40
+			WHEN 'employee' THEN 10
+			ELSE 0
+		END), 0)
+		FROM user_follows f
+		JOIN users u ON u.id = f.user_id
+		WHERE f.target_type = $1 AND f.target_id = $2`, targetType, targetID).Scan(&score); err != nil {
+		return 0
+	}
+	return score
+}
+
+func (h *DashboardHandler) combinedTaskRiskAttentionScore(taskID, requirementID string) int {
+	taskScore := h.attentionScore("task", taskID)
+	requirementScore := h.attentionScore("requirement", requirementID)
+	if requirementScore > taskScore {
+		return requirementScore
+	}
+	return taskScore
+}
+
+func attentionLevel(score int) string {
+	if score >= 150 {
+		return "high"
+	}
+	if score >= 80 {
+		return "important"
+	}
+	if score >= 40 {
+		return "notable"
+	}
+	return "normal"
+}
+
+func requirementRiskPriority(risk model.RequirementRiskSummary) int {
+	if risk.Overdue > 0 {
+		return 100
+	}
+	if risk.Blocked > 0 {
+		return 90
+	}
+	return 0
+}
+
+func taskRiskPriority(risks []string) int {
+	for _, risk := range risks {
+		if risk == service.TaskRiskOverdue {
+			return 100
+		}
+	}
+	for _, risk := range risks {
+		if risk == service.TaskRiskBlocked {
+			return 90
+		}
+	}
+	return 0
+}
+
+func sortDashboardFollowItems(items []model.DashboardFollowItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		left := items[i]
+		right := items[j]
+		if left.RiskPriority != right.RiskPriority {
+			return left.RiskPriority > right.RiskPriority
+		}
+		if left.AttentionScore != right.AttentionScore {
+			return left.AttentionScore > right.AttentionScore
+		}
+		if !sameOptionalDate(left.SortDueDate, right.SortDueDate) {
+			return optionalDateBefore(left.SortDueDate, right.SortDueDate)
+		}
+		return left.SortUpdatedAt.After(right.SortUpdatedAt)
+	})
+}
+
+func sortDashboardRiskItems(items []model.DashboardRiskItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		left := items[i]
+		right := items[j]
+		if left.RiskLevelPriority != right.RiskLevelPriority {
+			return left.RiskLevelPriority > right.RiskLevelPriority
+		}
+		if left.AttentionScore != right.AttentionScore {
+			return left.AttentionScore > right.AttentionScore
+		}
+		if !sameOptionalDate(left.SortDueDate, right.SortDueDate) {
+			return optionalDateBefore(left.SortDueDate, right.SortDueDate)
+		}
+		return left.SortUpdatedAt.After(right.SortUpdatedAt)
+	})
+}
+
+func sameOptionalDate(left, right *string) bool {
+	leftEmpty := left == nil || *left == ""
+	rightEmpty := right == nil || *right == ""
+	if leftEmpty || rightEmpty {
+		return leftEmpty == rightEmpty
+	}
+	return *left == *right
+}
+
+func optionalDateBefore(left, right *string) bool {
+	leftEmpty := left == nil || *left == ""
+	rightEmpty := right == nil || *right == ""
+	if leftEmpty || rightEmpty {
+		return !leftEmpty && rightEmpty
+	}
+	return *left < *right
 }
 
 func unfinishedDependencyNames(task model.Task) string {

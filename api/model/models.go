@@ -130,19 +130,24 @@ type DashboardNavigationTarget struct {
 }
 
 type DashboardFollowItem struct {
-	Key           string                    `json:"key"`
-	Type          string                    `json:"type"`
-	Title         string                    `json:"title"`
-	Requirement   string                    `json:"requirement,omitempty"`
-	RequirementID string                    `json:"requirementId"`
-	TaskID        *string                   `json:"taskId,omitempty"`
-	Owner         string                    `json:"owner"`
-	Status        string                    `json:"status"`
-	Deadline      string                    `json:"deadline"`
-	Risk          string                    `json:"risk"`
-	Dependency    string                    `json:"dependency,omitempty"`
-	Activity      string                    `json:"activity,omitempty"`
-	Navigation    DashboardNavigationTarget `json:"navigation"`
+	Key            string                    `json:"key"`
+	Type           string                    `json:"type"`
+	Title          string                    `json:"title"`
+	Requirement    string                    `json:"requirement,omitempty"`
+	RequirementID  string                    `json:"requirementId"`
+	TaskID         *string                   `json:"taskId,omitempty"`
+	Owner          string                    `json:"owner"`
+	Status         string                    `json:"status"`
+	Deadline       string                    `json:"deadline"`
+	Risk           string                    `json:"risk"`
+	Dependency     string                    `json:"dependency,omitempty"`
+	Activity       string                    `json:"activity,omitempty"`
+	AttentionScore int                       `json:"attentionScore"`
+	AttentionLevel string                    `json:"attentionLevel"`
+	RiskPriority   int                       `json:"riskPriority"`
+	SortDueDate    *string                   `json:"-"`
+	SortUpdatedAt  time.Time                 `json:"-"`
+	Navigation     DashboardNavigationTarget `json:"navigation"`
 }
 
 type DashboardRiskItem struct {
@@ -161,6 +166,11 @@ type DashboardRiskItem struct {
 	Tone              string                    `json:"tone"`
 	ActionText        string                    `json:"actionText"`
 	TargetURL         string                    `json:"targetUrl"`
+	AttentionScore    int                       `json:"attentionScore"`
+	AttentionLevel    string                    `json:"attentionLevel"`
+	RiskLevelPriority int                       `json:"-"`
+	SortDueDate       *string                   `json:"-"`
+	SortUpdatedAt     time.Time                 `json:"-"`
 	Navigation        DashboardNavigationTarget `json:"navigation"`
 }
 
@@ -371,6 +381,100 @@ type UpdateReportRequest struct {
 type SubmitReportRequest struct {
 	Content    *string   `json:"content,omitempty"`
 	SessionIDs *[]string `json:"session_ids,omitempty"`
+}
+
+type WeeklySessionSource struct {
+	SessionID        string     `json:"session_id"`
+	SessionRef       string     `json:"session_ref"`
+	AgentType        string     `json:"agent_type"`
+	StartedAt        time.Time  `json:"started_at"`
+	EndedAt          *time.Time `json:"ended_at,omitempty"`
+	Summary          string     `json:"summary"`
+	TaskID           *string    `json:"task_id,omitempty"`
+	TaskTitle        string     `json:"task_title,omitempty"`
+	RequirementID    *string    `json:"requirement_id,omitempty"`
+	RequirementTitle string     `json:"requirement_title,omitempty"`
+	TotalTokens      int64      `json:"total_tokens"`
+}
+
+type PersonalWeeklyReportSources struct {
+	UserID       string                    `json:"user_id"`
+	UserName     string                    `json:"user_name"`
+	WeekStart    string                    `json:"week_start"`
+	WeekEnd      string                    `json:"week_end"`
+	Sessions     []WeeklySessionSource     `json:"sessions"`
+	DailyReports []WeeklyDailyReportSource `json:"daily_reports"`
+	Tasks        []WeeklyTaskSource        `json:"tasks"`
+	SessionCount int                       `json:"session_count"`
+	DailyCount   int                       `json:"daily_count"`
+	TaskCount    int                       `json:"task_count"`
+}
+
+type PersonalWeeklyReport struct {
+	ID                   string     `json:"id"`
+	UserID               string     `json:"user_id"`
+	UserName             string     `json:"user_name"`
+	WeekStart            string     `json:"week_start"`
+	WeekEnd              string     `json:"week_end"`
+	Content              string     `json:"content"`
+	SubmittedContent     *string    `json:"submitted_content,omitempty"`
+	Status               string     `json:"status"`
+	SavedAt              *time.Time `json:"saved_at,omitempty"`
+	SubmittedAt          *time.Time `json:"submitted_at,omitempty"`
+	SubmittedTo          *string    `json:"submitted_to,omitempty"`
+	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
+	SourceSessionIDs     []string   `json:"source_session_ids"`
+	SourceTaskIDs        []string   `json:"source_task_ids"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+}
+
+type PersonalWeeklyReportListItem struct {
+	ID                 string     `json:"id"`
+	UserID             string     `json:"user_id"`
+	UserName           string     `json:"user_name"`
+	WeekStart          string     `json:"week_start"`
+	WeekEnd            string     `json:"week_end"`
+	Status             string     `json:"status"`
+	SavedAt            *time.Time `json:"saved_at,omitempty"`
+	SubmittedAt        *time.Time `json:"submitted_at,omitempty"`
+	SubmittedTo        *string    `json:"submitted_to,omitempty"`
+	SourceDailyCount   int        `json:"source_daily_count"`
+	SourceSessionCount int        `json:"source_session_count"`
+	SourceTaskCount    int        `json:"source_task_count"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+type PaginatedPersonalWeeklyReports struct {
+	Items    []PersonalWeeklyReportListItem `json:"items"`
+	Total    int                            `json:"total"`
+	Page     int                            `json:"page"`
+	PageSize int                            `json:"page_size"`
+}
+
+type GeneratePersonalWeeklyReportRequest struct {
+	WeekStart            string   `json:"week_start"`
+	SourceSessionIDs     []string `json:"source_session_ids"`
+	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
+	SourceTaskIDs        []string `json:"source_task_ids"`
+}
+
+type PersonalWeeklyReportPreview struct {
+	ReportMarkdown       string   `json:"report_markdown"`
+	WeekStart            string   `json:"week_start"`
+	WeekEnd              string   `json:"week_end"`
+	SourceSessionIDs     []string `json:"source_session_ids"`
+	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
+	SourceTaskIDs        []string `json:"source_task_ids"`
+}
+
+type SavePersonalWeeklyReportRequest struct {
+	WeekStart            string   `json:"week_start"`
+	Content              string   `json:"content"`
+	SourceSessionIDs     []string `json:"source_session_ids"`
+	SourceDailyReportIDs []string `json:"source_daily_report_ids"`
+	SourceTaskIDs        []string `json:"source_task_ids"`
 }
 
 type GenerateReportDraftRequest struct {

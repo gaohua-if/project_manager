@@ -28,6 +28,7 @@ import {
   fetchAllSessionTokens,
   fetchDepartmentReportSources,
   fetchDepartmentReportTodayOrNull,
+  fetchPersonalWeeklyReportCurrentOrNull,
 	fetchDashboardFollows,
 	fetchDashboardRisks,
   fetchReports,
@@ -51,6 +52,8 @@ import type {
   DepartmentReport,
   DepartmentReportSources,
   GenerateReportDraftPayload,
+  AttentionLevel,
+  PersonalWeeklyReport,
   Session,
   TaskProgressSuggestion as DraftTaskProgressSuggestion,
   TeamReport,
@@ -66,6 +69,7 @@ import {
   DailyReportGenerateModal,
   type DailyGenerateScope
 } from "../reports/components/DailyReportGenerateModal";
+import { PersonalWeeklyReportsView } from "../reports/pages/WeeklyReportsPage";
 
 import "./console-dashboard.css";
 
@@ -110,6 +114,9 @@ interface FollowItem {
   risk: string;
   dependency?: string;
   activity?: string;
+  attentionScore?: number;
+  attentionLevel?: AttentionLevel;
+  riskPriority?: number;
 }
 
 interface RiskItem {
@@ -128,6 +135,8 @@ interface RiskItem {
   tone: RiskTone;
   actionText: string;
   targetUrl?: string;
+  attentionScore?: number;
+  attentionLevel?: AttentionLevel;
 }
 
 interface ReportCoverage {
@@ -246,6 +255,25 @@ function applyTodayDailyReportState(report: ReportItem, dailyReport: DailyReport
     sessionCount: dailyReport.session_ids.length,
     generateMode: dailyReport.edited ? "手动生成" : "系统自动生成",
     updatedAt: formatDateTime(dailyReport.updated_at, "HH:mm")
+  };
+}
+
+function applyPersonalWeeklyReportState(report: ReportItem, weeklyReport: PersonalWeeklyReport | null | undefined, loaded: boolean): ReportItem {
+  if (!loaded) return report;
+  if (!weeklyReport) {
+    return {
+      ...report,
+      status: "待生成",
+      sessionCount: 0,
+      updatedAt: "-"
+    };
+  }
+  return {
+    ...report,
+    status: weeklyReport.status === "submitted" ? "已发送" : "已保存",
+    sessionCount: weeklyReport.source_session_ids.length,
+    generateMode: "系统自动生成",
+    updatedAt: formatDateTime(weeklyReport.updated_at, "HH:mm")
   };
 }
 
@@ -809,6 +837,8 @@ export function DashboardPage() {
   const { message } = App.useApp();
   const today = dayjs();
   const reportDate = today.format("YYYY-MM-DD");
+  const weekStart = today.subtract((today.day() + 6) % 7, "day").format("YYYY-MM-DD");
+  const weekEnd = dayjs(weekStart).add(6, "day").format("YYYY-MM-DD");
 	const followsQuery = useQuery({
 		queryKey: ["dashboard", "follows"],
 		queryFn: fetchDashboardFollows,
@@ -842,8 +872,14 @@ export function DashboardPage() {
   const [editingTaskDraft, setEditingTaskDraft] = useState<TaskProgressSuggestion | null>(null);
   const [tokenRange, setTokenRange] = useState<TokenRange>("last3days");
   const [dailyGenerateTarget, setDailyGenerateTarget] = useState<{ scope: DailyGenerateScope; reportDate?: string } | null>(null);
+  const [weeklyMineOpen, setWeeklyMineOpen] = useState(false);
   const dashboardRole = getDashboardRole(user?.role);
   const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
+  const personalWeeklyQuery = useQuery({
+    queryKey: ["reports", "weekly", "mine", "dashboard-current", weekStart],
+    queryFn: () => fetchPersonalWeeklyReportCurrentOrNull(weekStart),
+    staleTime: 30_000
+  });
   const departmentSourcesQuery = useQuery({
     queryKey: ["department-report-sources", reportDate],
     queryFn: () => fetchDepartmentReportSources(reportDate),
@@ -870,6 +906,9 @@ export function DashboardPage() {
   });
   const todayDailyReport = todayReportsQuery.data?.[0];
   const personalReports = data.personalReports.map((reportItem) => {
+    if (reportItem.kind === "personal_weekly") {
+      return applyPersonalWeeklyReportState(reportItem, personalWeeklyQuery.data, personalWeeklyQuery.isSuccess);
+    }
     if (reportItem.kind !== "personal_daily") return reportItem;
     return applyTodayDailyReportState(reportItem, todayDailyReport, todayReportsQuery.isSuccess);
   });
@@ -1154,7 +1193,7 @@ export function DashboardPage() {
     }
   });
 
-	  const saveReportMutation = useMutation({
+  const saveReportMutation = useMutation({
     mutationFn: async ({ closeAfterSave }: { closeAfterSave: boolean }) => {
       const report = await fetchTodayReport();
       const sessionIDs = validatedDraftSessionIds.length > 0 ? validatedDraftSessionIds : effectiveSelectedSessionIds;
@@ -1164,13 +1203,13 @@ export function DashboardPage() {
       });
       return { saved, closeAfterSave };
     },
-	    onSuccess: ({ saved, closeAfterSave }) => {
-	      message.success(closeAfterSave ? "日报已保存" : "日报修改已保存");
-	      updateReport(activeReport.id, {
-	        status: "草稿待确认",
-	        sessionCount: saved.session_ids.length,
-	        generateMode: "手动生成",
-	        skill: saved.edited ? "默认日报 Skill" : activeReport.skill,
+    onSuccess: ({ saved, closeAfterSave }) => {
+      message.success(closeAfterSave ? "日报已保存" : "日报修改已保存");
+      updateReport(activeReport.id, {
+        status: "草稿待确认",
+        sessionCount: saved.session_ids.length,
+        generateMode: "手动生成",
+        skill: saved.edited ? "默认日报 Skill" : activeReport.skill,
         updatedAt: "刚刚"
       });
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
@@ -1226,7 +1265,11 @@ export function DashboardPage() {
       setDailyGenerateTarget({ scope: "department", reportDate });
       return;
     }
-    if (reportItem.kind === "team_weekly" || reportItem.kind === "department_weekly" || reportItem.kind === "personal_weekly") {
+    if (reportItem.kind === "personal_weekly") {
+      setWeeklyMineOpen(true);
+      return;
+    }
+    if (reportItem.kind === "team_weekly" || reportItem.kind === "department_weekly") {
       navigate("/reports/weekly");
       return;
     }
@@ -1411,7 +1454,7 @@ export function DashboardPage() {
           />
           <div className="console-follow-list">
             {followItems.length > 0 ? (
-				sortFollowItems(followItems).map((item) => (
+				followItems.map((item) => (
 					<FollowCard key={item.key} item={item} onView={handleFollowAction} />
 				))
 			) : (
@@ -1430,7 +1473,7 @@ export function DashboardPage() {
           />
           <div className="console-risk-list">
             {riskItems.length > 0 ? (
-              sortRisks(riskItems).map((item) => (
+              riskItems.map((item) => (
                 <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
               ))
             ) : (
@@ -1485,6 +1528,23 @@ export function DashboardPage() {
           }}
         />
       ) : null}
+
+      <Modal
+        className="console-report-workflow-modal"
+        title="我的周报"
+        open={weeklyMineOpen}
+        width={980}
+        footer={null}
+        onCancel={() => setWeeklyMineOpen(false)}
+        destroyOnHidden
+      >
+        <PersonalWeeklyReportsView
+          key={`dashboard-mine-${weekStart}`}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          weekPicker={<span />}
+        />
+      </Modal>
 
       <Modal
         className="console-report-workflow-modal"
@@ -3303,6 +3363,7 @@ function FollowCard({ item, onView }: { item: FollowItem; onView: (item: FollowI
         <Space size={8} wrap>
           <Tag color={isTask ? "geekblue" : "green"}>{item.type}</Tag>
           <Badge status={item.status === "阻塞" ? "error" : "processing"} text={item.status} />
+          <AttentionTag level={item.attentionLevel ?? "normal"} />
         </Space>
       </div>
       <strong className="console-follow-card__title">{item.title}</strong>
@@ -3333,16 +3394,14 @@ function getFollowTone(item: FollowItem): "red" | "orange" | "blue" {
   return "blue";
 }
 
-function sortFollowItems(items: FollowItem[]) {
-  return [...items].sort((a, b) => getFollowPriority(a) - getFollowPriority(b));
-}
-
-function getFollowPriority(item: FollowItem) {
-  if (item.risk.includes("超期") || item.risk.includes("已超期")) return 1;
-  if (item.risk.includes("依赖") || item.status === "阻塞") return 2;
-  if (item.status === "进行中") return 4;
-  if (item.status === "已完成") return 9;
-  return 5;
+function AttentionTag({ level }: { level: AttentionLevel }) {
+  const config = {
+    normal: null,
+    notable: { label: "关注", color: "blue" },
+    important: { label: "重点关注", color: "orange" },
+    high: { label: "高关注", color: "red" }
+  }[level];
+  return config ? <Tag color={config.color}>{config.label}</Tag> : null;
 }
 
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
@@ -3350,7 +3409,10 @@ function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskIte
     <article className={`console-risk-card console-risk-card--${item.tone}`}>
       <span className="console-risk-card__rail" aria-hidden="true" />
       <div className="console-risk-card__main">
-        <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
+        <Space size={6} wrap>
+          <span className={`console-risk-tag console-risk-tag--${item.tone}`}>{item.level} · {item.source}</span>
+          <AttentionTag level={item.attentionLevel ?? "normal"} />
+        </Space>
         <strong>{item.title}</strong>
         <span>{item.reason}</span>
       </div>
@@ -3375,14 +3437,4 @@ function getRiskActionLabel(item: RiskItem) {
   if (item.riskType === "dependency_blocker") return "处理依赖";
   if (item.riskType === "deadline") return "查看任务";
   return item.actionText;
-}
-
-function sortRisks(risks: RiskItem[]) {
-  return [...risks].sort((a, b) => getRiskPriority(a) - getRiskPriority(b));
-}
-
-function getRiskPriority(risk: RiskItem) {
-  if (risk.riskType === "deadline" && risk.source === "已超期") return 1;
-  if (risk.riskType === "dependency_blocker") return 2;
-  return 3;
 }
