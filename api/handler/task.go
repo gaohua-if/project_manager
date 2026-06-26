@@ -240,6 +240,9 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	h.updateRequirementProgress(taskID)
 
+	autoFollow(h.db, u.ID, "task", taskID)
+	autoFollow(h.db, *req.AssigneeID, "task", taskID)
+
 	writeJSON(w, http.StatusCreated, map[string]string{"id": taskID, "status": "created"})
 }
 
@@ -361,6 +364,11 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if rows, _ := res.RowsAffected(); rows == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
+	}
+
+	if req.AssigneeID != nil && *req.AssigneeID != "" &&
+		(!task.AssigneeID.Valid || task.AssigneeID.String != *req.AssigneeID) {
+		autoFollow(h.db, *req.AssigneeID, "task", id)
 	}
 
 	h.updateRequirementProgress(id)

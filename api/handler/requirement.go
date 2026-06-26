@@ -187,6 +187,8 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.db.Exec("INSERT INTO requirement_teams (requirement_id, team_id) VALUES ($1, $2)", reqID, tid)
 	}
 
+	autoFollow(h.db, u.ID, "requirement", reqID)
+
 	var result model.Requirement
 	var acStr string
 	var deadline sql.NullString
