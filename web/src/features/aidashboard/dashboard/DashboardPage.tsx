@@ -11,9 +11,9 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import { Alert, App, Badge, Button, Checkbox, Col, Empty, Input, Modal, Popconfirm, Row, Segmented, Select, Space, Steps, Tag, Upload } from "antd";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as echarts from "echarts";
-import type { EChartsOption } from "echarts";
+import type { ECharts, EChartsOption } from "echarts";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -910,12 +910,14 @@ export function DashboardPage() {
   const tokenSessionsQuery = useQuery({
     queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, tokenScope],
     queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: tokenScope }),
+    placeholderData: keepPreviousData,
     staleTime: 60_000
   });
   const mineTokenSessionsQuery = useQuery({
     queryKey: ["dashboard", "token-sessions", tokenDateRange.from, tokenDateRange.to, "mine"],
     queryFn: () => fetchAllSessionTokens({ from: tokenDateRange.from, to: tokenDateRange.to, scope: "mine" }),
     enabled: shouldLoadMineTokens,
+    placeholderData: keepPreviousData,
     staleTime: 60_000
   });
   const teamTokenGroupsQuery = useQuery({
@@ -928,6 +930,7 @@ export function DashboardPage() {
         group_by: "team"
       }),
     enabled: shouldLoadTeamTokenGroups,
+    placeholderData: keepPreviousData,
     staleTime: 60_000
   });
   const reportSkillOptions = useMemo(
@@ -952,9 +955,9 @@ export function DashboardPage() {
     ]
   );
   const isTokenLoading =
-    tokenSessionsQuery.isLoading ||
-    (shouldLoadMineTokens && mineTokenSessionsQuery.isLoading) ||
-    (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isLoading);
+    (tokenSessionsQuery.isLoading && !tokenSessionsQuery.data) ||
+    (shouldLoadMineTokens && mineTokenSessionsQuery.isLoading && !mineTokenSessionsQuery.data) ||
+    (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isLoading && !teamTokenGroupsQuery.data);
   const isTokenError =
     tokenSessionsQuery.isError ||
     (shouldLoadMineTokens && mineTokenSessionsQuery.isError) ||
@@ -1454,6 +1457,7 @@ export function DashboardPage() {
           </Col>
           <Col className="console-dashboard-hero-row__token" xs={24} xl={12}>
             <SessionUploadCard
+              role={dashboardRole}
               range={tokenRange}
               report={tokenReport}
               loading={isTokenLoading}
@@ -1919,6 +1923,7 @@ function getReportModalWidth(report: ReportItem, step: ReportModalStep) {
 }
 
 function SessionUploadCard({
+  role,
   range,
   report,
   loading,
@@ -1926,6 +1931,7 @@ function SessionUploadCard({
   onRangeChange,
   onViewDetail
 }: {
+  role: DashboardRole;
   range: TokenRange;
   report: TokenReport;
   loading: boolean;
@@ -1956,7 +1962,7 @@ function SessionUploadCard({
         ) : report.sessions === 0 ? (
           <div className="console-token-state">当前范围暂无 Token 数据</div>
         ) : (
-          renderSessionUploadSummary(range, report)
+          renderSessionUploadSummary(role, range, report)
         )}
         <div className="console-token-footer">
           <span>基于已上传 session 解析</span>
@@ -1974,8 +1980,8 @@ function getTokenRangeLabel(range: TokenRange) {
   return option?.label ?? "近 7 天";
 }
 
-function renderSessionUploadSummary(range: TokenRange, report: TokenReport) {
-  if (report.groups && report.groups.length > 0) {
+function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, report: TokenReport) {
+  if (role === "director" && report.groups && report.groups.length > 0) {
     return (
       <div className="console-token-scope">
         <TokenPersonalSummary range={range} report={report} />
@@ -1985,7 +1991,31 @@ function renderSessionUploadSummary(range: TokenRange, report: TokenReport) {
             <strong>{report.total}</strong>
             <em>{report.sessions} 个 session · {report.groups.length} 个组已上报</em>
           </div>
-          <TokenGroupBars groups={report.groups} />
+          <TokenVerticalBars
+            ariaLabel="各组 Token 分布"
+            caption="各组 Token"
+            items={report.groups}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (role === "team_leader" && typeof report.uploaders === "number") {
+    return (
+      <div className="console-token-scope">
+        <TokenPersonalSummary range={range} report={report} />
+        <div className="console-token-scope-main">
+          <div className="console-token-scope-head">
+            <span>本组 Token</span>
+            <strong>{report.total}</strong>
+            <em>{report.sessions} 个 session · {report.uploaders} 人已上报</em>
+          </div>
+          <TokenVerticalBars
+            ariaLabel="组内成员 Token 分布"
+            caption="组内成员 Token"
+            items={report.memberGroups ?? []}
+          />
         </div>
       </div>
     );
@@ -2036,6 +2066,7 @@ function TokenPersonalSummary({ range, report }: { range: TokenRange; report: To
 
 function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const chartInstanceRef = useRef<ECharts | null>(null);
   const option = useMemo<EChartsOption>(() => {
     const middleIndex = Math.floor((bars.length - 1) / 2);
 
@@ -2128,7 +2159,7 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
     if (!chartRef.current) return undefined;
 
     const chart = echarts.init(chartRef.current, undefined, { renderer: "svg" });
-    chart.setOption(option);
+    chartInstanceRef.current = chart;
 
     const resize = () => chart.resize();
     window.addEventListener("resize", resize);
@@ -2136,7 +2167,14 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
     return () => {
       window.removeEventListener("resize", resize);
       chart.dispose();
+      chartInstanceRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.setOption(option, true);
+    chartInstanceRef.current.resize();
   }, [option]);
 
   return (
@@ -2165,25 +2203,168 @@ function TokenMetricBars({ bars }: { bars: TokenReport["bars"] }) {
   );
 }
 
-function TokenGroupBars({ groups }: { groups: NonNullable<TokenReport["groups"]> }) {
-  const maxValue = Math.max(...groups.map((group) => group.value), 1);
+function TokenVerticalBars({
+  ariaLabel,
+  caption,
+  items
+}: {
+  ariaLabel: string;
+  caption: string;
+  items: NonNullable<TokenReport["groups"]>;
+}) {
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const chartInstanceRef = useRef<ECharts | null>(null);
+  const option = useMemo<EChartsOption>(() => {
+    const visibleCount = 6;
+    const hasOverflow = items.length > visibleCount;
+    const end = hasOverflow ? Math.max(20, Math.round((visibleCount / items.length) * 100)) : 100;
+
+    return {
+      animation: false,
+      grid: {
+        top: 18,
+        right: 12,
+        bottom: hasOverflow ? 38 : 32,
+        left: 42,
+        containLabel: false
+      },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow"
+        },
+        borderWidth: 0,
+        padding: [6, 8],
+        textStyle: {
+          color: "#172033",
+          fontSize: 12
+        },
+        formatter: (params: unknown) => {
+          const item = Array.isArray(params) ? params[0] : params;
+          const index =
+            item && typeof item === "object" && "dataIndex" in item
+              ? Number((item as { dataIndex: number }).dataIndex)
+              : 0;
+          const datum = items[index] ?? items[0];
+          return datum ? `${datum.name}<br />${datum.total}${datum.note ? `<br />${datum.note}` : ""}` : "";
+        }
+      },
+      dataZoom: hasOverflow
+        ? [
+            {
+              type: "inside",
+              xAxisIndex: 0,
+              start: 0,
+              end,
+              zoomLock: true
+            },
+            {
+              type: "slider",
+              xAxisIndex: 0,
+              height: 14,
+              bottom: 4,
+              start: 0,
+              end,
+              borderColor: "transparent",
+              fillerColor: "rgba(22, 119, 255, 0.16)",
+              handleSize: 0,
+              showDetail: false,
+              brushSelect: false
+            }
+          ]
+        : undefined,
+      xAxis: {
+        type: "category",
+        data: items.map((item) => item.name),
+        axisTick: { show: false },
+        axisLine: { lineStyle: { color: "#dbe6f2" } },
+        axisLabel: {
+          color: "#64748b",
+          fontSize: 11,
+          interval: 0,
+          overflow: "truncate",
+          width: 56
+        }
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        axisLabel: {
+          color: "#8a97a8",
+          fontSize: 10,
+          formatter: (value: number) => formatTokenAxisValue(value)
+        },
+        splitLine: { lineStyle: { color: "#eef3f8" } }
+      },
+      series: [
+        {
+          type: "bar",
+          data: items.map((item) => item.value),
+          barMaxWidth: 24,
+          itemStyle: {
+            borderRadius: [5, 5, 0, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: "#1677ff" },
+              { offset: 1, color: "#69a6ff" }
+            ])
+          },
+          label: {
+            show: true,
+            position: "top",
+            color: "#526173",
+            fontSize: 10,
+            formatter: (params: unknown) => {
+              const index =
+                params && typeof params === "object" && "dataIndex" in params
+                  ? Number((params as { dataIndex: number }).dataIndex)
+                  : 0;
+              return items[index]?.total ?? "";
+            }
+          },
+          emphasis: {
+            itemStyle: {
+              color: "#0958d9"
+            }
+          }
+        }
+      ]
+    };
+  }, [items]);
+
+  useEffect(() => {
+    if (!chartRef.current) return undefined;
+
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "svg" });
+    chartInstanceRef.current = chart;
+
+    const resize = () => chart.resize();
+    window.addEventListener("resize", resize);
+
+    return () => {
+      window.removeEventListener("resize", resize);
+      chart.dispose();
+      chartInstanceRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.setOption(option, true);
+    chartInstanceRef.current.resize();
+  }, [option]);
 
   return (
-    <div className="console-token-group-bars" aria-label="Token 分组分布">
-      {groups.map((group) => (
-        <div key={group.name} className="console-token-group-bars__item">
-          <span>
-            <strong>{group.name}</strong>
-            {group.note ? <small title={group.note}>{group.note}</small> : null}
-          </span>
-          <i>
-            <b style={{ width: `${Math.max(8, Math.round((group.value / maxValue) * 100))}%` }} />
-          </i>
-          <em>{group.total}</em>
-        </div>
-      ))}
+    <div className="console-token-vertical-chart" aria-label={ariaLabel}>
+      <span className="console-token-chart__caption">{caption}</span>
+      <div ref={chartRef} className="console-token-vertical-echart" />
     </div>
   );
+}
+
+function formatTokenAxisValue(value: number) {
+  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return String(value);
 }
 
 function getDefaultDraftMarkdown(report: ReportItem) {

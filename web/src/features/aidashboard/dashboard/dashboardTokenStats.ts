@@ -21,6 +21,7 @@ export interface DashboardTokenReport {
   uploaders?: number;
   bars: DashboardTokenBar[];
   groups?: DashboardTokenGroup[];
+  memberGroups?: DashboardTokenGroup[];
   mine?: { sessions: number; total: string };
   status: "上报完整" | "有上报记录" | "暂无记录" | "解析异常";
 }
@@ -90,6 +91,16 @@ export function aggregateDashboardTokenReport(
     if (key) userIds.add(key);
   });
 
+  const tokenByMember = new Map<string, { name: string; total: number; sessions: number }>();
+  sessions.forEach((session) => {
+    const key = session.user_id || session.user_name || "unknown";
+    const name = session.user_name || session.user_id || "未命名成员";
+    const current = tokenByMember.get(key) ?? { name, total: 0, sessions: 0 };
+    current.total += Math.max(0, Number(session.total_tokens ?? 0));
+    current.sessions += 1;
+    tokenByMember.set(key, current);
+  });
+
   const tokenByDate = new Map<string, number>();
   sessions.forEach((session) => {
     if (!session.started_at) return;
@@ -119,9 +130,17 @@ export function aggregateDashboardTokenReport(
   const groups = options?.teamAggregation?.groups?.map((group) => ({
     name: group.label,
     total: formatDashboardTokens(group.value),
-    value: group.percent || group.value,
+    value: group.value,
     note: typeof group.percent === "number" ? `占比 ${group.percent.toFixed(1)}%` : undefined
   }));
+  const memberGroups = Array.from(tokenByMember.values())
+    .sort((a, b) => b.total - a.total)
+    .map((member) => ({
+      name: member.name,
+      total: formatDashboardTokens(member.total),
+      value: member.total,
+      note: `${member.sessions} 个 session`
+    }));
 
   return {
     total: formatDashboardTokens(totalTokens),
@@ -129,6 +148,7 @@ export function aggregateDashboardTokenReport(
     uploaders: options?.showUploaders ? userIds.size : undefined,
     bars,
     groups: groups && groups.length > 0 ? groups : undefined,
+    memberGroups: memberGroups.length > 0 ? memberGroups : undefined,
     mine,
     status: sessions.length > 0 ? "有上报记录" : "暂无记录"
   };
