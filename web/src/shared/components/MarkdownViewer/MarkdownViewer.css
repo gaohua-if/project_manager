@@ -1,0 +1,9 @@
+.markdown-viewer {
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.markdown-viewer .toastui-editor-contents {
+  font-size: 14px;
+}

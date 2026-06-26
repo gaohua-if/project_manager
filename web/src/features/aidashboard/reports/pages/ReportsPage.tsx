@@ -8,6 +8,7 @@ import {
   DatePicker,
   Empty,
   Input,
+  Modal,
   Segmented,
   Space,
   Table,
@@ -18,10 +19,11 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 
 import { useAuth } from "@/shared/auth/authContext";
+import { MarkdownViewer } from "@/shared/components/MarkdownViewer/MarkdownViewer";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
 import {
@@ -58,6 +60,14 @@ const { RangePicker } = DatePicker;
 const pageSizeOptions = [10, 20, 50, 100];
 
 type DailyTab = "personal" | "team" | "department";
+
+function isDailyTab(value: string | null): value is DailyTab {
+  return value === "personal" || value === "team" || value === "department";
+}
+
+function dailyReportsPath(tab: DailyTab) {
+  return `/reports/daily?tab=${tab}`;
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "请稍后重试";
@@ -107,7 +117,7 @@ function useTablePagination() {
       showSizeChanger: true,
       pageSizeOptions,
       onChange: (next: number, size: number) => {
-        setPage(next);
+        setPage(size && size !== pageSize ? 1 : next);
         if (size && size !== pageSize) setPageSize(size);
       }
     })
@@ -120,8 +130,9 @@ export function DailyReportsPage() {
 
 export function ReportsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<DailyTab>("personal");
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [generateTarget, setGenerateTarget] = useState<{ scope: DailyGenerateScope; reportId?: string; reportDate?: string } | null>(null);
 
@@ -131,18 +142,32 @@ export function ReportsPage() {
           { label: "我的日报记录", value: "personal" },
           { label: "部门日报记录", value: "department" }
         ]
-      : user?.role === "team_leader"
+      : user?.role === "team_leader" || user?.role === "pm"
         ? [
             { label: "我的日报记录", value: "personal" },
             { label: "小组日报记录", value: "team" }
           ]
         : [{ label: "我的日报记录", value: "personal" }];
 
-  const activeTab = options.some((item) => item.value === tab) ? tab : "personal";
+  const queryTab = searchParams.get("tab");
+  const queryTabIsValid = isDailyTab(queryTab);
+  const queryTabIsAvailable = queryTabIsValid && options.some((item) => item.value === queryTab);
+  const activeTab = queryTabIsAvailable ? queryTab : "personal";
   const from = dateRange?.[0].format("YYYY-MM-DD");
   const to = dateRange?.[1].format("YYYY-MM-DD");
+  const queryString = searchParams.toString();
+  const querySuffix = queryString ? `?${queryString}` : "";
   const generateLabel =
     activeTab === "team" ? "生成今日小组日报" : activeTab === "department" ? "生成今日部门日报" : "生成今日日报";
+  const canGenerate = activeTab !== "team" || user?.role === "team_leader" || user?.role === "pm";
+
+  const handleTabChange = (value: DailyTab) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("tab", value);
+      return next;
+    });
+  };
 
   if (!user) return null;
 
@@ -158,34 +183,42 @@ export function ReportsPage() {
         <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
           <Space wrap>
             {options.length > 1 ? (
-              <Segmented value={activeTab} onChange={(value) => setTab(value as DailyTab)} options={options} />
+              <Segmented value={activeTab} onChange={(value) => handleTabChange(value as DailyTab)} options={options} />
             ) : null}
             <RangePicker value={dateRange} onChange={(value) => setDateRange(value as [Dayjs, Dayjs] | null)} />
           </Space>
-          <Button type="primary" icon={<RobotOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
-            {generateLabel}
-          </Button>
+          {canGenerate ? (
+            <Button type="primary" icon={<RobotOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
+              {generateLabel}
+            </Button>
+          ) : null}
         </Space>
       </Card>
       {activeTab === "personal" ? (
         <PersonalDailyTable
+          key={`personal:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
+          onView={(record) => navigate(`/reports/daily/personal/${record.id}${querySuffix}`)}
           onEdit={(record) => setGenerateTarget({ scope: "personal", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {activeTab === "team" ? (
         <TeamDailyTable
+          key={`team:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
-          onOpen={(record) => setGenerateTarget({ scope: "team", reportId: record.id, reportDate: record.report_date })}
+          onView={(record) => navigate(`/reports/daily/team/${record.id}${querySuffix}`)}
+          onEdit={(record) => setGenerateTarget({ scope: "team", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {activeTab === "department" ? (
         <DepartmentDailyTable
+          key={`department:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
-          onOpen={(record) => setGenerateTarget({ scope: "department", reportId: record.id, reportDate: record.report_date })}
+          onView={(record) => navigate(`/reports/daily/department/${record.id}${querySuffix}`)}
+          onEdit={(record) => setGenerateTarget({ scope: "department", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {generateTarget ? (
@@ -197,6 +230,7 @@ export function ReportsPage() {
           onClose={() => setGenerateTarget(null)}
           onDone={() => {
             void queryClient.invalidateQueries({ queryKey: ["reports", "daily"] });
+            void queryClient.invalidateQueries({ queryKey: ["reports"] });
           }}
         />
       ) : null}
@@ -207,10 +241,12 @@ export function ReportsPage() {
 function PersonalDailyTable({
   from,
   to,
+  onView,
   onEdit
 }: {
   from?: string;
   to?: string;
+  onView: (record: DailyReportListItem) => void;
   onEdit: (record: DailyReportListItem) => void;
 }) {
   const { user } = useAuth();
@@ -239,7 +275,7 @@ function PersonalDailyTable({
       width: 160,
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => onEdit(record)}>
+          <Button size="small" type="link" onClick={() => onView(record)}>
             查看
           </Button>
           <Button size="small" type="link" onClick={() => onEdit(record)}>
@@ -273,12 +309,14 @@ function TeamDailyTable({
   from,
   to,
   readonly,
-  onOpen
+  onView,
+  onEdit
 }: {
   from?: string;
   to?: string;
   readonly?: boolean;
-  onOpen: (record: TeamReportListItem) => void;
+  onView: (record: TeamReportListItem) => void;
+  onEdit: (record: TeamReportListItem) => void;
 }) {
   const { page, pageSize, tablePagination } = useTablePagination();
 
@@ -308,11 +346,11 @@ function TeamDailyTable({
       width: 220,
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => onOpen(record)}>
+          <Button size="small" type="link" onClick={() => onView(record)}>
             查看
           </Button>
           {!readonly ? (
-            <Button size="small" type="link" onClick={() => onOpen(record)}>
+            <Button size="small" type="link" onClick={() => onEdit(record)}>
               编辑
             </Button>
           ) : null}
@@ -342,11 +380,13 @@ function TeamDailyTable({
 function DepartmentDailyTable({
   from,
   to,
-  onOpen
+  onView,
+  onEdit
 }: {
   from?: string;
   to?: string;
-  onOpen: (record: DepartmentReportListItem) => void;
+  onView: (record: DepartmentReportListItem) => void;
+  onEdit: (record: DepartmentReportListItem) => void;
 }) {
   const { page, pageSize, tablePagination } = useTablePagination();
 
@@ -376,10 +416,10 @@ function DepartmentDailyTable({
       width: 160,
       render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => onOpen(record)}>
+          <Button size="small" type="link" onClick={() => onView(record)}>
             查看
           </Button>
-          <Button size="small" type="link" onClick={() => onOpen(record)}>
+          <Button size="small" type="link" onClick={() => onEdit(record)}>
             编辑
           </Button>
         </Space>
@@ -431,7 +471,7 @@ export function PersonalDailyReportDetailPage() {
   });
 
   return (
-    <PagePanel title="个人日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "个人日报详情" }]} showNav={false}>
+    <PagePanel title="个人日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报", path: dailyReportsPath("personal") }, { title: "个人日报详情" }]} showNav={false}>
       {reportQuery.isError ? (
         <Alert type="error" showIcon message="个人日报加载失败" description={errorMessage(reportQuery.error)} />
       ) : !report ? (
@@ -440,7 +480,7 @@ export function PersonalDailyReportDetailPage() {
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
-              <Text>日期：{report.report_date}</Text>
+              <Text>日期：{formatDate(report.report_date)}</Text>
               <Text>状态：{report.edited ? "已编辑" : "自动生成"}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
               <Text>来源 session 数：{report.session_ids.length}</Text>
@@ -522,7 +562,7 @@ export function TeamDailyReportDetailPage() {
   });
 
   return (
-    <PagePanel title="小组日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "小组日报详情" }]} showNav={false}>
+    <PagePanel title="小组日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报", path: dailyReportsPath("team") }, { title: "小组日报详情" }]} showNav={false}>
       {reportQuery.isError ? (
         <Alert type="error" showIcon message="小组日报加载失败" description={errorMessage(reportQuery.error)} />
       ) : !report ? (
@@ -531,7 +571,7 @@ export function TeamDailyReportDetailPage() {
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
-              <Text>日期：{report.report_date}</Text>
+              <Text>日期：{formatDate(report.report_date)}</Text>
               <Text>小组：{report.team_name}</Text>
               <Text>成员发送：{sourcesQuery.data ? `${sourcesQuery.data.submitted}/${sourcesQuery.data.members.length}` : "-"}</Text>
               <Text>状态：{report.status === "submitted" ? "已发送" : report.status === "saved" && report.submitted_at ? "已保存，未发送最新修改" : "已保存"}</Text>
@@ -594,6 +634,7 @@ export function TeamDailyReportDetailPage() {
             <DailyReportGenerateModal
               open
               scope="team"
+              reportId={report.id}
               reportDate={report.report_date}
               onClose={() => setGenerateOpen(false)}
               onDone={() => {
@@ -654,7 +695,6 @@ export function DepartmentDailyReportDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [draft, setDraft] = useState<{ reportId?: string; content: string }>({ content: "" });
   const [generateOpen, setGenerateOpen] = useState(false);
 
   const reportQuery = useQuery({
@@ -664,7 +704,7 @@ export function DepartmentDailyReportDetailPage() {
     staleTime: 30_000
   });
   const report = reportQuery.data;
-  const content = draft.reportId === report?.id ? draft.content : (report?.content ?? "");
+  const content = report?.content ?? "";
 
   const sourcesQuery = useQuery<DepartmentReportSources>({
     queryKey: ["reports", "daily", "department-sources", report?.report_date],
@@ -684,7 +724,7 @@ export function DepartmentDailyReportDetailPage() {
   });
 
   return (
-    <PagePanel title="部门日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报" }, { title: "部门日报详情" }]} showNav={false}>
+    <PagePanel title="部门日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报", path: dailyReportsPath("department") }, { title: "部门日报详情" }]} showNav={false}>
       {reportQuery.isError ? (
         <Alert type="error" showIcon message="部门日报加载失败" description={errorMessage(reportQuery.error)} />
       ) : !report ? (
@@ -693,7 +733,7 @@ export function DepartmentDailyReportDetailPage() {
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Card>
             <Space size="large" wrap>
-              <Text>日期：{report.report_date}</Text>
+              <Text>日期：{formatDate(report.report_date)}</Text>
               <Text>
                 小组发送：
                 {sourcesQuery.data
@@ -707,17 +747,6 @@ export function DepartmentDailyReportDetailPage() {
           </Card>
           <Tabs
             items={[
-              {
-                key: "sources",
-                label: "原始小组日报",
-                children: sourcesQuery.isError ? (
-                  <Alert type="error" showIcon message="小组日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
-                ) : sourcesQuery.isLoading ? (
-                  <Card loading />
-                ) : (
-                  <DepartmentSources sources={sourcesQuery.data} />
-                )
-              },
               {
                 key: "report",
                 label: "部门日报",
@@ -734,12 +763,19 @@ export function DepartmentDailyReportDetailPage() {
                       </Space>
                     }
                   >
-                    <TextArea
-                      rows={14}
-                      value={content}
-                      onChange={(event) => setDraft({ reportId: report.id, content: event.target.value })}
-                    />
+                    {content.trim() ? <MarkdownViewer value={content} /> : <Empty description="暂无部门日报内容" />}
                   </Card>
+                )
+              },
+              {
+                key: "sources",
+                label: "原始小组日报",
+                children: sourcesQuery.isError ? (
+                  <Alert type="error" showIcon message="小组日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
+                ) : sourcesQuery.isLoading ? (
+                  <Card loading />
+                ) : (
+                  <DepartmentSources sources={sourcesQuery.data} />
                 )
               }
             ]}
@@ -748,6 +784,7 @@ export function DepartmentDailyReportDetailPage() {
             <DailyReportGenerateModal
               open
               scope="department"
+              reportId={report.id}
               reportDate={report.report_date}
               onClose={() => setGenerateOpen(false)}
               onDone={() => {
@@ -764,6 +801,8 @@ export function DepartmentDailyReportDetailPage() {
 }
 
 function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
+  const [sourcePreview, setSourcePreview] = useState<DepartmentTeamReportSource | null>(null);
+
   if (!sources) return <Empty description="暂无来源" />;
   type DepartmentSourceRow = DepartmentTeamReportSource | (DepartmentMissingTeam & { has_report: false });
   const rows: DepartmentSourceRow[] = [
@@ -789,7 +828,14 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
       title: "操作",
       key: "actions",
       width: 140,
-      render: (_, record) => (record.has_report ? <Text type="secondary">展开查看原文</Text> : "-")
+      render: (_, record) =>
+        record.has_report && "content" in record ? (
+          <Button size="small" type="link" onClick={() => setSourcePreview(record)}>
+            查看原文
+          </Button>
+        ) : (
+          "-"
+        )
     }
   ];
   return (
@@ -806,13 +852,16 @@ function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
         columns={columns}
         dataSource={rows}
         pagination={false}
-        expandable={{
-          rowExpandable: (record) => record.has_report,
-          expandedRowRender: (record) => (
-            <pre className="reports-source-content">{"content" in record ? record.content || "暂无小组日报原文" : ""}</pre>
-          )
-        }}
       />
+      <Modal
+        open={Boolean(sourcePreview)}
+        title={sourcePreview ? `${sourcePreview.team_name} 原文` : "小组日报原文"}
+        footer={null}
+        width={840}
+        onCancel={() => setSourcePreview(null)}
+      >
+        <pre className="reports-source-content">{sourcePreview?.content || "暂无小组日报原文"}</pre>
+      </Modal>
     </Space>
   );
 }
