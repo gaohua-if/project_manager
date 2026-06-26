@@ -259,9 +259,29 @@ export function TokensPage() {
           columns={[
             {
               title: "记录",
-              dataIndex: "session_ref",
-              render: (v: string) => <span className="tokens-session-ref">{v.slice(0, 12)}</span>,
-              width: 130
+              key: "record",
+              width: 260,
+              render: (_: unknown, s) => (
+                <Space direction="vertical" size={0}>
+                  <span className="tokens-session-ref">{s.session_ref.slice(0, 12)}</span>
+                  {s.summary ? (
+                    <span
+                      title={s.summary}
+                      style={{
+                        display: "inline-block",
+                        maxWidth: 220,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        color: "var(--color-text-secondary, #64748b)",
+                        fontSize: 12
+                      }}
+                    >
+                      {s.summary}
+                    </span>
+                  ) : null}
+                </Space>
+              )
             },
             ...(effectiveScope === "team"
               ? [

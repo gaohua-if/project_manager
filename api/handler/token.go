@@ -145,6 +145,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 	q := `
 		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name, ''), s.agent_type,
 		       CASE WHEN s.models <> '{}' THEN s.models ELSE ARRAY[s.model] END,
+		       s.summary,
 		       s.started_at,
 		       COALESCE(tu.input_tokens, 0),
 		       COALESCE(tu.output_tokens, 0),
@@ -174,12 +175,14 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var s model.SessionTokens
 		var models pq.StringArray
+		var summary sql.NullString
 		if err := rows.Scan(&s.SessionID, &s.SessionRef, &s.UserID, &s.UserName, &s.AgentType, &models,
-			&s.StartedAt, &s.InputTokens, &s.OutputTokens,
+			&summary, &s.StartedAt, &s.InputTokens, &s.OutputTokens,
 			&s.CacheCreationTokens, &s.CacheReadTokens, &s.TotalTokens); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		s.Summary = nullStringPtr(summary)
 		s.Models = []string(models)
 		if s.Models == nil {
 			s.Models = []string{}

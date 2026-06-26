@@ -738,6 +738,7 @@ type SessionTokens struct {
 	UserName            string    `json:"user_name"`
 	AgentType           string    `json:"agent_type"`
 	Models              []string  `json:"models"`
+	Summary             *string   `json:"summary,omitempty"`
 	StartedAt           time.Time `json:"started_at"`
 	InputTokens         int64     `json:"input_tokens"`
 	OutputTokens        int64     `json:"output_tokens"`

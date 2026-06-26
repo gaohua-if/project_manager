@@ -509,6 +509,7 @@ export interface SessionTokens {
   user_name: string;
   agent_type: string;
   models: string[];
+  summary?: string;
   started_at: string;
   input_tokens: number;
   output_tokens: number;
