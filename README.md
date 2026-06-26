@@ -104,6 +104,50 @@ go build -o aida .
 cp aida /usr/local/bin/
 ```
 
+### Linux CLI Release 打包与安装
+
+面向用户发布 `aida` CLI 时，不要求用户安装 Go 或 Docker。发布人员在当前项目主机上用项目既有的 Go Docker builder 打包 Linux 二进制即可；该 builder 与 `daemon/Dockerfile` 保持一致，使用 `golang:1.26-alpine`。
+
+```bash
+# 在仓库根目录执行
+make release-dir AIDA_RELEASE_URL=http://<host>/statics-live/aida
+```
+
+该命令会生成 release 静态目录：
+
+```text
+./aida-releases/
+  install.sh
+  aida-linux-amd64
+  aida-latest.txt
+  SHA256SUMS.txt
+```
+
+将 `./aida-releases/` 里的文件发布到静态下载目录，例如 `http://<host>/statics-live/aida/`。
+
+Linux 用户安装：
+
+```bash
+curl -fsSL http://<host>/statics-live/aida/install.sh | bash
+
+aida login --server http://<server>:8080/api/v1 --token <jwt>
+aida sessions
+aida upload --all
+```
+
+如果要安装时直接写入登录配置：
+
+```bash
+curl -fsSL http://<host>/statics-live/aida/install.sh \
+  | AIDA_API_URL=http://<server>:8080/api/v1 AIDA_TOKEN=<jwt> bash
+```
+
+约定：
+
+- Windows 版本暂不纳入当前发布流程。
+- 用户机器只需要 `aida` 二进制，不需要 Go、Docker 或源码。
+- 发布机器使用 Docker builder，避免本机 Go 版本不一致。当前 `daemon/go.mod` 要求 Go 1.26.3+，不要使用低版本 Go 镜像打包。
+
 ---
 
 ## 角色与权限

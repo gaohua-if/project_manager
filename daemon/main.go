@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var Version = "dev"
+
 type Config struct {
 	APIURL     string `yaml:"api_url"`
 	Token      string `yaml:"token"`
@@ -108,6 +110,8 @@ func main() {
 		cmdServeReports(os.Args[2:])
 	case "status":
 		cmdStatus()
+	case "version", "--version", "-v":
+		fmt.Printf("aida %s\n", Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -130,6 +134,7 @@ Commands:
   consume  [--once]                         Upload sessions and generate daily report
   serve                                      Run report generator HTTP service
   status                                     Show current login status
+  version                                    Show CLI version
 
 Examples:
   # Login with platform token
