@@ -15,7 +15,8 @@ This repository contains Aida: a Go API, Go CLI daemon, PostgreSQL schema, and N
 - `docker compose up -d db`: start only the database for API development.
 - `cd api && go run main.go`: run the API locally. Set `DATABASE_URL`, `JWT_SECRET`, and `PORT` when needed.
 - `cd daemon && go build -o aida .`: build the CLI binary.
-- `make release-dir AIDA_RELEASE_URL=http://<host>/statics-live/aida`: package the Linux CLI release directory (`install.sh`, `aida-linux-amd64`, `aida-latest.txt`, `SHA256SUMS.txt`) using the Docker Go builder. Users should not need Go or Docker.
+- `make release-test-dir`: package the Linux/Windows CLI test release directory `aida-releases-test/`, with download URL fixed to `http://192.168.14.157:9000/statics-live/aida`.
+- Production CLI release packaging uses `make release-prod-dir` and is documented in `doc/AI_Coding_Console_简易部署文档.md`; do not reuse the test package for production. Users should not need Go or Docker. Windows users install with `install.ps1`.
 - `cd web && pnpm dev`: run the web dashboard locally.
 - `cd web && pnpm build`: build the production Next.js app.
 - `cd web && pnpm lint`: run ESLint for the frontend.

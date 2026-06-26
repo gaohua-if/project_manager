@@ -104,31 +104,44 @@ go build -o aida .
 cp aida /usr/local/bin/
 ```
 
-### Linux CLI Release 打包与安装
+### CLI Release 打包与安装
 
-面向用户发布 `aida` CLI 时，不要求用户安装 Go 或 Docker。发布人员在当前项目主机上用项目既有的 Go Docker builder 打包 Linux 二进制即可；该 builder 与 `daemon/Dockerfile` 保持一致，使用 `golang:1.26-alpine`。
+面向用户发布 `aida` CLI 时，不要求用户安装 Go 或 Docker。发布人员在当前项目主机上用项目既有的 Go Docker builder 同时打包 Linux/Windows 二进制；该 builder 与 `daemon/Dockerfile` 保持一致，使用 `golang:1.26-alpine`。
 
 ```bash
 # 在仓库根目录执行
-make release-dir AIDA_RELEASE_URL=http://<host>/statics-live/aida
+# 测试包：固化当前测试主机 192.168.14.157 的 MinIO 下载地址
+make release-test-dir
 ```
 
-该命令会生成 release 静态目录：
+该命令会生成测试 release 静态目录：
 
 ```text
-./aida-releases/
+./aida-releases-test/
   install.sh
+  install.ps1
   aida-linux-amd64
+  aida-windows-amd64.exe
   aida-latest.txt
   SHA256SUMS.txt
 ```
 
-将 `./aida-releases/` 里的文件发布到静态下载目录，例如 `http://<host>/statics-live/aida/`。
+将目录里的文件发布到测试静态下载目录 `http://192.168.14.157:9000/statics-live/aida/`。正式包使用 `make release-prod-dir`，见 `doc/AI_Coding_Console_简易部署文档.md`。
 
 Linux 用户安装：
 
 ```bash
 curl -fsSL http://<host>/statics-live/aida/install.sh | bash
+
+aida login --server http://<server>:8080/api/v1 --token <jwt>
+aida sessions
+aida upload --all
+```
+
+Windows 用户安装：
+
+```powershell
+powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
 
 aida login --server http://<server>:8080/api/v1 --token <jwt>
 aida sessions
@@ -142,11 +155,18 @@ curl -fsSL http://<host>/statics-live/aida/install.sh \
   | AIDA_API_URL=http://<server>:8080/api/v1 AIDA_TOKEN=<jwt> bash
 ```
 
+Windows 对应命令：
+
+```powershell
+$env:AIDA_API_URL="http://<server>:8080/api/v1"; $env:AIDA_TOKEN="<jwt>"; powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
+```
+
 约定：
 
-- Windows 版本暂不纳入当前发布流程。
 - 用户机器只需要 `aida` 二进制，不需要 Go、Docker 或源码。
+- Windows 安装脚本会安装到 `%LOCALAPPDATA%\Aida\bin\aida.exe`，并自动写入当前用户 PATH；用户可能需要重新打开 PowerShell。
 - 发布机器使用 Docker builder，避免本机 Go 版本不一致。当前 `daemon/go.mod` 要求 Go 1.26.3+，不要使用低版本 Go 镜像打包。
+- `release-test-dir` 固定测试下载地址为 `http://192.168.14.157:9000/statics-live/aida`；正式包不要复用测试包。
 
 ---
 

@@ -37,5 +37,7 @@ daemon/tmp/
 *.dylib
 dist/
 aida-releases/
+aida-releases-test/
+aida-releases-release/
 aida_release_*.tar.gz
 .cache/

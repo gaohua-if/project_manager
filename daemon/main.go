@@ -138,10 +138,10 @@ Commands:
 
 Examples:
   # Login with platform token
-  aida login --server http://localhost:8080/api/v1 --token eyJhbG...
+  aida login --server http://<server>:18090/api/v1 --token eyJhbG...
 
   # Login interactively (enter token when prompted)
-  aida login --server http://localhost:8080/api/v1
+  aida login --server http://<server>:18090/api/v1
 
   # List recent sessions (last 48h)
   aida sessions
@@ -173,7 +173,7 @@ Session logs location:
 Documentation:
   PRD:        See PRD.md in the project repository
   Prototype:  See prototype.html in the project repository
-  API:        http://localhost:8080/health  (health check)
+  API:        http://<server>:18090/health  (health check)
 `)
 }
 

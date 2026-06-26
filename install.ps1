@@ -1,0 +1,131 @@
+# Aida Windows CLI installer.
+#
+# Usage:
+#   powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
+#
+# Optional environment variables:
+#   AIDA_RELEASE_URL  Static release directory URL, defaults to the packaged value.
+#   AIDA_API_URL      Aida API base URL written to %USERPROFILE%\.aida.yaml. Defaults to the packaged value.
+#   AIDA_TOKEN        User JWT written to %USERPROFILE%\.aida.yaml when provided.
+#   AIDA_INSTALL_DIR  Install directory, default %LOCALAPPDATA%\Aida\bin.
+#   AIDA_FORCE        Set to 1 to skip update prompts.
+
+$ErrorActionPreference = "Stop"
+
+$DefaultReleaseUrl = "http://localhost:5080/statics-live/aida"
+$DefaultApiUrl = "http://localhost:8080/api/v1"
+
+function Resolve-Value($Value, $Default) {
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $Default
+    }
+    return $Value
+}
+
+function Add-UserPath($PathToAdd) {
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ([string]::IsNullOrWhiteSpace($userPath)) {
+        $items = @()
+    } else {
+        $items = $userPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    $alreadyAdded = $false
+    foreach ($item in $items) {
+        if ($item.TrimEnd('\') -ieq $PathToAdd.TrimEnd('\')) {
+            $alreadyAdded = $true
+            break
+        }
+    }
+
+    if (-not $alreadyAdded) {
+        $newPath = if ([string]::IsNullOrWhiteSpace($userPath)) { $PathToAdd } else { "$userPath;$PathToAdd" }
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+        $env:Path = "$env:Path;$PathToAdd"
+        return $true
+    }
+    return $false
+}
+
+if (-not [Environment]::Is64BitOperatingSystem) {
+    throw "Unsupported Windows architecture. Current release only provides windows/amd64."
+}
+
+$releaseUrl = (Resolve-Value $env:AIDA_RELEASE_URL $DefaultReleaseUrl).TrimEnd('/')
+$apiUrl = (Resolve-Value $env:AIDA_API_URL $DefaultApiUrl).TrimEnd('/')
+$token = $env:AIDA_TOKEN
+$installDir = Resolve-Value $env:AIDA_INSTALL_DIR (Join-Path $env:LOCALAPPDATA "Aida\bin")
+$aidaExe = Join-Path $installDir "aida.exe"
+
+Write-Host "=== Aida Installer ==="
+Write-Host "  Release URL: $releaseUrl"
+Write-Host "  Install dir: $installDir"
+Write-Host "  API URL:     $apiUrl"
+Write-Host ""
+
+$version = (Invoke-RestMethod "$releaseUrl/aida-latest.txt").ToString().Trim()
+if ([string]::IsNullOrWhiteSpace($version)) {
+    throw "failed to fetch aida-latest.txt"
+}
+
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+
+$needInstall = $true
+if (Test-Path $aidaExe) {
+    try {
+        $current = (& $aidaExe version 2>$null | Select-Object -First 1).ToString().Split(' ')[1]
+    } catch {
+        $current = ""
+    }
+
+    if ($current -eq $version) {
+        Write-Host "aida v$version already installed, skipping binary download"
+        $needInstall = $false
+    } elseif ($env:AIDA_FORCE -ne "1") {
+        Write-Host "aida update available: $current -> $version"
+    }
+}
+
+if ($needInstall) {
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("aida-windows-amd64-{0}.exe" -f ([Guid]::NewGuid().ToString("N")))
+    Write-Host "downloading aida-windows-amd64.exe ..."
+    Invoke-WebRequest -Uri "$releaseUrl/aida-windows-amd64.exe" -OutFile $tmp
+
+    $size = (Get-Item $tmp).Length
+    if ($size -lt 1048576) {
+        Remove-Item -Force $tmp
+        throw "downloaded binary is too small ($size bytes). Check $releaseUrl/aida-windows-amd64.exe"
+    }
+
+    Move-Item -Force $tmp $aidaExe
+    Write-Host "installed aida v$version -> $aidaExe"
+}
+
+$pathChanged = Add-UserPath $installDir
+if ($pathChanged) {
+    Write-Host "added $installDir to the current user's PATH"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($apiUrl) -or -not [string]::IsNullOrWhiteSpace($token)) {
+    $configFile = Join-Path $env:USERPROFILE ".aida.yaml"
+    $lines = @()
+    if (-not [string]::IsNullOrWhiteSpace($apiUrl)) {
+        $lines += "api_url: $apiUrl"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($token)) {
+        $lines += "token: $token"
+    }
+    Set-Content -Path $configFile -Value $lines -Encoding UTF8
+    Write-Host "wrote config -> $configFile"
+}
+
+Write-Host ""
+Write-Host "=== Installation complete ==="
+if ($pathChanged) {
+    Write-Host "Close this PowerShell window and open a new one so PATH is refreshed."
+}
+if ([string]::IsNullOrWhiteSpace($token)) {
+    Write-Host "Login: aida login --server $apiUrl --token <jwt>"
+}
+Write-Host "List local sessions: aida sessions"
+Write-Host "Upload sessions:     aida upload --all"

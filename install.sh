@@ -8,7 +8,7 @@
 #
 # Environment variables:
 #   AIDA_RELEASE_URL  Static release directory URL, defaults to the packaged value.
-#   AIDA_API_URL      Aida API base URL written to ~/.aida.yaml when provided.
+#   AIDA_API_URL      Aida API base URL written to ~/.aida.yaml. Defaults to the packaged value when provided by the release package.
 #   AIDA_TOKEN        User JWT written to ~/.aida.yaml when provided.
 #   AIDA_INSTALL_DIR  Install directory, default ~/.local/bin.
 #   AIDA_FORCE        Set to 1 to skip update prompts.
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 RELEASE_URL="${AIDA_RELEASE_URL:-http://localhost:5080/statics-live/aida}"
-API_URL="${AIDA_API_URL:-}"
+API_URL="${AIDA_API_URL:-http://localhost:8080/api/v1}"
 TOKEN="${AIDA_TOKEN:-}"
 INSTALL_DIR="${AIDA_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -147,8 +147,8 @@ if [ -n "$PATH_RC_FILE" ]; then
     echo "  ${step}. Reload your shell: source $PATH_RC_FILE"
     step=$((step + 1))
 fi
-if [ -z "$TOKEN" ] || [ -z "$API_URL" ]; then
-    echo "  ${step}. Login: aida login --server http://<server>:8080/api/v1 --token <jwt>"
+if [ -z "$TOKEN" ]; then
+    echo "  ${step}. Login: aida login --server ${API_URL%/} --token <jwt>"
     step=$((step + 1))
 fi
 echo "  ${step}. List local sessions: aida sessions"

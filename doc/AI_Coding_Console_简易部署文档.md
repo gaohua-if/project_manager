@@ -244,21 +244,34 @@ http://服务器IP:9001
 
 ## 7. aida CLI 安装包托管（MinIO）
 
-用户通过 `curl ... | bash` 安装 `aida` 命令行工具。安装包直接托管在本机 MinIO 上，无需额外静态服务器。
+用户通过 Linux `curl ... | bash` 或 Windows PowerShell 一行命令安装 `aida` 命令行工具。安装包直接托管在本机 MinIO 上，无需额外静态服务器。
 
 ### 7.1 构建发布包
 
-在能编译的开发机执行（`AIDA_RELEASE_URL` 会被固化进 `install.sh`，必须指向最终对外地址）：
+在能编译的开发机执行（`AIDA_RELEASE_URL` 会被固化进 `install.sh`，必须指向最终对外地址）。
+
+测试包固定使用当前测试主机 `192.168.14.157`：
 
 ```bash
 # 修改根目录 VERSION 后构建
-make release-dir AIDA_RELEASE_URL=http://<服务器IP>:9000/statics-live/aida
-# 产物在 ./aida-releases/：aida-linux-amd64 / install.sh / aida-latest.txt / SHA256SUMS.txt
+make release-test-dir
+# 产物在 ./aida-releases-test/：
+# install.sh / install.ps1 / aida-linux-amd64 / aida-windows-amd64.exe / aida-latest.txt / SHA256SUMS.txt
+```
+
+正式包必须传入最终部署服务器地址：
+
+```bash
+make release-prod-dir \
+  AIDA_RELEASE_URL=http://<服务器IP>:9000/statics-live/aida \
+  AIDA_API_URL=http://<服务器IP>:18090/api/v1
+# 产物在 ./aida-releases-release/：
+# install.sh / install.ps1 / aida-linux-amd64 / aida-windows-amd64.exe / aida-latest.txt / SHA256SUMS.txt
 ```
 
 ### 7.2 上传到 MinIO 并开放匿名下载
 
-把 `aida-releases/` 传到服务器（如 `/tmp/aida-releases`），然后用 `minio/mc` 容器上传到
+把对应 release 目录传到服务器（如测试包 `aida-releases-test/`，正式包 `aida-releases-release/`，目标路径统一示例为 `/tmp/aida-releases`），然后用 `minio/mc` 容器上传到
 bucket `statics-live`、前缀 `aida/`，并设匿名只读：
 
 ```bash
@@ -274,12 +287,20 @@ docker run --rm --network host -v /tmp/aida-releases:/data:ro --entrypoint sh mi
 
 ### 7.3 安装命令
 
+Linux：
+
 ```bash
 curl -fsSL http://<服务器IP>:9000/statics-live/aida/install.sh \
   | AIDA_API_URL=http://<服务器IP>:18090/api/v1 AIDA_TOKEN=<用户JWT> bash
 ```
 
-不带 `AIDA_API_URL` / `AIDA_TOKEN` 也可安装，装完再执行 `aida login` 即可。
+Windows：
+
+```powershell
+$env:AIDA_API_URL="http://<服务器IP>:18090/api/v1"; $env:AIDA_TOKEN="<用户JWT>"; powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<服务器IP>:9000/statics-live/aida/install.ps1 | Invoke-Expression"
+```
+
+不带 `AIDA_API_URL` / `AIDA_TOKEN` 也可安装，装完再执行 `aida login` 即可。Windows 安装脚本会写入当前用户 PATH，安装后建议重新打开 PowerShell。
 
 ### 7.4（可选）去掉 URL 中的 `:9000`
 
@@ -304,4 +325,10 @@ server {
 
 ```bash
 curl -fsSL http://<服务器IP>/statics-live/aida/install.sh | bash
+```
+
+Windows：
+
+```powershell
+powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<服务器IP>/statics-live/aida/install.ps1 | Invoke-Expression"
 ```
