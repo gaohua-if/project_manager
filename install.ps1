@@ -1,7 +1,7 @@
 # Aida Windows CLI installer.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
+#   Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression
 #
 # Optional environment variables:
 #   AIDA_RELEASE_URL  Static release directory URL, defaults to the packaged value.
@@ -45,6 +45,37 @@ function Add-UserPath($PathToAdd) {
         return $true
     }
     return $false
+}
+
+function Test-PathListContains($PathList, $PathToFind) {
+    if ([string]::IsNullOrWhiteSpace($PathList)) {
+        return $false
+    }
+
+    $target = $PathToFind.TrimEnd('\')
+    foreach ($item in ($PathList -split ';')) {
+        if (-not [string]::IsNullOrWhiteSpace($item) -and $item.TrimEnd('\') -ieq $target) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Update-CurrentProcessPath($PathToAdd) {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $pathParts = @($machinePath, $userPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $combinedPath = [string]::Join(';', $pathParts)
+
+    if ([string]::IsNullOrWhiteSpace($combinedPath)) {
+        $combinedPath = $env:Path
+    }
+
+    if (-not (Test-PathListContains $combinedPath $PathToAdd)) {
+        $combinedPath = if ([string]::IsNullOrWhiteSpace($combinedPath)) { $PathToAdd } else { "$combinedPath;$PathToAdd" }
+    }
+
+    $env:Path = $combinedPath
 }
 
 if (-not [Environment]::Is64BitOperatingSystem) {
@@ -102,6 +133,7 @@ if ($needInstall) {
 }
 
 $pathChanged = Add-UserPath $installDir
+Update-CurrentProcessPath $installDir
 if ($pathChanged) {
     Write-Host "added $installDir to the current user's PATH"
 }
@@ -121,8 +153,12 @@ if (-not [string]::IsNullOrWhiteSpace($apiUrl) -or -not [string]::IsNullOrWhiteS
 
 Write-Host ""
 Write-Host "=== Installation complete ==="
-if ($pathChanged) {
-    Write-Host "Close this PowerShell window and open a new one so PATH is refreshed."
+if (Get-Command aida -ErrorAction SilentlyContinue) {
+    Write-Host "aida is available in this PowerShell session."
+} else {
+    Write-Host "aida.exe is installed, but this parent shell did not receive the PATH update."
+    Write-Host "Run in the current PowerShell session:"
+    Write-Host '  $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")'
 }
 if ([string]::IsNullOrWhiteSpace($token)) {
     Write-Host "Login: aida login --server $apiUrl --token <jwt>"

@@ -55,7 +55,7 @@ define package_release
 	@echo "publish its contents to: $(2)"
 	@echo "install command:"
 	@echo "  curl -fsSL $(2)/install.sh | AIDA_API_URL=$(3) AIDA_TOKEN=<jwt> bash"
-	@echo "  powershell -ExecutionPolicy Bypass -NoProfile -Command \"Invoke-RestMethod $(2)/install.ps1 | Invoke-Expression\""
+	@echo "  Invoke-RestMethod $(2)/install.ps1 | Invoke-Expression"
 endef
 
 clean:

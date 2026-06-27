@@ -297,10 +297,10 @@ curl -fsSL http://<服务器IP>:9000/statics-live/aida/install.sh \
 Windows：
 
 ```powershell
-$env:AIDA_API_URL="http://<服务器IP>:18090/api/v1"; $env:AIDA_TOKEN="<用户JWT>"; powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<服务器IP>:9000/statics-live/aida/install.ps1 | Invoke-Expression"
+$env:AIDA_API_URL="http://<服务器IP>:18090/api/v1"; $env:AIDA_TOKEN="<用户JWT>"; Invoke-RestMethod http://<服务器IP>:9000/statics-live/aida/install.ps1 | Invoke-Expression
 ```
 
-不带 `AIDA_API_URL` / `AIDA_TOKEN` 也可安装，装完再执行 `aida login` 即可。Windows 安装脚本会写入当前用户 PATH，安装后建议重新打开 PowerShell。
+不带 `AIDA_API_URL` / `AIDA_TOKEN` 也可安装，装完再执行 `aida login` 即可。Windows 安装脚本会写入当前用户 PATH，并刷新当前 PowerShell 会话。注意不要在已打开的 PowerShell 里再套一层 `powershell -Command`，否则 PATH 只能刷新到子进程。
 
 ### 7.4（可选）去掉 URL 中的 `:9000`
 
@@ -330,5 +330,5 @@ curl -fsSL http://<服务器IP>/statics-live/aida/install.sh | bash
 Windows：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<服务器IP>/statics-live/aida/install.ps1 | Invoke-Expression"
+Invoke-RestMethod http://<服务器IP>/statics-live/aida/install.ps1 | Invoke-Expression
 ```

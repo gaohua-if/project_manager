@@ -141,7 +141,7 @@ aida upload --all
 Windows 用户安装：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
+Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression
 
 aida login --server http://<server>:8080/api/v1 --token <jwt>
 aida sessions
@@ -158,13 +158,13 @@ curl -fsSL http://<host>/statics-live/aida/install.sh \
 Windows 对应命令：
 
 ```powershell
-$env:AIDA_API_URL="http://<server>:8080/api/v1"; $env:AIDA_TOKEN="<jwt>"; powershell -ExecutionPolicy Bypass -NoProfile -Command "Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression"
+$env:AIDA_API_URL="http://<server>:8080/api/v1"; $env:AIDA_TOKEN="<jwt>"; Invoke-RestMethod http://<host>/statics-live/aida/install.ps1 | Invoke-Expression
 ```
 
 约定：
 
 - 用户机器只需要 `aida` 二进制，不需要 Go、Docker 或源码。
-- Windows 安装脚本会安装到 `%LOCALAPPDATA%\Aida\bin\aida.exe`，并自动写入当前用户 PATH；用户可能需要重新打开 PowerShell。
+- Windows 安装脚本会安装到 `%LOCALAPPDATA%\Aida\bin\aida.exe`，并自动写入当前用户 PATH。请在当前 PowerShell 会话直接执行 `Invoke-RestMethod ... | Invoke-Expression`，不要在已打开的 PowerShell 里再套一层 `powershell -Command`，否则 PATH 只能刷新到子进程。
 - 发布机器使用 Docker builder，避免本机 Go 版本不一致。当前 `daemon/go.mod` 要求 Go 1.26.3+，不要使用低版本 Go 镜像打包。
 - `release-test-dir` 固定测试下载地址为 `http://192.168.14.157:9000/statics-live/aida`；正式包不要复用测试包。
 
