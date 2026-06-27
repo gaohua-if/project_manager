@@ -90,7 +90,11 @@ import {
   DailyReportGenerateModal,
   type DailyGenerateScope
 } from "../reports/components/DailyReportGenerateModal";
-import { PersonalWeeklyReportModal } from "../reports/pages/WeeklyReportsPage";
+import {
+  DepartmentWeeklyReportModal,
+  PersonalWeeklyReportModal,
+  TeamWeeklyReportModal
+} from "../reports/pages/WeeklyReportsPage";
 
 import "./console-dashboard.css";
 
@@ -939,6 +943,8 @@ export function DashboardPage() {
     reportDate?: string;
   } | null>(null);
   const [weeklyMineOpen, setWeeklyMineOpen] = useState(false);
+  const [teamWeeklyOpen, setTeamWeeklyOpen] = useState(false);
+  const [departmentWeeklyOpen, setDepartmentWeeklyOpen] = useState(false);
   const dashboardRole = getDashboardRole(user?.role);
   const data = useMemo(() => ROLE_DATA[dashboardRole], [dashboardRole]);
   const personalWeeklyQuery = useQuery({
@@ -984,7 +990,11 @@ export function DashboardPage() {
   });
   const summaryReports = (data.summaryReports ?? [])
     .filter(
-      (reportItem) => reportItem.kind === "team_daily" || reportItem.kind === "department_daily"
+      (reportItem) =>
+        reportItem.kind === "team_daily" ||
+        reportItem.kind === "department_daily" ||
+        reportItem.kind === "team_weekly" ||
+        reportItem.kind === "department_weekly"
     )
     .map((reportItem) => {
       if (reportItem.kind === "team_daily") {
@@ -994,11 +1004,14 @@ export function DashboardPage() {
           teamReportQuery.isSuccess
         );
       }
-      return applyDepartmentDailyReportState(
-        reportItem,
-        departmentReportQuery.data,
-        departmentReportQuery.isSuccess
-      );
+      if (reportItem.kind === "department_daily") {
+        return applyDepartmentDailyReportState(
+          reportItem,
+          departmentReportQuery.data,
+          departmentReportQuery.isSuccess
+        );
+      }
+      return reportItem;
     });
   const effectiveCoverage =
     dashboardRole === "director" && departmentSourcesQuery.data
@@ -1386,8 +1399,12 @@ export function DashboardPage() {
       setWeeklyMineOpen(true);
       return;
     }
-    if (reportItem.kind === "team_weekly" || reportItem.kind === "department_weekly") {
-      navigate("/reports/weekly");
+    if (reportItem.kind === "team_weekly") {
+      setTeamWeeklyOpen(true);
+      return;
+    }
+    if (reportItem.kind === "department_weekly") {
+      setDepartmentWeeklyOpen(true);
       return;
     }
     const nextStep = step ?? getInitialReportModalStep(reportItem);
@@ -1678,6 +1695,30 @@ export function DashboardPage() {
         }}
       />
 
+      {teamWeeklyOpen ? (
+        <TeamWeeklyReportModal
+          open
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          onClose={() => setTeamWeeklyOpen(false)}
+          onDone={() => {
+            void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
+          }}
+        />
+      ) : null}
+
+      {departmentWeeklyOpen ? (
+        <DepartmentWeeklyReportModal
+          open
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          onClose={() => setDepartmentWeeklyOpen(false)}
+          onDone={() => {
+            void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
+          }}
+        />
+      ) : null}
+
       <Modal
         className="console-report-workflow-modal"
         title={getReportModalTitle(activeReport, reportModalStep)}
@@ -1800,6 +1841,9 @@ function ReportSection({
     const summaryDailyReport = summaryReports.find(
       (report) => report.kind === "team_daily" || report.kind === "department_daily"
     );
+    const summaryWeeklyReport = summaryReports.find(
+      (report) => report.kind === "team_weekly" || report.kind === "department_weekly"
+    );
     return (
       <div className="console-panel console-panel--daily">
         <PanelHeader icon={icon} title={title} />
@@ -1821,6 +1865,13 @@ function ReportSection({
             {weeklyReport ? (
               <ReportWeeklyInlineRow
                 report={weeklyReport}
+                onOpen={onOpen}
+              />
+            ) : null}
+            {summaryWeeklyReport ? (
+              <ReportManagementWeeklyInlineRow
+                report={summaryWeeklyReport}
+                coverage={coverage}
                 onOpen={onOpen}
               />
             ) : null}
@@ -1919,6 +1970,30 @@ function ReportWeeklyInlineRow({
       </div>
       <Button type="link" onClick={() => onOpen(report, getGenerateStepForReport(report))}>
         生成个人周报 <RightOutlined />
+      </Button>
+    </section>
+  );
+}
+
+function ReportManagementWeeklyInlineRow({
+  report,
+  coverage,
+  onOpen
+}: {
+  report: ReportItem;
+  coverage?: ReportCoverage;
+  onOpen: (report: ReportItem, step?: ReportModalStep) => void;
+}) {
+  return (
+    <section className="console-report-weekly-inline">
+      <div className="console-report-weekly-inline__main">
+        <Space size={8} wrap>
+          <strong>{report.name}</strong>
+          <span>{getManagementWeeklyInlineCopy(report, coverage)}</span>
+        </Space>
+      </div>
+      <Button type="link" onClick={() => onOpen(report, getGenerateStepForReport(report))}>
+        {getReportButtonText(report)} <RightOutlined />
       </Button>
     </section>
   );
@@ -2163,6 +2238,21 @@ function getPersonalWeeklyInlineCopy(report: ReportItem) {
   if (report.status === "生成中") return "生成中";
   if (report.status === "生成失败") return "生成失败";
   return `待生成 · 已收集 ${report.sessionCount} 篇日报`;
+}
+
+function getManagementWeeklyInlineCopy(report: ReportItem, coverage?: ReportCoverage) {
+  if (report.status === "已归档") return "已归档";
+  if (report.status === "已发送") return "已发送";
+  if (report.status === "已保存") return "已保存";
+  if (report.status === "生成中") return "生成中";
+  if (report.status === "生成失败") return "生成失败";
+  if (!coverage) return "待生成";
+
+  if (report.kind === "department_weekly") {
+    return `待生成 · 已收集 ${coverage.submitted}/${coverage.expected} 组周报`;
+  }
+
+  return `待生成 · 已收集 ${coverage.submitted} 篇个人周报`;
 }
 
 function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {

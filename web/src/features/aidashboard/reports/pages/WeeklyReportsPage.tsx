@@ -1233,7 +1233,7 @@ function TeamWeeklySources({
   );
 }
 
-function TeamWeeklyReportModal({
+export function TeamWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
@@ -1628,7 +1628,7 @@ function DepartmentWeeklySources({
   );
 }
 
-function DepartmentWeeklyReportModal({
+export function DepartmentWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
