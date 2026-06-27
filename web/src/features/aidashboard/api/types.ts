@@ -147,25 +147,35 @@ export interface DashboardFollowItemDTO {
   navigation: DashboardNavigationTargetDTO;
 }
 
-export interface DashboardRiskItemDTO {
-  key: string;
-  riskType: "deadline" | "dependency_blocker";
-  title: string;
-  source: string;
-  target: string;
-  relatedObjectType: "requirement" | "task";
-  requirementId: string;
+export type DashboardRiskType = "requirement_overdue" | "deadline" | "dependency_blocker";
+
+export interface DashboardRiskTaskSummaryDTO {
   taskId: string;
-  owner: string;
+  title: string;
+  deadline?: string;
+  riskTypes: DashboardRiskType[];
+  unfinishedDependencyCount?: number;
+}
+
+export interface DashboardRiskGroupDTO {
+  key: string;
+  displayType: "requirement_group" | "single_task";
+  requirementId: string;
+  requirementTitle: string;
+  riskTypes: DashboardRiskType[];
+  requirementOverdue: boolean;
+  deadlineTaskCount: number;
+  dependencyBlockerCount: number;
+  representativeTask?: DashboardRiskTaskSummaryDTO;
+  summary: string;
   deadline: string;
-  reason: string;
   level: "高" | "中" | "低";
   tone: "red" | "orange" | "gold" | "blue";
-  actionText: string;
-  targetUrl: string;
   attentionScore: number;
   attentionLevel: AttentionLevel;
-  navigation: DashboardNavigationTargetDTO;
+  actionText: string;
+  targetUrl: string;
+  navigation?: DashboardNavigationTargetDTO;
 }
 
 export interface Session {

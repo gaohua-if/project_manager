@@ -160,28 +160,38 @@ type DashboardFollowItem struct {
 	Navigation     DashboardNavigationTarget `json:"navigation"`
 }
 
-type DashboardRiskItem struct {
-	Key               string                    `json:"key"`
-	RiskType          string                    `json:"riskType"`
-	Title             string                    `json:"title"`
-	Source            string                    `json:"source"`
-	Target            string                    `json:"target"`
-	RelatedObjectType string                    `json:"relatedObjectType"`
-	RequirementID     string                    `json:"requirementId"`
-	TaskID            string                    `json:"taskId"`
-	Owner             string                    `json:"owner"`
-	Deadline          string                    `json:"deadline"`
-	Reason            string                    `json:"reason"`
-	Level             string                    `json:"level"`
-	Tone              string                    `json:"tone"`
-	ActionText        string                    `json:"actionText"`
-	TargetURL         string                    `json:"targetUrl"`
-	AttentionScore    int                       `json:"attentionScore"`
-	AttentionLevel    string                    `json:"attentionLevel"`
-	RiskLevelPriority int                       `json:"-"`
-	SortDueDate       *string                   `json:"-"`
-	SortUpdatedAt     time.Time                 `json:"-"`
-	Navigation        DashboardNavigationTarget `json:"navigation"`
+type DashboardRiskTaskSummary struct {
+	TaskID                    string    `json:"taskId"`
+	Title                     string    `json:"title"`
+	Deadline                  string    `json:"deadline,omitempty"`
+	RiskTypes                 []string  `json:"riskTypes"`
+	UnfinishedDependencyCount int       `json:"unfinishedDependencyCount,omitempty"`
+	SortDueDate               *string   `json:"-"`
+	SortUpdatedAt             time.Time `json:"-"`
+}
+
+type DashboardRiskGroup struct {
+	Key                     string                    `json:"key"`
+	DisplayType             string                    `json:"displayType"`
+	RequirementID           string                    `json:"requirementId"`
+	RequirementTitle        string                    `json:"requirementTitle"`
+	RiskTypes               []string                  `json:"riskTypes"`
+	RequirementOverdue      bool                      `json:"requirementOverdue"`
+	DeadlineTaskCount       int                       `json:"deadlineTaskCount"`
+	DependencyBlockerCount  int                       `json:"dependencyBlockerCount"`
+	RepresentativeTask      *DashboardRiskTaskSummary `json:"representativeTask,omitempty"`
+	Summary                 string                    `json:"summary"`
+	Deadline                string                    `json:"deadline"`
+	Level                   string                    `json:"level"`
+	Tone                    string                    `json:"tone"`
+	AttentionScore          int                       `json:"attentionScore"`
+	AttentionLevel          string                    `json:"attentionLevel"`
+	ActionText              string                    `json:"actionText"`
+	TargetURL               string                    `json:"targetUrl"`
+	Navigation              DashboardNavigationTarget `json:"navigation"`
+	SortHasOverdue          bool                      `json:"-"`
+	SortEarliestOverdueDate *string                   `json:"-"`
+	SortUpdatedAt           time.Time                 `json:"-"`
 }
 
 type Session struct {

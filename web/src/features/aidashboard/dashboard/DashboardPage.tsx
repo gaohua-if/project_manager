@@ -116,7 +116,7 @@ type ReportKind =
 type ReportScope = "personal" | "team" | "department";
 type RiskTone = "red" | "orange" | "gold" | "blue";
 type FollowType = "需求" | "任务";
-type RiskType = "deadline" | "dependency_blocker";
+type RiskType = "requirement_overdue" | "deadline" | "dependency_blocker";
 type RiskRelatedObjectType = "requirement" | "task";
 type TokenRange = DashboardTokenRange;
 type ReportSkillOption = {
@@ -156,19 +156,33 @@ interface FollowItem {
 
 interface RiskItem {
   key: string;
-  riskType: RiskType;
-  title: string;
-  source: string;
-  target: string;
-  relatedObjectType: RiskRelatedObjectType;
+  displayType?: "requirement_group" | "single_task";
+  riskType?: RiskType;
+  riskTypes?: RiskType[];
+  title?: string;
+  source?: string;
+  target?: string;
+  relatedObjectType?: RiskRelatedObjectType;
   requirementId?: string;
+  requirementTitle?: string;
   taskId?: string;
-  owner: string;
-  deadline: string;
-  reason: string;
-  level: "高" | "中" | "低";
-  tone: RiskTone;
-  actionText: string;
+  requirementOverdue?: boolean;
+  deadlineTaskCount?: number;
+  dependencyBlockerCount?: number;
+  representativeTask?: {
+    taskId: string;
+    title: string;
+    deadline?: string;
+    riskTypes: RiskType[];
+    unfinishedDependencyCount?: number;
+  };
+  summary?: string;
+  owner?: string;
+  deadline?: string;
+  reason?: string;
+  level?: "高" | "中" | "低";
+  tone?: RiskTone;
+  actionText?: string;
   targetUrl?: string;
   attentionScore?: number;
   attentionLevel?: AttentionLevel;
@@ -1601,7 +1615,7 @@ export function DashboardPage() {
         </div>
 
         <div className="console-panel">
-          <PanelHeader icon={<AlertOutlined />} title={`待处理风险 ${riskItems.length}`} />
+          <PanelHeader icon={<AlertOutlined />} title={`我的风险提示 ${riskItems.length}`} />
           <div className="console-risk-list">
             {riskItems.length > 0 ? (
               riskItems.map((item) => (
@@ -1609,7 +1623,7 @@ export function DashboardPage() {
               ))
             ) : (
               <div className="console-report-status-card">
-                <p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要关注的风险"}</p>
+                <p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要处理的风险"}</p>
                 <Button type="link" onClick={() => navigate("/requirements")}>
                   查看需求看板
                 </Button>
@@ -3794,27 +3808,36 @@ function AttentionTag({ level }: { level: AttentionLevel }) {
 }
 
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
+  const tone = item.tone ?? "red";
+  const level = item.level ?? "高";
+  const title = getRiskTitle(item);
+  const reason = getRiskReason(item);
+  const impact = getRiskImpact(item);
+  const deadline = getRiskDeadline(item);
+  const tags = getRiskTagLabels(item);
   return (
-    <article className={`console-risk-card console-risk-card--${item.tone}`}>
+    <article className={`console-risk-card console-risk-card--${tone}`}>
       <span className="console-risk-card__rail" aria-hidden="true" />
       <div className="console-risk-card__main">
         <Space size={6} wrap>
-          <span className={`console-risk-tag console-risk-tag--${item.tone}`}>
-            {item.level} · {item.source}
-          </span>
+          {tags.map((tag) => (
+            <span key={tag} className={`console-risk-tag console-risk-tag--${tone}`}>
+              {level} · {tag}
+            </span>
+          ))}
           <AttentionTag level={item.attentionLevel ?? "normal"} />
         </Space>
-        <strong>{item.title}</strong>
-        <span>{item.reason}</span>
+        <strong>{title}</strong>
+        <span>{reason}</span>
       </div>
       <div className="console-risk-card__impact">
-        <em>影响对象</em>
-        <span>{item.target}</span>
+        <em>{impact.label}</em>
+        <span>{impact.value}</span>
       </div>
       <div className="console-risk-card__meta">
-        <span>{item.owner}</span>
+        {item.owner ? <span>{item.owner}</span> : null}
         <span>
-          <ClockCircleOutlined /> {item.deadline}
+          <ClockCircleOutlined /> {deadline}
         </span>
       </div>
       <Button type="link" icon={<LinkOutlined />} onClick={() => onAction(item)}>
@@ -3824,8 +3847,64 @@ function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskIte
   );
 }
 
+function getRiskTagLabels(item: RiskItem) {
+  if (!item.displayType) {
+    return [item.source ?? "风险"];
+  }
+  const labels: string[] = [];
+  if (item.requirementOverdue) labels.push("需求超期");
+  if ((item.deadlineTaskCount ?? 0) > 0) labels.push(`${item.deadlineTaskCount} 个任务超期`);
+  if ((item.dependencyBlockerCount ?? 0) > 0)
+    labels.push(`${item.dependencyBlockerCount} 个依赖阻塞`);
+  if (labels.length === 0 && item.representativeTask) {
+    item.representativeTask.riskTypes.forEach((riskType) => labels.push(riskTypeLabel(riskType)));
+  }
+  return labels.length > 0 ? labels : ["风险"];
+}
+
+function getRiskTitle(item: RiskItem) {
+  if (item.displayType === "single_task" && item.representativeTask) {
+    return item.representativeTask.title;
+  }
+  return item.requirementTitle ?? item.title ?? item.target ?? "风险提示";
+}
+
+function getRiskReason(item: RiskItem) {
+  if (item.summary) return item.summary;
+  if (item.reason) return item.reason;
+  if (item.displayType === "single_task" && item.representativeTask) {
+    return `${item.requirementTitle ?? "所属需求"} · ${item.representativeTask.riskTypes.map(riskTypeLabel).join(" / ")}`;
+  }
+  return "需要查看并处理";
+}
+
+function getRiskImpact(item: RiskItem) {
+  if (item.displayType === "single_task") {
+    return { label: "所属需求", value: item.requirementTitle ?? item.target ?? "未设置" };
+  }
+  return { label: "影响对象", value: item.requirementTitle ?? item.target ?? "未设置" };
+}
+
+function getRiskDeadline(item: RiskItem) {
+  if (item.deadline) return item.deadline;
+  if (item.representativeTask?.deadline) return item.representativeTask.deadline;
+  return "未设置";
+}
+
+function riskTypeLabel(riskType: RiskType) {
+  if (riskType === "requirement_overdue") return "需求超期";
+  if (riskType === "dependency_blocker") return "依赖阻塞";
+  return "任务超期";
+}
+
 function getRiskActionLabel(item: RiskItem) {
-  if (item.riskType === "dependency_blocker") return "处理依赖";
-  if (item.riskType === "deadline") return "查看任务";
-  return item.actionText;
+  if (item.displayType === "requirement_group") return item.actionText ?? "查看需求";
+  const riskTypes = item.representativeTask?.riskTypes ?? (item.riskType ? [item.riskType] : []);
+  if (riskTypes.includes("dependency_blocker") && !riskTypes.includes("deadline")) {
+    return item.actionText ?? "处理依赖";
+  }
+  if (item.displayType === "single_task" || riskTypes.includes("deadline")) {
+    return item.actionText ?? "查看任务";
+  }
+  return item.actionText ?? "查看风险";
 }

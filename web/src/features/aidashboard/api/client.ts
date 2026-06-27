@@ -7,7 +7,7 @@ import type {
   ACStatus,
   DashboardFollowFollowerDTO,
   DashboardFollowItemDTO,
-  DashboardRiskItemDTO,
+  DashboardRiskGroupDTO,
   DailyReport,
   DepartmentReport,
   DepartmentReportSources,
@@ -158,7 +158,7 @@ export const fetchFollowFollowers = (targetType: "requirement" | "task", targetI
 export const fetchDashboardFollows = () =>
   unwrap(api.get<DashboardFollowItemDTO[]>("/dashboard/follows"));
 export const fetchDashboardRisks = () =>
-  unwrap(api.get<DashboardRiskItemDTO[]>("/dashboard/risks"));
+  unwrap(api.get<DashboardRiskGroupDTO[]>("/dashboard/risks"));
 
 // ───────────────────────── Sessions ─────────────────────────
 
