@@ -179,7 +179,7 @@ export function ReportsPage() {
       className="reports-page aidashboard-list"
       showNav={false}
     >
-      <Card>
+      <Card className="reports-control-card">
         <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
           <Space wrap>
             {options.length > 1 ? (
@@ -288,6 +288,7 @@ function PersonalDailyTable({
 
   return (
     <Card
+      className="reports-list-card"
       title="我的日报记录"
     >
       {reportsQuery.isError ? (
@@ -360,6 +361,7 @@ function TeamDailyTable({
   ];
   return (
     <Card
+      className="reports-list-card"
       title="小组日报记录"
     >
       {reportsQuery.isError ? (
@@ -429,6 +431,7 @@ function DepartmentDailyTable({
 
   return (
     <Card
+      className="reports-list-card"
       title="部门日报记录"
     >
       {reportsQuery.isError ? (

@@ -639,7 +639,7 @@ export function WeeklyReportsPage() {
       className="reports-page aidashboard-list"
       showNav={false}
     >
-      <Card>
+      <Card className="reports-control-card">
         <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
           <Space wrap>
             {tabOptions.length > 1 ? (
@@ -750,7 +750,7 @@ function PersonalWeeklyRecordsTable({
   ];
 
   return (
-    <Card title="我的周报记录">
+    <Card className="reports-list-card" title="我的周报记录">
       {reportsQuery.isError ? (
         <Alert type="error" showIcon message="我的周报记录加载失败" description={errorMessage(reportsQuery.error)} />
       ) : (
@@ -815,7 +815,7 @@ function TeamWeeklyRecordsTable({
   ];
 
   return (
-    <Card title="小组周报记录">
+    <Card className="reports-list-card" title="小组周报记录">
       {reportsQuery.isError ? (
         <Alert type="error" showIcon message="小组周报记录加载失败" description={errorMessage(reportsQuery.error)} />
       ) : (
@@ -869,7 +869,7 @@ function DepartmentWeeklyRecordsTable({
   ];
 
   return (
-    <Card title="部门周报记录">
+    <Card className="reports-list-card" title="部门周报记录">
       {reportsQuery.isError ? (
         <Alert type="error" showIcon message="部门周报记录加载失败" description={errorMessage(reportsQuery.error)} />
       ) : (

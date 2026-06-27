@@ -46,6 +46,10 @@
   border-color: #dfe8f2;
 }
 
+.tokens-toolbar .ant-segmented {
+  max-width: 100%;
+}
+
 .tokens-table-card {
   overflow: hidden;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
@@ -60,10 +64,21 @@
   color: #526173;
   font-weight: 700;
   font-size: 12px;
+  border-bottom-color: #e6edf5;
 }
 
 .tokens-table-card .ant-table-tbody > tr > td {
-  height: 48px;
+  height: 50px;
+  color: #2f3a4d;
+  border-bottom-color: #edf2f7;
+}
+
+.tokens-table-card .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: #f8fbff;
+}
+
+.tokens-table-card .ant-table-pagination {
+  margin: 14px 16px 16px !important;
 }
 
 .tokens-session-ref {
@@ -117,5 +132,24 @@
 
 .tokens-table-card .ant-table-summary > tr > td {
   border-top: 1px solid #dfe8f2;
+  color: #2f3a4d;
   font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .tokens-toolbar,
+  .tokens-toolbar__left,
+  .tokens-toolbar__right {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .tokens-toolbar__right,
+  .tokens-toolbar .ant-picker {
+    width: 100%;
+  }
+
+  .tokens-table-card .ant-table-pagination {
+    margin-inline: 12px !important;
+  }
 }

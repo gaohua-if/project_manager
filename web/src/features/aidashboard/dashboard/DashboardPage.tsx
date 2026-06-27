@@ -1,13 +1,14 @@
 import {
-  AlertOutlined,
   BarChartOutlined,
   ClockCircleOutlined,
   EditOutlined,
   FileDoneOutlined,
   FileTextOutlined,
-  FlagOutlined,
   LinkOutlined,
   RightOutlined,
+  StarOutlined,
+  UnorderedListOutlined,
+  WarningOutlined,
   UploadOutlined
 } from "@ant-design/icons";
 import {
@@ -17,6 +18,7 @@ import {
   Button,
   Checkbox,
   Col,
+  Drawer,
   Empty,
   Input,
   Modal,
@@ -35,7 +37,7 @@ import * as echarts from "echarts";
 import type { ECharts, EChartsOption } from "echarts";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
@@ -124,6 +126,9 @@ type FollowType = "需求" | "任务";
 type RiskType = "requirement_overdue" | "deadline" | "dependency_blocker";
 type RiskRelatedObjectType = "requirement" | "task";
 type TokenRange = DashboardTokenRange;
+type DashboardDrawer = "follows" | "risks";
+type FollowDrawerFilter = "all" | "blocked" | "overdue" | "risk";
+type RiskDrawerFilter = "all" | "blocker" | "deadline" | "requirement";
 type ReportSkillOption = {
   label: string;
   value: string;
@@ -193,6 +198,12 @@ interface RiskItem {
   attentionLevel?: AttentionLevel;
 }
 
+interface SummaryChipItem {
+  label: string;
+  value: number;
+  tone?: "default" | RiskTone | "muted";
+}
+
 interface ReportCoverage {
   expected: number;
   submitted: number;
@@ -235,6 +246,22 @@ interface ConsoleRoleData {
 }
 
 type TokenReport = DashboardTokenReport;
+
+const DASHBOARD_PREVIEW_LIMIT = 5;
+
+const FOLLOW_DRAWER_FILTER_OPTIONS: { label: string; value: FollowDrawerFilter }[] = [
+  { label: "全部", value: "all" },
+  { label: "阻塞", value: "blocked" },
+  { label: "超期", value: "overdue" },
+  { label: "有风险", value: "risk" }
+];
+
+const RISK_DRAWER_FILTER_OPTIONS: { label: string; value: RiskDrawerFilter }[] = [
+  { label: "全部", value: "all" },
+  { label: "依赖阻塞", value: "blocker" },
+  { label: "任务超期", value: "deadline" },
+  { label: "需求超期", value: "requirement" }
+];
 
 interface TaskProgressSuggestion {
   key: string;
@@ -912,6 +939,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { message } = App.useApp();
@@ -1137,13 +1165,29 @@ export function DashboardPage() {
     tokenSessionsQuery.isError ||
     (shouldLoadMineTokens && mineTokenSessionsQuery.isError) ||
     (shouldLoadTeamTokenGroups && teamTokenGroupsQuery.isError);
-  const followItems: FollowItem[] = followsQuery.data ?? [];
-  const riskItems: RiskItem[] = risksQuery.data ?? [];
+  const followItems = useMemo<FollowItem[]>(() => followsQuery.data ?? [], [followsQuery.data]);
+  const riskItems = useMemo<RiskItem[]>(() => risksQuery.data ?? [], [risksQuery.data]);
+  const activeDashboardDrawer = getDashboardDrawer(searchParams.get("drawer"));
+  const [followDrawerFilter, setFollowDrawerFilter] = useState<FollowDrawerFilter>("all");
+  const [riskDrawerFilter, setRiskDrawerFilter] = useState<RiskDrawerFilter>("all");
+  const prioritizedFollowItems = useMemo(
+    () => [...followItems].sort(compareFollowItems),
+    [followItems]
+  );
+  const prioritizedRiskItems = useMemo(() => [...riskItems].sort(compareRiskItems), [riskItems]);
+  const previewFollowItems = prioritizedFollowItems.slice(0, DASHBOARD_PREVIEW_LIMIT);
+  const previewRiskItems = prioritizedRiskItems.slice(0, DASHBOARD_PREVIEW_LIMIT);
+  const followSummaryChips = useMemo(() => getFollowSummaryChips(followItems), [followItems]);
+  const riskSummaryChips = useMemo(() => getRiskSummaryChips(riskItems), [riskItems]);
+  const filteredFollowDrawerItems = useMemo(
+    () => prioritizedFollowItems.filter((item) => matchesFollowFilter(item, followDrawerFilter)),
+    [followDrawerFilter, prioritizedFollowItems]
+  );
+  const filteredRiskDrawerItems = useMemo(
+    () => prioritizedRiskItems.filter((item) => matchesRiskFilter(item, riskDrawerFilter)),
+    [prioritizedRiskItems, riskDrawerFilter]
+  );
   const modifiedTaskCount = taskSuggestions.filter((task) => task.syncState === "待同步").length;
-  const followBlockedCount = followItems.filter(
-    (item) => item.risk.includes("阻塞") || item.status === "阻塞"
-  ).length;
-  const followUrgentCount = followItems.filter((item) => item.risk.includes("超期")).length;
   const reportSessionsQuery = useQuery({
     queryKey: ["dashboard", currentUserId, "daily-report-sessions", reportDate],
     queryFn: () =>
@@ -1585,6 +1629,18 @@ export function DashboardPage() {
     applyTaskSuggestionMutation.mutate(editingTaskDraft);
   };
 
+  const openDashboardDrawer = (drawer: DashboardDrawer) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("drawer", drawer);
+    setSearchParams(nextParams);
+  };
+
+  const closeDashboardDrawer = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("drawer");
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const handleRiskAction = (risk: RiskItem) => {
     if (risk.targetUrl) {
       navigate(risk.targetUrl);
@@ -1610,26 +1666,33 @@ export function DashboardPage() {
       <section className="console-dashboard">
         <div className="console-panel console-panel--follow">
           <PanelHeader
-            icon={<FlagOutlined />}
+            icon={<StarOutlined />}
             title="我关注的事项"
-            extra={
-              <Space size={6} wrap>
-                <Tag>{followItems.length} 项</Tag>
-                {followBlockedCount > 0 ? <Tag color="red">{followBlockedCount} 阻塞</Tag> : null}
-                {followUrgentCount > 0 ? <Tag color="red">{followUrgentCount} 超期</Tag> : null}
-              </Space>
-            }
+            extra={<SummaryChips items={followSummaryChips} />}
           />
           <div className="console-follow-list">
             {followItems.length > 0 ? (
-              followItems.map((item) => (
-                <FollowCard
-                  key={item.key}
-                  item={item}
-                  showAttention={dashboardRole !== "director"}
-                  onView={handleFollowAction}
-                />
-              ))
+              <>
+                {previewFollowItems.map((item) => (
+                  <FollowCard
+                    key={item.key}
+                    item={item}
+                    showAttention={dashboardRole !== "director"}
+                    onView={handleFollowAction}
+                  />
+                ))}
+                {followItems.length > DASHBOARD_PREVIEW_LIMIT ? (
+                  <ListMoreAction
+                    hiddenCount={followItems.length - previewFollowItems.length}
+                    previewCount={previewFollowItems.length}
+                    totalCount={followItems.length}
+                    title="还有关注事项未展示"
+                    label="查看全部关注"
+                    tone="follow"
+                    onClick={() => openDashboardDrawer("follows")}
+                  />
+                ) : null}
+              </>
             ) : (
               <div className="console-report-status-card">
                 <p>{followsQuery.isError ? "关注事项加载失败" : "暂无关注事项"}</p>
@@ -1641,13 +1704,30 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="console-panel">
-          <PanelHeader icon={<AlertOutlined />} title={`我的风险提示 ${riskItems.length}`} />
+        <div className="console-panel console-panel--risk">
+          <PanelHeader
+            icon={<WarningOutlined />}
+            title="我的风险提示"
+            extra={<SummaryChips items={riskSummaryChips} />}
+          />
           <div className="console-risk-list">
             {riskItems.length > 0 ? (
-              riskItems.map((item) => (
-                <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
-              ))
+              <>
+                {previewRiskItems.map((item) => (
+                  <RiskCard key={item.key} item={item} onAction={handleRiskAction} />
+                ))}
+                {riskItems.length > DASHBOARD_PREVIEW_LIMIT ? (
+                  <ListMoreAction
+                    hiddenCount={riskItems.length - previewRiskItems.length}
+                    previewCount={previewRiskItems.length}
+                    totalCount={riskItems.length}
+                    title="还有风险需要查看"
+                    label="查看全部风险"
+                    tone="risk"
+                    onClick={() => openDashboardDrawer("risks")}
+                  />
+                ) : null}
+              </>
             ) : (
               <div className="console-report-status-card">
                 <p>{risksQuery.isError ? "风险数据加载失败" : "暂无需要处理的风险"}</p>
@@ -1686,6 +1766,31 @@ export function DashboardPage() {
           </Col>
         </Row>
       </section>
+
+      <FollowItemsDrawer
+        open={activeDashboardDrawer === "follows"}
+        filter={followDrawerFilter}
+        items={filteredFollowDrawerItems}
+        totalCount={followItems.length}
+        summaryItems={followSummaryChips}
+        showAttention={dashboardRole !== "director"}
+        onClose={closeDashboardDrawer}
+        onFilterChange={setFollowDrawerFilter}
+        onView={handleFollowAction}
+        onViewBoard={() => navigate("/requirements")}
+      />
+
+      <RiskItemsDrawer
+        open={activeDashboardDrawer === "risks"}
+        filter={riskDrawerFilter}
+        items={filteredRiskDrawerItems}
+        totalCount={riskItems.length}
+        summaryItems={riskSummaryChips}
+        onClose={closeDashboardDrawer}
+        onFilterChange={setRiskDrawerFilter}
+        onAction={handleRiskAction}
+        onViewBoard={() => navigate("/requirements?view=risks")}
+      />
 
       {dailyGenerateTarget ? (
         <DailyReportGenerateModal
@@ -1838,6 +1943,198 @@ function PanelHeader({
   );
 }
 
+function SummaryChips({ items }: { items: SummaryChipItem[] }) {
+  return (
+    <div className="console-summary-chips" aria-label="数量摘要">
+      {items.map((item) => (
+        <span
+          key={`${item.label}-${item.value}`}
+          className={`console-summary-chip console-summary-chip--${item.tone ?? "default"}`}
+        >
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ListMoreAction({
+  hiddenCount,
+  previewCount,
+  totalCount,
+  title,
+  label,
+  tone,
+  onClick
+}: {
+  hiddenCount: number;
+  previewCount: number;
+  totalCount: number;
+  title: string;
+  label: string;
+  tone: "follow" | "risk";
+  onClick: () => void;
+}) {
+  return (
+    <div className={`console-list-more console-list-more--${tone}`}>
+      <div className="console-list-more__copy">
+        <strong>{title}</strong>
+        <span>
+          已展示 {previewCount} / {totalCount} 项，另有 {hiddenCount} 项在完整列表中
+        </span>
+      </div>
+      <Button
+        className="console-list-more__button"
+        icon={<UnorderedListOutlined />}
+        onClick={onClick}
+      >
+        {label}
+        <span>{totalCount}</span>
+      </Button>
+    </div>
+  );
+}
+
+function FollowItemsDrawer({
+  open,
+  filter,
+  items,
+  totalCount,
+  summaryItems,
+  showAttention,
+  onClose,
+  onFilterChange,
+  onView,
+  onViewBoard
+}: {
+  open: boolean;
+  filter: FollowDrawerFilter;
+  items: FollowItem[];
+  totalCount: number;
+  summaryItems: SummaryChipItem[];
+  showAttention: boolean;
+  onClose: () => void;
+  onFilterChange: (filter: FollowDrawerFilter) => void;
+  onView: (item: FollowItem) => void;
+  onViewBoard: () => void;
+}) {
+  return (
+    <Drawer
+      className="console-dashboard-drawer"
+      width={720}
+      open={open}
+      onClose={onClose}
+      title={
+        <span className="console-dashboard-drawer__title">
+          <StarOutlined />
+          全部关注事项
+        </span>
+      }
+      extra={
+        <Button type="link" icon={<LinkOutlined />} onClick={onViewBoard}>
+          打开需求看板
+        </Button>
+      }
+    >
+      <div className="console-dashboard-drawer__body">
+        <div className="console-dashboard-drawer__toolbar">
+          <SummaryChips items={summaryItems} />
+          <Segmented
+            options={FOLLOW_DRAWER_FILTER_OPTIONS}
+            value={filter}
+            onChange={(value) => onFilterChange(value as FollowDrawerFilter)}
+          />
+        </div>
+        <div className="console-dashboard-drawer__meta">
+          当前显示 {items.length} / {totalCount} 项，按阻塞、超期、高关注优先排序。
+        </div>
+        <div className="console-dashboard-drawer__list console-follow-list">
+          {items.length > 0 ? (
+            items.map((item) => (
+              <FollowCard
+                key={item.key}
+                item={item}
+                showAttention={showAttention}
+                onView={onView}
+              />
+            ))
+          ) : (
+            <div className="console-report-status-card">
+              <p>当前筛选下暂无关注事项</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+function RiskItemsDrawer({
+  open,
+  filter,
+  items,
+  totalCount,
+  summaryItems,
+  onClose,
+  onFilterChange,
+  onAction,
+  onViewBoard
+}: {
+  open: boolean;
+  filter: RiskDrawerFilter;
+  items: RiskItem[];
+  totalCount: number;
+  summaryItems: SummaryChipItem[];
+  onClose: () => void;
+  onFilterChange: (filter: RiskDrawerFilter) => void;
+  onAction: (item: RiskItem) => void;
+  onViewBoard: () => void;
+}) {
+  return (
+    <Drawer
+      className="console-dashboard-drawer"
+      width={760}
+      open={open}
+      onClose={onClose}
+      title={
+        <span className="console-dashboard-drawer__title">
+          <WarningOutlined />
+          全部风险提示
+        </span>
+      }
+      extra={
+        <Button type="link" icon={<LinkOutlined />} onClick={onViewBoard}>
+          打开风险看板
+        </Button>
+      }
+    >
+      <div className="console-dashboard-drawer__body">
+        <div className="console-dashboard-drawer__toolbar">
+          <SummaryChips items={summaryItems} />
+          <Segmented
+            options={RISK_DRAWER_FILTER_OPTIONS}
+            value={filter}
+            onChange={(value) => onFilterChange(value as RiskDrawerFilter)}
+          />
+        </div>
+        <div className="console-dashboard-drawer__meta">
+          当前显示 {items.length} / {totalCount} 项，按严重度、风险类型和截止时间优先排序。
+        </div>
+        <div className="console-dashboard-drawer__list console-risk-list">
+          {items.length > 0 ? (
+            items.map((item) => <RiskCard key={item.key} item={item} onAction={onAction} />)
+          ) : (
+            <div className="console-report-status-card">
+              <p>当前筛选下暂无风险提示</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
 function ReportSection({
   title,
   icon,
@@ -1893,10 +2190,7 @@ function ReportSection({
             <section className="console-report-workbench-group" aria-label="本周处理">
               <div className="console-report-workbench-group__title">本周处理</div>
               {weeklyReport ? (
-                <ReportWeeklyInlineRow
-                  report={weeklyReport}
-                  onOpen={onOpen}
-                />
+                <ReportWeeklyInlineRow report={weeklyReport} onOpen={onOpen} />
               ) : null}
               {summaryWeeklyReport ? (
                 <ReportManagementWeeklyInlineRow
@@ -1907,7 +2201,10 @@ function ReportSection({
               ) : null}
             </section>
           </div>
-          <div className="console-report-shortcuts console-report-shortcuts--list" aria-label="报告入口">
+          <div
+            className="console-report-shortcuts console-report-shortcuts--list"
+            aria-label="报告入口"
+          >
             <button
               type="button"
               className="console-report-shortcut"
@@ -2124,11 +2421,11 @@ function renderReportActions(
 
   if (report.status === "已归档") {
     return (
-    <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-      {getReportButtonText(report)}
-    </Button>
-  );
-}
+      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
+        {getReportButtonText(report)}
+      </Button>
+    );
+  }
 
   return (
     <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
@@ -3837,6 +4134,146 @@ function FollowCard({
 
 type FollowRiskHint = { label: string; color: string; tone: "red" | "orange" | "blue" };
 
+function getDashboardDrawer(value: string | null): DashboardDrawer | null {
+  if (value === "follows" || value === "risks") return value;
+  return null;
+}
+
+function getFollowSummaryChips(items: FollowItem[]): SummaryChipItem[] {
+  const blocked = items.filter(isFollowBlocked).length;
+  const overdue = items.filter(isFollowOverdue).length;
+  const risky = items.filter(isFollowRisky).length;
+  const chips: SummaryChipItem[] = [
+    { label: "全部", value: items.length, tone: "default" },
+    { label: "阻塞", value: blocked, tone: "red" },
+    { label: "超期", value: overdue, tone: "red" },
+    { label: "有风险", value: risky, tone: "orange" }
+  ];
+  return chips.filter((item) => item.label === "全部" || item.value > 0);
+}
+
+function getRiskSummaryChips(items: RiskItem[]): SummaryChipItem[] {
+  const blockers = items.filter(isRiskBlocker).length;
+  const overdue = items.filter(
+    (item) => isRiskDeadline(item) || isRiskRequirementOverdue(item)
+  ).length;
+  const highAttention = items.filter((item) => item.attentionLevel === "high").length;
+  const chips: SummaryChipItem[] = [
+    { label: "全部", value: items.length, tone: "default" },
+    { label: "阻塞", value: blockers, tone: "red" },
+    { label: "超期", value: overdue, tone: "red" },
+    { label: "高关注", value: highAttention, tone: "orange" }
+  ];
+  return chips.filter((item) => item.label === "全部" || item.value > 0);
+}
+
+function matchesFollowFilter(item: FollowItem, filter: FollowDrawerFilter) {
+  if (filter === "blocked") return isFollowBlocked(item);
+  if (filter === "overdue") return isFollowOverdue(item);
+  if (filter === "risk") return isFollowRisky(item);
+  return true;
+}
+
+function matchesRiskFilter(item: RiskItem, filter: RiskDrawerFilter) {
+  if (filter === "blocker") return isRiskBlocker(item);
+  if (filter === "deadline") return isRiskDeadline(item);
+  if (filter === "requirement") return isRiskRequirementOverdue(item);
+  return true;
+}
+
+function compareFollowItems(a: FollowItem, b: FollowItem) {
+  const scoreDelta = getFollowPriorityScore(b) - getFollowPriorityScore(a);
+  if (scoreDelta !== 0) return scoreDelta;
+  return getDeadlineRank(a.deadline) - getDeadlineRank(b.deadline);
+}
+
+function compareRiskItems(a: RiskItem, b: RiskItem) {
+  const scoreDelta = getRiskPriorityScore(b) - getRiskPriorityScore(a);
+  if (scoreDelta !== 0) return scoreDelta;
+  return getDeadlineRank(getRiskDeadline(a)) - getDeadlineRank(getRiskDeadline(b));
+}
+
+function getFollowPriorityScore(item: FollowItem) {
+  let score = item.riskPriority ?? 0;
+  score += item.attentionScore ?? 0;
+  score += getAttentionWeight(item.attentionLevel);
+  if (isFollowBlocked(item)) score += 300;
+  if (isFollowOverdue(item)) score += 240;
+  if (item.risk.includes("依赖")) score += 160;
+  if (item.status === "待办" || item.status === "待开始") score += 40;
+  const deadlineRank = getDeadlineRank(item.deadline);
+  if (deadlineRank <= 2) score += 60 - Math.max(deadlineRank, 0) * 10;
+  return score;
+}
+
+function getRiskPriorityScore(item: RiskItem) {
+  const levelWeight = { 高: 300, 中: 190, 低: 100 }[item.level ?? "高"];
+  let score = levelWeight + getAttentionWeight(item.attentionLevel);
+  score += item.attentionScore ?? 0;
+  if (isRiskBlocker(item)) score += 220;
+  if (isRiskRequirementOverdue(item)) score += 190;
+  if (isRiskDeadline(item)) score += 150;
+  const deadlineRank = getDeadlineRank(getRiskDeadline(item));
+  if (deadlineRank <= 2) score += 60 - Math.max(deadlineRank, 0) * 10;
+  return score;
+}
+
+function getAttentionWeight(level?: AttentionLevel) {
+  if (level === "high") return 80;
+  if (level === "important") return 50;
+  if (level === "notable") return 25;
+  return 0;
+}
+
+function isFollowBlocked(item: FollowItem) {
+  return item.status === "阻塞" || item.risk.includes("阻塞");
+}
+
+function isFollowOverdue(item: FollowItem) {
+  return item.risk.includes("超期") || item.risk.includes("逾期");
+}
+
+function isFollowRisky(item: FollowItem) {
+  return isFollowBlocked(item) || isFollowOverdue(item) || item.risk.includes("依赖");
+}
+
+function isRiskBlocker(item: RiskItem) {
+  return (
+    (item.dependencyBlockerCount ?? 0) > 0 ||
+    hasRiskType(item, "dependency_blocker") ||
+    getRiskTagLabels(item).some((label) => label.includes("阻塞"))
+  );
+}
+
+function isRiskDeadline(item: RiskItem) {
+  return (
+    (item.deadlineTaskCount ?? 0) > 0 ||
+    hasRiskType(item, "deadline") ||
+    getRiskTagLabels(item).some((label) => label.includes("任务超期"))
+  );
+}
+
+function isRiskRequirementOverdue(item: RiskItem) {
+  return item.requirementOverdue === true || hasRiskType(item, "requirement_overdue");
+}
+
+function hasRiskType(item: RiskItem, riskType: RiskType) {
+  if (item.riskType === riskType) return true;
+  if (item.riskTypes?.includes(riskType)) return true;
+  return item.representativeTask?.riskTypes.includes(riskType) ?? false;
+}
+
+function getDeadlineRank(value?: string) {
+  if (!value || value === "未设置") return 9999;
+  if (value.includes("已超") || value.includes("超期") || value.includes("逾期")) return -10;
+  if (value.includes("今天")) return 0;
+  if (value.includes("明天")) return 1;
+  if (value.includes("后天")) return 2;
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) return 999;
+  return parsed.startOf("day").diff(dayjs().startOf("day"), "day");
+}
+
 function getFollowRiskHint(item: FollowItem): FollowRiskHint | null {
   if (item.status === "阻塞" || item.risk.includes("阻塞"))
     return { label: "阻塞", color: "red", tone: "red" };
@@ -3932,14 +4369,18 @@ function groupFollowersByRole(followers: DashboardFollowFollowerDTO[]) {
     .filter((group) => group.followers.length > 0);
 }
 
-function AttentionTag({ level }: { level: AttentionLevel }) {
+function RiskAttentionPill({ level }: { level: AttentionLevel }) {
   const config = {
     normal: null,
-    notable: { label: "关注", color: "blue" },
-    important: { label: "重点关注", color: "orange" },
-    high: { label: "高关注", color: "red" }
+    notable: { label: "关注", tone: "blue" },
+    important: { label: "重点关注", tone: "orange" },
+    high: { label: "高关注", tone: "red" }
   }[level];
-  return config ? <Tag color={config.color}>{config.label}</Tag> : null;
+  return config ? (
+    <span className={`console-risk-attention console-risk-attention--${config.tone}`}>
+      {config.label}
+    </span>
+  ) : null;
 }
 
 function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskItem) => void }) {
@@ -3954,16 +4395,18 @@ function RiskCard({ item, onAction }: { item: RiskItem; onAction: (item: RiskIte
     <article className={`console-risk-card console-risk-card--${tone}`}>
       <span className="console-risk-card__rail" aria-hidden="true" />
       <div className="console-risk-card__main">
-        <Space size={6} wrap>
+        <div className="console-risk-card__primary">
           {tags.map((tag) => (
             <span key={tag} className={`console-risk-tag console-risk-tag--${tone}`}>
               {level} · {tag}
             </span>
           ))}
-          <AttentionTag level={item.attentionLevel ?? "normal"} />
-        </Space>
-        <strong>{title}</strong>
-        <span>{reason}</span>
+          <RiskAttentionPill level={item.attentionLevel ?? "normal"} />
+          <strong title={title}>{title}</strong>
+        </div>
+        <span className="console-risk-card__reason" title={reason}>
+          {reason}
+        </span>
       </div>
       <div className="console-risk-card__impact">
         <em>{impact.label}</em>
