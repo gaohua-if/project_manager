@@ -61,10 +61,25 @@ export const fetchTeamActivity = (date?: string) =>
 
 // ───────────────────────── Admin ─────────────────────────
 
+export const adminCreateUser = (data: {
+  employee_id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  team_id?: string;
+}) => unwrap(api.post<User>("/admin/users", data));
+
+export const adminCreateTeam = (data: { name: string }) =>
+  unwrap(api.post<Team>("/admin/teams", data));
+
 export const adminUpdateUser = (
   id: string,
   data: { role?: string; team_id?: string; clear_team?: boolean }
 ) => unwrap(api.put<unknown>(`/admin/users/${id}`, data));
+
+export const adminUpdateUserStatus = (id: string, status: "active" | "deactivated") =>
+  unwrap(api.put<User>(`/admin/users/${id}/status`, { status }));
 
 export const adminResetPassword = (id: string, password: string) =>
   unwrap(api.post<{ status: string }>(`/admin/users/${id}/reset-password`, { password }));

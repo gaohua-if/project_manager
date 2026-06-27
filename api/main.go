@@ -40,7 +40,7 @@ func main() {
 		log.Println("MinIO not configured, raw log upload disabled")
 	}
 
-	authH := handler.NewAuthHandler(database, cfg.JWTSecret)
+	authH := handler.NewAuthHandler(database, cfg.JWTSecret, cfg.EnablePublicRegister)
 	aiClient := service.NewAIClient()
 	reqH := handler.NewRequirementHandler(database, aiClient)
 	taskH := handler.NewTaskHandler(database)
@@ -66,7 +66,7 @@ func main() {
 	r.Post("/api/v1/auth/register", authH.Register)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(handler.AuthMiddleware(cfg.JWTSecret))
+		r.Use(handler.AuthMiddleware(database, cfg.JWTSecret))
 
 		r.Get("/auth/me", authH.Me)
 		r.Get("/users", authH.ListUsers)
@@ -75,8 +75,11 @@ func main() {
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(handler.AdminOnly)
+			r.Post("/users", authH.AdminCreateUser)
 			r.Put("/users/{id}", authH.AdminUpdateUser)
+			r.Put("/users/{id}/status", authH.AdminUpdateUserStatus)
 			r.Post("/users/{id}/reset-password", authH.AdminResetPassword)
+			r.Post("/teams", authH.AdminCreateTeam)
 		})
 
 		r.Get("/requirements", reqH.List)

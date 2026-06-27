@@ -1,4 +1,5 @@
 export type UserRole = "admin" | "director" | "pm" | "team_leader" | "employee";
+export type UserStatus = "active" | "deactivated";
 
 export interface User {
   id: string;
@@ -8,18 +9,13 @@ export interface User {
   role: UserRole;
   team_id?: string | null;
   team_name?: string | null;
+  status?: UserStatus;
+  deactivated_at?: string | null;
   created_at?: string;
 }
 
 export interface LoginCredentials {
   employee_id: string;
-  password: string;
-}
-
-export interface RegisterPayload {
-  employee_id: string;
-  name: string;
-  email: string;
   password: string;
 }
 

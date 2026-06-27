@@ -8,7 +8,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Spin } from "antd";
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import { runtimeConfig } from "@/config/runtimeConfig";
 import { useAuth } from "@/shared/auth/authContext";
@@ -177,7 +177,6 @@ export function LoginPage() {
               <ClockCircleOutlined />
               安全连接
             </span>
-            <Link to="/register">注册账号</Link>
           </div>
 
           {status === "initializing" && !submitting ? (

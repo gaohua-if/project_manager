@@ -2,20 +2,27 @@ import {
   CrownOutlined,
   EditOutlined,
   KeyOutlined,
+  PlusOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   SolutionOutlined,
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
-import { Alert, Button, Empty } from "antd";
+import { Alert, Button, Empty, Form, Input, Modal, Select, message } from "antd";
 import type { TableProps } from "antd";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../../aidashboard-pattern.css";
-import { fetchTeams, fetchUsers } from "../../api/client";
+import {
+  adminCreateTeam,
+  adminCreateUser,
+  adminUpdateUserStatus,
+  fetchTeams,
+  fetchUsers
+} from "../../api/client";
 import type { Team } from "../../api/types";
 import {
   RequirementMetricCard,
@@ -25,6 +32,7 @@ import {
 import { useAuth } from "@/shared/auth/authContext";
 import { ROLE_LABELS, type User, type UserRole } from "@/shared/auth/types";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { getApiErrorMessage } from "@/shared/request/apiError";
 import { ResourceActions, ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 import { TableLayout } from "@/shared/components/TableLayout/TableLayout";
 
@@ -56,6 +64,24 @@ const ROLE_DESCRIPTION: Record<UserRole, string> = {
   employee: "在所属团队内推进任务"
 };
 
+const ROLE_OPTIONS = ROLE_ORDER.map((role) => ({ value: role, label: ROLE_LABELS[role] }));
+
+interface CreateUserFormValues {
+  employee_id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  team_id?: string;
+  password: string;
+}
+
+interface CreateTeamFormValues {
+  name: string;
+}
+
+const EMPTY_USERS: User[] = [];
+const EMPTY_TEAMS: Team[] = [];
+
 function initials(name: string) {
   if (!name) return "?";
   const trimmed = name.trim();
@@ -72,6 +98,13 @@ function avatarToneClass(role: UserRole) {
 export function OrganizationPage() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string>();
+  const [createTeamError, setCreateTeamError] = useState<string>();
+  const [createUserForm] = Form.useForm<CreateUserFormValues>();
+  const [createTeamForm] = Form.useForm<CreateTeamFormValues>();
   const isAdmin = currentUser?.role === "admin";
   const canView = Boolean(
     currentUser &&
@@ -94,16 +127,76 @@ export function OrganizationPage() {
     staleTime: 5 * 60_000
   });
 
-  const users = usersQuery.data ?? [];
-  const teams = teamsQuery.data ?? [];
+  const users = usersQuery.data ?? EMPTY_USERS;
+  const activeUsers = users.filter((u) => u.status !== "deactivated");
+  const teams = teamsQuery.data ?? EMPTY_TEAMS;
+
+  const createUserMutation = useMutation({
+    mutationFn: (values: CreateUserFormValues) =>
+      adminCreateUser({
+        employee_id: values.employee_id.trim(),
+        name: values.name.trim(),
+        email: values.email.trim(),
+        password: values.password,
+        role: values.role,
+        team_id: values.team_id || undefined
+      }),
+    onSuccess: async () => {
+      setCreateUserOpen(false);
+      setCreateUserError(undefined);
+      createUserForm.resetFields();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["users"] }),
+        queryClient.invalidateQueries({ queryKey: ["teams"] })
+      ]);
+    },
+    onError: (error) => setCreateUserError(getApiErrorMessage(error, "添加账号失败，请稍后重试"))
+  });
+
+  const createTeamMutation = useMutation({
+    mutationFn: (values: CreateTeamFormValues) => adminCreateTeam({ name: values.name.trim() }),
+    onSuccess: async () => {
+      setCreateTeamOpen(false);
+      setCreateTeamError(undefined);
+      createTeamForm.resetFields();
+      await queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+    onError: (error) => setCreateTeamError(getApiErrorMessage(error, "添加团队失败，请稍后重试"))
+  });
+
+  const updateUserStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "deactivated" }) =>
+      adminUpdateUserStatus(id, status),
+    onSuccess: async (_, variables) => {
+      message.success(variables.status === "deactivated" ? "账号已停用" : "账号已启用");
+      await queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error) => message.error(getApiErrorMessage(error, "账号状态更新失败，请稍后重试"))
+  });
+
+  const handleUpdateUserStatus = (target: User) => {
+    const currentStatus = target.status ?? "active";
+    const nextStatus = currentStatus === "deactivated" ? "active" : "deactivated";
+    Modal.confirm({
+      title: nextStatus === "deactivated" ? "停用账号" : "启用账号",
+      content:
+        nextStatus === "deactivated"
+          ? `停用后，${target.name} 将不能登录，历史数据会保留。`
+          : `启用后，${target.name} 可以重新登录。`,
+      okText: nextStatus === "deactivated" ? "停用" : "启用",
+      okButtonProps: { danger: nextStatus === "deactivated" },
+      cancelText: "取消",
+      onOk: () => updateUserStatusMutation.mutateAsync({ id: target.id, status: nextStatus })
+    });
+  };
 
   const roleCounts = useMemo(
     () =>
       ROLE_ORDER.map((role) => ({
         role,
-        count: users.filter((u) => u.role === role).length
+        count: activeUsers.filter((u) => u.role === role).length
       })),
-    [users]
+    [activeUsers]
   );
 
   const columns: TableProps<User>["columns"] = [
@@ -117,7 +210,7 @@ export function OrganizationPage() {
       title: "姓名",
       dataIndex: "name",
       render: (_: string, record: User) => (
-        <span className="org-name-cell">
+        <span className={`org-name-cell${record.status === "deactivated" ? " is-deactivated" : ""}`}>
           <span className={`org-name-cell__dot is-${record.role}`} aria-hidden="true" />
           <strong>{record.name}</strong>
         </span>
@@ -133,6 +226,16 @@ export function OrganizationPage() {
       dataIndex: "role",
       width: 120,
       render: (r: UserRole) => <span className={`org-role-tag is-${r}`}>{ROLE_LABELS[r]}</span>
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 110,
+      render: (status: User["status"]) => (
+        <span className={`org-status-tag is-${status ?? "active"}`}>
+          {status === "deactivated" ? "已停用" : "启用"}
+        </span>
+      )
     },
     { title: "团队", dataIndex: "team_name", width: 140, render: (v?: string) => v || "-" },
     ...(isAdmin
@@ -156,6 +259,13 @@ export function OrganizationPage() {
                     label: "重置密码",
                     icon: <KeyOutlined />,
                     onClick: () => navigate(`/organization/users/${u.id}/reset-password`)
+                  },
+                  {
+                    key: "status",
+                    label: u.status === "deactivated" ? "启用" : "停用",
+                    danger: u.status !== "deactivated",
+                    disabled: u.id === currentUser?.id || updateUserStatusMutation.isPending,
+                    onClick: () => handleUpdateUserStatus(u)
                   }
                 ]}
               />
@@ -178,13 +288,14 @@ export function OrganizationPage() {
   const teamsLoading = teamsQuery.isLoading || usersQuery.isLoading;
 
   return (
-    <PagePanel
-      title="组织"
-      description={isAdmin ? "管理员视图：可调整任何用户的角色与团队" : "团队成员、活跃度统计"}
-      className="org-page aidashboard-list"
-      breadcrumbs={[{ title: "组织" }]}
-      showNav={false}
-      actions={
+    <>
+      <PagePanel
+        title="组织"
+        description={isAdmin ? "管理员视图：可调整角色、团队、密码与账号状态" : "团队成员、活跃度统计"}
+        className="org-page aidashboard-list"
+        breadcrumbs={[{ title: "组织" }]}
+        showNav={false}
+        actions={
         <Button
           icon={<ReloadOutlined />}
           loading={usersQuery.isFetching || teamsQuery.isFetching}
@@ -216,8 +327,15 @@ export function OrganizationPage() {
 
       <section className="org-team-section">
         <div className="org-team-section__head">
-          <strong>团队</strong>
-          <span>{teams.length} 个团队 · {users.length} 名成员</span>
+          <div className="org-section-title">
+            <strong>团队</strong>
+            <span>{teams.length} 个团队 · {activeUsers.length} 名启用成员</span>
+          </div>
+          {isAdmin ? (
+            <Button size="small" icon={<PlusOutlined />} onClick={() => setCreateTeamOpen(true)}>
+              添加团队
+            </Button>
+          ) : null}
         </div>
         {teamsLoading ? (
           <Empty description="加载中" />
@@ -226,7 +344,7 @@ export function OrganizationPage() {
         ) : (
           <div className="org-team-grid">
             {teams.map((team) => {
-              const members = users.filter((u) => u.team_id === team.id);
+              const members = users.filter((u) => u.team_id === team.id && u.status !== "deactivated");
               const leaders = members.filter((u) => u.role === "team_leader");
               const engineers = members.filter((u) => u.role === "employee");
               const visibleMembers = members.slice(0, 5);
@@ -277,7 +395,15 @@ export function OrganizationPage() {
         )}
       </section>
 
-      <TableLayout>
+      <TableLayout
+        operations={
+          isAdmin ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>
+              添加账号
+            </Button>
+          ) : undefined
+        }
+      >
         {usersQuery.isError ? (
           <Alert
             type="error"
@@ -298,5 +424,105 @@ export function OrganizationPage() {
         />
       </TableLayout>
     </PagePanel>
+
+      <Modal
+        title="添加账号"
+        open={createUserOpen}
+        confirmLoading={createUserMutation.isPending}
+        okText="创建"
+        cancelText="取消"
+        onCancel={() => {
+          setCreateUserOpen(false);
+          setCreateUserError(undefined);
+          createUserForm.resetFields();
+        }}
+        onOk={() => createUserForm.submit()}
+        destroyOnHidden
+      >
+        {createUserError ? (
+          <Alert type="error" showIcon message={createUserError} className="org-modal-alert" />
+        ) : null}
+        <Form
+          form={createUserForm}
+          layout="vertical"
+          requiredMark={false}
+          initialValues={{ role: "employee", team_id: "" }}
+          onFinish={(values) => void createUserMutation.mutateAsync(values)}
+          onValuesChange={() => setCreateUserError(undefined)}
+        >
+          <Form.Item
+            label="工号 / 登录账号"
+            name="employee_id"
+            rules={[{ required: true, message: "请输入工号" }]}
+          >
+            <Input autoComplete="username" placeholder="例如 zhangsan" />
+          </Form.Item>
+          <Form.Item label="姓名" name="name" rules={[{ required: true, message: "请输入姓名" }]}>
+            <Input placeholder="请输入姓名" />
+          </Form.Item>
+          <Form.Item
+            label="邮箱"
+            name="email"
+            rules={[
+              { required: true, message: "请输入邮箱" },
+              { type: "email", message: "邮箱格式不正确" }
+            ]}
+          >
+            <Input autoComplete="email" placeholder="请输入邮箱" />
+          </Form.Item>
+          <Form.Item label="角色" name="role" rules={[{ required: true, message: "请选择角色" }]}>
+            <Select options={ROLE_OPTIONS} />
+          </Form.Item>
+          <Form.Item label="所属团队" name="team_id">
+            <Select
+              options={[
+                { value: "", label: "无团队" },
+                ...teams.map((team) => ({ value: team.id, label: team.name }))
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="初始密码"
+            name="password"
+            rules={[
+              { required: true, message: "请输入初始密码" },
+              { min: 8, message: "密码至少 8 位" }
+            ]}
+          >
+            <Input.Password autoComplete="new-password" placeholder="至少 8 位" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="添加团队"
+        open={createTeamOpen}
+        confirmLoading={createTeamMutation.isPending}
+        okText="创建"
+        cancelText="取消"
+        onCancel={() => {
+          setCreateTeamOpen(false);
+          setCreateTeamError(undefined);
+          createTeamForm.resetFields();
+        }}
+        onOk={() => createTeamForm.submit()}
+        destroyOnHidden
+      >
+        {createTeamError ? (
+          <Alert type="error" showIcon message={createTeamError} className="org-modal-alert" />
+        ) : null}
+        <Form
+          form={createTeamForm}
+          layout="vertical"
+          requiredMark={false}
+          onFinish={(values) => void createTeamMutation.mutateAsync(values)}
+          onValuesChange={() => setCreateTeamError(undefined)}
+        >
+          <Form.Item label="团队名称" name="name" rules={[{ required: true, message: "请输入团队名称" }]}>
+            <Input placeholder="请输入团队名称" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   );
 }

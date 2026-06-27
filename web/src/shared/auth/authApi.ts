@@ -1,6 +1,6 @@
 import { runtimeConfig } from "@/config/runtimeConfig";
 
-import type { LoginCredentials, LoginResponse, RegisterPayload, User } from "./types";
+import type { LoginCredentials, LoginResponse, User } from "./types";
 
 export class AuthRequestError extends Error {
   status?: number;
@@ -68,6 +68,8 @@ function resolveUser(payload: unknown): User {
     role: (pickString(record, ["role"]) ?? "employee") as User["role"],
     team_id: pickString(record, ["team_id"]) ?? null,
     team_name: pickString(record, ["team_name"]) ?? null,
+    status: (pickString(record, ["status"]) ?? "active") as User["status"],
+    deactivated_at: pickString(record, ["deactivated_at"]) ?? null,
     created_at: pickString(record, ["created_at"]) ?? undefined
   };
 }
@@ -99,19 +101,6 @@ export async function loginWithPassword(credentials: LoginCredentials): Promise<
     );
   }
   return resolveLoginResponse(payload);
-}
-
-export async function registerUser(payload: RegisterPayload): Promise<LoginResponse> {
-  const response = await fetch(getApiUrl(runtimeConfig.authApiBaseUrl, "/auth/register"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const body = await readPayload(response);
-  if (!response.ok) {
-    throw new AuthRequestError(getErrorMessage(body, "注册失败"), response.status);
-  }
-  return resolveLoginResponse(body);
 }
 
 export async function fetchCurrentUser(token: string, signal?: AbortSignal): Promise<User> {

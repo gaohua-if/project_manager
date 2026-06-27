@@ -9,14 +9,16 @@ type Team struct {
 }
 
 type User struct {
-	ID         string    `json:"id"`
-	EmployeeID string    `json:"employee_id"`
-	Email      string    `json:"email"`
-	Name       string    `json:"name"`
-	Role       string    `json:"role"`
-	TeamID     *string   `json:"team_id,omitempty"`
-	TeamName   *string   `json:"team_name,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID            string     `json:"id"`
+	EmployeeID    string     `json:"employee_id"`
+	Email         string     `json:"email"`
+	Name          string     `json:"name"`
+	Role          string     `json:"role"`
+	TeamID        *string    `json:"team_id,omitempty"`
+	TeamName      *string    `json:"team_name,omitempty"`
+	Status        string     `json:"status"`
+	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 type Requirement struct {
@@ -298,10 +300,27 @@ type RegisterRequest struct {
 	Password   string `json:"password"`
 }
 
+type AdminCreateUserRequest struct {
+	EmployeeID string  `json:"employee_id"`
+	Name       string  `json:"name"`
+	Email      string  `json:"email"`
+	Password   string  `json:"password"`
+	Role       string  `json:"role"`
+	TeamID     *string `json:"team_id,omitempty"`
+}
+
+type AdminCreateTeamRequest struct {
+	Name string `json:"name"`
+}
+
 type AdminUpdateUserRequest struct {
 	Role      *string `json:"role,omitempty"`
 	TeamID    *string `json:"team_id,omitempty"`
 	ClearTeam bool    `json:"clear_team,omitempty"`
+}
+
+type AdminUpdateUserStatusRequest struct {
+	Status string `json:"status"`
 }
 
 type AdminResetPasswordRequest struct {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 
@@ -13,7 +14,7 @@ type contextKey string
 
 const userKey contextKey = "user"
 
-func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+func AuthMiddleware(db *sql.DB, jwtSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -41,23 +42,47 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid claims"})
 				return
 			}
+			id, ok := claims["id"].(string)
+			if !ok || id == "" {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid claims"})
+				return
+			}
 
-			user := &model.User{
-				ID:   claims["id"].(string),
-				Name: claims["name"].(string),
-				Role: claims["role"].(string),
+			user, err := loadActiveUser(db, id)
+			if err == sql.ErrNoRows {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+				return
 			}
-			if eid, ok := claims["employee_id"].(string); ok {
-				user.EmployeeID = eid
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
 			}
-			if tid, ok := claims["team_id"].(string); ok && tid != "" {
-				user.TeamID = &tid
+			if user.Status != "active" {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "account deactivated"})
+				return
 			}
 
 			ctx := context.WithValue(r.Context(), userKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func loadActiveUser(db *sql.DB, id string) (*model.User, error) {
+	var user model.User
+	var deactivatedAt sql.NullTime
+	err := db.QueryRow(`
+		SELECT u.id, u.employee_id, COALESCE(u.email,''), u.name, u.role, u.team_id,
+			COALESCE((SELECT name FROM teams WHERE id = u.team_id), ''), u.status, u.deactivated_at, u.created_at
+		FROM users u WHERE u.id = $1`, id).Scan(
+		&user.ID, &user.EmployeeID, &user.Email, &user.Name, &user.Role, &user.TeamID, &user.TeamName,
+		&user.Status, &deactivatedAt, &user.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	assignUserDeactivatedAt(&user, deactivatedAt)
+	return &user, nil
 }
 
 func getUser(r *http.Request) *model.User {

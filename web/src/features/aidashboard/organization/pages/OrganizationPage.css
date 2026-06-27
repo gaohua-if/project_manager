@@ -21,10 +21,19 @@
   margin-bottom: 12px;
 }
 
-.org-team-section__head strong {
+.org-section-title {
+  display: grid;
+  gap: 2px;
+}
+
+.org-section-title strong {
   color: #182033;
   font-size: 14px;
   font-weight: 700;
+}
+
+.org-modal-alert {
+  margin-bottom: 16px;
 }
 
 .org-team-section__head span {
@@ -178,6 +187,31 @@
   background: #ecfdf5;
 }
 
+.org-status-tag {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.org-status-tag.is-active {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.org-status-tag.is-deactivated {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.org-status-action {
+  height: auto;
+  padding: 0;
+}
+
 .org-name-cell {
   display: inline-flex;
   align-items: center;
@@ -220,6 +254,16 @@
 .org-name-cell strong {
   color: #182033;
   font-weight: 600;
+}
+
+.org-name-cell.is-deactivated strong {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.org-name-cell.is-deactivated .org-name-cell__dot {
+  --dot-color: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.22);
 }
 
 .org-employee-id {
