@@ -462,6 +462,11 @@ export const generateDepartmentWeeklyReport = (weekStart: string) =>
       params: { week_start: weekStart }
     })
   );
+export const saveDepartmentWeeklyReportCurrent = (data: {
+  week_start: string;
+  content: string;
+  archive?: boolean;
+}) => unwrap(api.put<DepartmentWeeklyReport>("/reports/department/weekly/current", data));
 export const updateDepartmentWeeklyReport = (
   id: string,
   data: { content?: string; archive?: boolean }
