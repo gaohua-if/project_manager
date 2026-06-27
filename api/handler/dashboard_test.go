@@ -39,7 +39,7 @@ func TestDashboardRisksUsesMyRiskScopeForAllRolesAndMergesTaskRisks(t *testing.T
 				WillReturnRows(sqlmock.NewRows(dashboardRequirementRiskColumns()))
 			expectDashboardTaskRiskCandidateQuery(mock, userID).
 				WillReturnRows(sqlmock.NewRows(dashboardRiskTaskColumns()).
-					AddRow(taskID, reqID, "需求", "双风险任务", "{}", userID, "当前用户", userID, "in_progress", "high", 40, "2000-01-01", nil, testTime(), testTime()))
+					AddRow(taskID, reqID, "需求", "双风险任务", "{}", userID, "当前用户", userID, "in_progress", "high", 40, "2000-01-01", nil, testTime(), testTime(), int64(1)))
 			expectTaskDependencies(mock, taskID, 2)
 			expectAttentionScore(mock, "requirement", reqID, 0)
 			expectAttentionScore(mock, "task", taskID, 0)
@@ -162,7 +162,7 @@ func TestDashboardRisksAggregatesOnlyVisibleTaskFacts(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(dashboardRequirementRiskColumns()))
 	expectDashboardTaskRiskCandidateQuery(mock, userID).
 		WillReturnRows(sqlmock.NewRows(dashboardRiskTaskColumns()).
-			AddRow(visibleTaskID, reqID, "共享需求", "我负责的超期任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime()))
+			AddRow(visibleTaskID, reqID, "共享需求", "我负责的超期任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime(), int64(1)))
 	expectTaskDependencies(mock, visibleTaskID, 0)
 	expectAttentionScore(mock, "requirement", reqID, 0)
 	expectAttentionScore(mock, "task", visibleTaskID, 10)
@@ -213,8 +213,8 @@ func TestDashboardRisksMultipleVisibleTasksUseRequirementGroup(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(dashboardRequirementRiskColumns()))
 	expectDashboardTaskRiskCandidateQuery(mock, userID).
 		WillReturnRows(sqlmock.NewRows(dashboardRiskTaskColumns()).
-			AddRow("task-one", reqID, "多任务需求", "超期任务一", "{}", userID, "当前用户", userID, "in_progress", "high", 20, "2000-01-01", nil, testTime(), testTime()).
-			AddRow("task-two", reqID, "多任务需求", "超期任务二", "{}", userID, "当前用户", userID, "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime()))
+			AddRow("task-one", reqID, "多任务需求", "超期任务一", "{}", userID, "当前用户", userID, "in_progress", "high", 20, "2000-01-01", nil, testTime(), testTime(), int64(1)).
+			AddRow("task-two", reqID, "多任务需求", "超期任务二", "{}", userID, "当前用户", userID, "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime(), int64(1)))
 	expectTaskDependencies(mock, "task-one", 0)
 	expectTaskDependencies(mock, "task-two", 0)
 	expectAttentionScore(mock, "requirement", reqID, 0)
@@ -269,8 +269,8 @@ func TestDashboardRisksSortsUsingOnlyVisibleFacts(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(dashboardRequirementRiskColumns()))
 	expectDashboardTaskRiskCandidateQuery(mock, userID).
 		WillReturnRows(sqlmock.NewRows(dashboardRiskTaskColumns()).
-			AddRow("task-late", "req-late", "较晚需求", "较晚可见任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-03", nil, testTime(), testTime()).
-			AddRow("task-early", "req-early", "较早需求", "较早可见任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime()))
+			AddRow("task-late", "req-late", "较晚需求", "较晚可见任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-03", nil, testTime(), testTime(), int64(1)).
+			AddRow("task-early", "req-early", "较早需求", "较早可见任务", "{}", userID, "当前用户", "creator", "in_progress", "high", 20, "2000-01-02", nil, testTime(), testTime(), int64(1)))
 	expectTaskDependencies(mock, "task-late", 0)
 	expectTaskDependencies(mock, "task-early", 0)
 	expectAttentionScore(mock, "requirement", "req-late", 0)
@@ -393,7 +393,7 @@ func dashboardRiskTaskColumns() []string {
 		"id", "requirement_id", "requirement_title", "title",
 		"acceptance_criteria", "assignee_id", "assignee_name",
 		"creator_tl_id", "status", "priority", "progress", "due_date",
-		"completed_at", "created_at", "updated_at",
+		"completed_at", "created_at", "updated_at", "version",
 	}
 }
 

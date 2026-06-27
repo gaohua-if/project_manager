@@ -48,6 +48,7 @@ type Requirement struct {
 	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`
+	Version            int64                  `json:"version"`
 }
 
 type Task struct {
@@ -78,6 +79,7 @@ type Task struct {
 	CompletedAt           *time.Time `json:"completed_at,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
+	Version               int64      `json:"version"`
 }
 
 type TaskDep struct {
@@ -324,6 +326,15 @@ type UpdateRequirementRequest struct {
 	Status             *string   `json:"status,omitempty"`
 	Deadline           *string   `json:"deadline,omitempty"`
 	AcceptanceCriteria *[]string `json:"acceptance_criteria,omitempty"`
+	BaseVersion        int64     `json:"base_version"`
+}
+
+type RequirementVersionRequest struct {
+	BaseVersion int64 `json:"base_version"`
+}
+
+type RegenerateACRequest struct {
+	BaseVersion int64 `json:"base_version"`
 }
 
 type CreateTaskRequest struct {
@@ -344,14 +355,17 @@ type UpdateTaskRequest struct {
 	Priority           *string   `json:"priority,omitempty"`
 	DueDate            *string   `json:"due_date,omitempty"`
 	Progress           *int      `json:"progress,omitempty"`
+	BaseVersion        int64     `json:"base_version"`
 }
 
 type UpdateTaskStatusRequest struct {
-	Status string `json:"status"`
+	Status      string `json:"status"`
+	BaseVersion int64  `json:"base_version"`
 }
 
 type UpdateTaskProgressRequest struct {
-	Progress int `json:"progress"`
+	Progress    int   `json:"progress"`
+	BaseVersion int64 `json:"base_version"`
 }
 
 type UpdateSessionRequirementRequest struct {
@@ -360,6 +374,7 @@ type UpdateSessionRequirementRequest struct {
 
 type AddDependencyRequest struct {
 	DependsOnID string `json:"depends_on_id"`
+	BaseVersion int64  `json:"base_version"`
 }
 
 type BatchSessionUpload struct {

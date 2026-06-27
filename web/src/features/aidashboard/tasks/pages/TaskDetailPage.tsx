@@ -19,6 +19,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { isEditConflict } from "@/shared/request/apiError";
 import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
@@ -83,27 +84,49 @@ export function TaskDetailPage() {
 
   const statusMutation = useMutation({
     mutationFn: (status: Exclude<MockTaskStatus, "blocked">) =>
-      requirementsBoardApi.updateTaskStatus(id, status),
+      requirementsBoardApi.updateTaskStatus(id, status, task?.version ?? 0),
     onSuccess: () => {
       message.success("任务状态已更新");
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
       void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "状态更新失败")
+    onError: (error) => {
+      if (isEditConflict(error)) {
+        message.warning("内容已被其他人更新，请刷新后再操作");
+        void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
+        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+        return;
+      }
+      message.error(error instanceof Error ? error.message : "状态更新失败");
+    }
   });
 
   const progressMutation = useMutation({
     mutationFn: (nextProgress: number) =>
-      requirementsBoardApi.updateTaskProgress(id, nextProgress),
+      requirementsBoardApi.updateTaskProgress(id, nextProgress, task?.version ?? 0),
     onSuccess: () => {
       setProgressOverride(null);
       message.success("任务进度已保存");
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
       void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "进度保存失败")
+    onError: (error) => {
+      if (isEditConflict(error)) {
+        message.warning("内容已被其他人更新，请刷新后再操作");
+        void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
+        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+        return;
+      }
+      message.error(error instanceof Error ? error.message : "进度保存失败");
+    }
   });
 
   const requestStatusChange = (status: Exclude<MockTaskStatus, "blocked">) => {
@@ -319,4 +342,3 @@ export function TaskDetailPage() {
     </PagePanel>
   );
 }
-

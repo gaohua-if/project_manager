@@ -85,15 +85,19 @@ export const createRequirement = (data: {
 }) => unwrap(api.post<Requirement>("/requirements", data));
 export const updateRequirement = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Requirement>(`/requirements/${id}`, data));
-export const deleteRequirement = (id: string) =>
-  unwrap(api.delete<{ status: string }>(`/requirements/${id}`));
-export const cancelRequirement = (id: string) =>
-  unwrap(api.put<Requirement>(`/requirements/${id}`, { status: "cancelled" }));
-export const restoreRequirement = (id: string) =>
-  unwrap(api.put<Requirement>(`/requirements/${id}/restore`, {}));
+export const deleteRequirement = (id: string, baseVersion: number) =>
+  unwrap(
+    api.delete<{ status: string; id: string }>(
+      `/requirements/${id}?base_version=${encodeURIComponent(baseVersion)}`
+    )
+  );
+export const cancelRequirement = (id: string, baseVersion: number) =>
+  unwrap(api.put<Requirement>(`/requirements/${id}`, { status: "cancelled", base_version: baseVersion }));
+export const restoreRequirement = (id: string, baseVersion: number) =>
+  unwrap(api.put<Requirement>(`/requirements/${id}/restore`, { base_version: baseVersion }));
 export const fetchACStatus = (id: string) => unwrap(api.get<ACStatus[]>(`/requirements/${id}/ac`));
-export const regenerateAC = (id: string) =>
-  unwrap(api.post<{ acceptance_criteria: string[] }>(`/requirements/${id}/regenerate-ac`));
+export const regenerateAC = (id: string, baseVersion: number) =>
+  unwrap(api.post<Requirement>(`/requirements/${id}/regenerate-ac`, { base_version: baseVersion }));
 
 // ───────────────────────── Tasks ─────────────────────────
 
@@ -111,25 +115,35 @@ export const createTask = (data: {
 }) => unwrap(api.post<{ id: string; status: string }>("/tasks", data));
 export const updateTask = (id: string, data: Record<string, unknown>) =>
   unwrap(api.put<Task>(`/tasks/${id}`, data, { skipErrorHandler: true }));
-export const deleteTask = (id: string) =>
-  unwrap(api.delete<{ status: string }>(`/tasks/${id}`, undefined, { skipErrorHandler: true }));
-export const updateTaskStatus = (id: string, status: string) =>
-  unwrap(api.put<Task>(`/tasks/${id}/status`, { status }, { skipErrorHandler: true }));
-export const updateTaskProgress = (id: string, progress: number) =>
-  unwrap(api.put<Task>(`/tasks/${id}/progress`, { progress }, { skipErrorHandler: true }));
-export const addTaskDependency = (taskId: string, dependsOnId: string) =>
+export const deleteTask = (id: string, baseVersion: number) =>
   unwrap(
-    api.post<Task>(
-      `/tasks/${taskId}/dependencies`,
-      { depends_on_id: dependsOnId },
+    api.delete<{ status: string; id: string }>(
+      `/tasks/${id}?base_version=${encodeURIComponent(baseVersion)}`,
+      undefined,
       { skipErrorHandler: true }
     )
   );
-export const removeTaskDependency = (taskId: string, depId: string) =>
+export const updateTaskStatus = (id: string, status: string, baseVersion: number) =>
+  unwrap(api.put<Task>(`/tasks/${id}/status`, { status, base_version: baseVersion }, { skipErrorHandler: true }));
+export const updateTaskProgress = (id: string, progress: number, baseVersion: number) =>
+  unwrap(api.put<Task>(`/tasks/${id}/progress`, { progress, base_version: baseVersion }, { skipErrorHandler: true }));
+export const addTaskDependency = (taskId: string, dependsOnId: string, baseVersion: number) =>
   unwrap(
-    api.delete<Task>(`/tasks/${taskId}/dependencies/${depId}`, undefined, {
-      skipErrorHandler: true
-    })
+    api.post<Task>(
+      `/tasks/${taskId}/dependencies`,
+      { depends_on_id: dependsOnId, base_version: baseVersion },
+      { skipErrorHandler: true }
+    )
+  );
+export const removeTaskDependency = (taskId: string, depId: string, baseVersion: number) =>
+  unwrap(
+    api.delete<Task>(
+      `/tasks/${taskId}/dependencies/${depId}?base_version=${encodeURIComponent(baseVersion)}`,
+      undefined,
+      {
+        skipErrorHandler: true
+      }
+    )
   );
 
 // ───────────────────────── Follows / Dashboard projections ─────────────────────────

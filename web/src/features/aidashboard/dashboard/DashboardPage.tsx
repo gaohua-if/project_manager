@@ -41,6 +41,7 @@ import dayjs from "dayjs";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { useAuth } from "@/shared/auth/authContext";
 import type { UserRole } from "@/shared/auth/types";
+import { isEditConflict } from "@/shared/request/apiError";
 import { formatDateTime } from "@/shared/utils/dateTime";
 
 import {
@@ -51,6 +52,7 @@ import {
   fetchDashboardFollows,
   fetchFollowFollowers,
   fetchDashboardRisks,
+  fetchTask,
   fetchReports,
   fetchSessions,
   fetchTeamReportSources,
@@ -64,8 +66,7 @@ import {
   updateReport as updateDailyReport,
   submitTeamReport,
   updateTeamReport,
-  updateTaskProgress,
-  updateTaskStatus
+  updateTask
 } from "../api/client";
 import type {
   DailyReport,
@@ -1368,11 +1369,12 @@ export function DashboardPage() {
 
   const applyTaskSuggestionMutation = useMutation({
     mutationFn: async (task: TaskProgressSuggestion) => {
-      if (task.status === "done") {
-        return updateTaskStatus(task.taskId, "done");
-      }
-      await updateTaskStatus(task.taskId, task.status);
-      return updateTaskProgress(task.taskId, task.progress);
+      const current = await fetchTask(task.taskId);
+      return updateTask(task.taskId, {
+        status: task.status,
+        progress: task.progress,
+        base_version: current.version
+      });
     },
     onSuccess: (_, task) => {
       message.success("任务进展已更新");
@@ -1390,8 +1392,16 @@ export function DashboardPage() {
       setEditingTaskDraft(null);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
     },
     onError: (error: unknown) => {
+      if (isEditConflict(error)) {
+        message.warning("内容已被其他人更新，请刷新后再操作");
+        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+        return;
+      }
       message.error(error instanceof Error ? error.message : "任务更新失败");
     }
   });

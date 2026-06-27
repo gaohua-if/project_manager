@@ -21,6 +21,7 @@ import {
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   Alert,
   App,
@@ -54,6 +55,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/shared/auth/authContext";
 import { ROLE_LABELS, type User, type UserRole } from "@/shared/auth/types";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { isEditConflict } from "@/shared/request/apiError";
 import { appendSearch } from "@/shared/utils/urlQuery";
 
 import { TaskStatusTag } from "../../dashboard/shared";
@@ -81,6 +83,27 @@ import "./RequirementsBoard.css";
 
 type BoardView = "board" | "tree";
 type RiskFilter = "blocked";
+
+const EDIT_CONFLICT_MESSAGE = "内容已被其他人更新，请刷新后再操作";
+
+type MessageApi = {
+  warning: (content: string) => unknown;
+};
+
+function invalidateRequirementWorkspaces(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
+  ]);
+}
+
+function handleEditConflict(error: unknown, messageApi: MessageApi, queryClient: QueryClient) {
+  if (!isEditConflict(error)) return false;
+  messageApi.warning(EDIT_CONFLICT_MESSAGE);
+  void invalidateRequirementWorkspaces(queryClient);
+  return true;
+}
 
 const STATUS_COLUMNS: Array<{
   value: RequirementStage;
@@ -379,8 +402,15 @@ export function RequirementsListPage() {
   );
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, nextStatus }: { id: string; nextStatus: RequirementStage }) =>
-      requirementsBoardApi.updateRequirementStage(id, nextStatus),
+    mutationFn: ({
+      id,
+      nextStatus,
+      baseVersion
+    }: {
+      id: string;
+      nextStatus: RequirementStage;
+      baseVersion: number;
+    }) => requirementsBoardApi.updateRequirementStage(id, nextStatus, baseVersion),
     onMutate: async ({ id, nextStatus }) => {
       const queryKey = ["requirements-board", "requirements"] as const;
       await queryClient.cancelQueries({ queryKey });
@@ -394,6 +424,7 @@ export function RequirementsListPage() {
       if (context?.previous) {
         queryClient.setQueryData(["requirements-board", "requirements"], context.previous);
       }
+      if (handleEditConflict(error, message, queryClient)) return;
       message.error(error instanceof Error ? error.message : "需求阶段更新失败");
     },
     onSuccess: () => message.success("需求阶段已更新"),
@@ -533,7 +564,7 @@ export function RequirementsListPage() {
     const nextStatus = result.destination.droppableId as RequirementStage;
     const requirement = requirements.find((item) => item.id === result.draggableId);
     if (!requirement || requirement.status === nextStatus || nextStatus === "cancelled") return;
-    statusMutation.mutate({ id: requirement.id, nextStatus });
+    statusMutation.mutate({ id: requirement.id, nextStatus, baseVersion: requirement.version });
   };
 
   const toggleRequirement = (id: string) => {
@@ -1369,39 +1400,44 @@ function RequirementDrawer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
-  const invalidateBoard = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
-    ]);
+  const invalidateBoard = () => invalidateRequirementWorkspaces(queryClient);
 
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => requirementsBoardApi.cancelRequirement(id),
+    mutationFn: (target: MockRequirement) =>
+      requirementsBoardApi.cancelRequirement(target.id, target.version),
     onSuccess: () => {
       message.success("需求已取消");
       void invalidateBoard();
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "取消需求失败")
+    onError: (error) => {
+      if (handleEditConflict(error, message, queryClient)) return;
+      message.error(error instanceof Error ? error.message : "取消需求失败");
+    }
   });
 
   const restoreMutation = useMutation({
-    mutationFn: (id: string) => requirementsBoardApi.restoreRequirement(id),
+    mutationFn: (target: MockRequirement) =>
+      requirementsBoardApi.restoreRequirement(target.id, target.version),
     onSuccess: () => {
       message.success("需求已恢复");
       void invalidateBoard();
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "恢复需求失败")
+    onError: (error) => {
+      if (handleEditConflict(error, message, queryClient)) return;
+      message.error(error instanceof Error ? error.message : "恢复需求失败");
+    }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => requirementsBoardApi.deleteRequirement(id),
+    mutationFn: (target: MockRequirement) =>
+      requirementsBoardApi.deleteRequirement(target.id, target.version),
     onSuccess: () => {
       message.success("需求已删除");
       void invalidateBoard();
       onClose();
     },
     onError: (error) => {
+      if (handleEditConflict(error, message, queryClient)) return;
       const text = error instanceof Error ? error.message : "删除需求失败";
       if (/409|has_associations|associated/i.test(text)) {
         message.warning("该需求已有历史数据，无法删除，可选择取消需求");
@@ -1419,7 +1455,7 @@ function RequirementDrawer({
       okText: "取消需求",
       okButtonProps: { danger: true },
       cancelText: "返回",
-      onOk: () => cancelMutation.mutateAsync(requirement.id)
+      onOk: () => cancelMutation.mutateAsync(requirement)
     });
   };
 
@@ -1430,7 +1466,7 @@ function RequirementDrawer({
       content: "恢复后，该需求将回到待开始状态，并重新进入需求看板。",
       okText: "恢复需求",
       cancelText: "返回",
-      onOk: () => restoreMutation.mutateAsync(requirement.id)
+      onOk: () => restoreMutation.mutateAsync(requirement)
     });
   };
 
@@ -1442,7 +1478,7 @@ function RequirementDrawer({
       okText: "彻底删除",
       okButtonProps: { danger: true },
       cancelText: "取消",
-      onOk: () => deleteMutation.mutateAsync(requirement.id)
+      onOk: () => deleteMutation.mutateAsync(requirement)
     });
   };
 
@@ -1862,18 +1898,18 @@ function RequirementEditModal({
         priority: values.priority,
         deadline: values.deadline ? values.deadline.format("YYYY-MM-DD") : undefined,
         feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        base_version: requirement.version
       }),
     onSuccess: () => {
       message.success("需求已更新");
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
-      ]);
+      void invalidateRequirementWorkspaces(queryClient);
       onSaved();
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "需求更新失败")
+    onError: (error) => {
+      if (handleEditConflict(error, message, queryClient)) return;
+      message.error(error instanceof Error ? error.message : "需求更新失败");
+    }
   });
 
   return (
@@ -2276,16 +2312,18 @@ function TaskDrawerContent({
   const [editOpen, setEditOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState<string>();
   const dependencyBlocked = task.status === "blocked";
+  const refreshAfterConflict = (error: unknown, fallback: string) => {
+    if (handleEditConflict(error, message, queryClient)) return;
+    message.error(error instanceof Error ? error.message : fallback);
+  };
   const deleteMutation = useMutation({
-    mutationFn: () => requirementsBoardApi.deleteTask(task.id),
+    mutationFn: () => requirementsBoardApi.deleteTask(task.id, task.version),
     onSuccess: () => {
       message.success("任务已删除");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      void invalidateRequirementWorkspaces(queryClient);
       onDeleted();
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "任务删除失败")
+    onError: (error) => refreshAfterConflict(error, "任务删除失败")
   });
   const handleDelete = () => {
     modal.confirm({
@@ -2298,52 +2336,44 @@ function TaskDrawerContent({
     });
   };
   const progressMutation = useMutation({
-    mutationFn: () => requirementsBoardApi.updateTaskProgress(task.id, progress),
+    mutationFn: () => requirementsBoardApi.updateTaskProgress(task.id, progress, task.version),
     onSuccess: (updated) => {
       message.success("任务进度已保存");
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      void invalidateRequirementWorkspaces(queryClient);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "进度保存失败")
+    onError: (error) => refreshAfterConflict(error, "进度保存失败")
   });
   const statusMutation = useMutation({
     mutationFn: (next: Exclude<MockTaskStatus, "blocked">) =>
-      requirementsBoardApi.updateTaskStatus(task.id, next),
+      requirementsBoardApi.updateTaskStatus(task.id, next, task.version),
     onSuccess: (updated) => {
       message.success("任务状态已更新");
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      void invalidateRequirementWorkspaces(queryClient);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "状态更新失败")
+    onError: (error) => refreshAfterConflict(error, "状态更新失败")
   });
   const addDependencyMutation = useMutation({
     mutationFn: (dependsOnId: string) =>
-      requirementsBoardApi.addTaskDependency(task.id, dependsOnId),
+      requirementsBoardApi.addTaskDependency(task.id, dependsOnId, task.version),
     onSuccess: (updated) => {
       message.success("上游依赖已更新");
       setDependencyDraft(undefined);
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+      void invalidateRequirementWorkspaces(queryClient);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "依赖更新失败")
+    onError: (error) => refreshAfterConflict(error, "依赖更新失败")
   });
   const removeDependencyMutation = useMutation({
     mutationFn: (dependsOnId: string) =>
-      requirementsBoardApi.removeTaskDependency(task.id, dependsOnId),
+      requirementsBoardApi.removeTaskDependency(task.id, dependsOnId, task.version),
     onSuccess: (updated) => {
       message.success("上游依赖已移除");
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
+      void invalidateRequirementWorkspaces(queryClient);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "依赖移除失败")
+    onError: (error) => refreshAfterConflict(error, "依赖移除失败")
   });
   const requestStatusChange = (next: Exclude<MockTaskStatus, "blocked">) => {
     if (next === "done" || next === "todo") {
@@ -2687,18 +2717,18 @@ function TaskEditModal({
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined,
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
+        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        base_version: task.version
       }),
     onSuccess: (updated) => {
       message.success("任务已更新");
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
-      ]);
+      void invalidateRequirementWorkspaces(queryClient);
       onSaved(updated);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "任务更新失败")
+    onError: (error) => {
+      if (handleEditConflict(error, message, queryClient)) return;
+      message.error(error instanceof Error ? error.message : "任务更新失败");
+    }
   });
 
   return (

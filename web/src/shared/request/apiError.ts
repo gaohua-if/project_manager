@@ -82,3 +82,10 @@ export function getApiErrorMessage(error: unknown, fallback = "请求失败，�
   }
   return fallback;
 }
+
+export function isEditConflict(error: unknown) {
+  if (!(error instanceof HttpError) || error.status !== 409 || !isRecord(error.payload)) {
+    return false;
+  }
+  return error.payload.code === "EDIT_CONFLICT";
+}

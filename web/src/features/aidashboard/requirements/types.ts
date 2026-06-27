@@ -61,6 +61,7 @@ export interface BoardRequirement {
   can_create_task?: boolean;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 export interface BoardTask {
@@ -87,6 +88,7 @@ export interface BoardTask {
   can_delete?: boolean;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 export interface CreateBoardRequirementInput {
@@ -107,6 +109,7 @@ export interface UpdateBoardRequirementInput {
   deadline?: string;
   feishu_doc_url?: string;
   acceptance_criteria?: string[];
+  base_version: number;
 }
 
 export interface CreateBoardTaskInput {
@@ -127,6 +130,7 @@ export interface UpdateBoardTaskInput {
   progress?: number;
   due_date?: string;
   acceptance_criteria?: string[];
+  base_version: number;
 }
 
 export type FavoriteTargetType = FollowTargetType;

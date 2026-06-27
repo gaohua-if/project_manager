@@ -169,7 +169,7 @@ func (h *DashboardHandler) loadTask(id, userID string) (model.Task, error) {
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
-			t.completed_at, t.created_at, t.updated_at
+			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
 		LEFT JOIN users a ON a.id = t.assignee_id
@@ -195,7 +195,7 @@ func scanProjectionTask(row rowScanner) (model.Task, error) {
 		&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
 		&ac, &assigneeID, &assigneeName, &task.CreatorTLID,
 		&task.Status, &task.Priority, &task.Progress, &dueDate,
-		&completedAt, &task.CreatedAt, &task.UpdatedAt,
+		&completedAt, &task.CreatedAt, &task.UpdatedAt, &task.Version,
 	)
 	if err != nil {
 		return model.Task{}, err
@@ -275,7 +275,7 @@ func (h *DashboardHandler) loadTaskRiskFacts(u *model.User, now time.Time) ([]da
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
-			t.completed_at, t.created_at, t.updated_at
+			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
 		LEFT JOIN users a ON a.id = t.assignee_id

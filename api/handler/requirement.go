@@ -27,7 +27,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
 		WHERE 1=1`
@@ -76,7 +76,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 		var completedAt sql.NullTime
 		if err := rows.Scan(&req.ID, &req.Title, &req.Description, &feishuURL, &acStr,
 			&req.CreatorID, &req.CreatorName, &req.CreatorRole, &req.Status, &req.Priority,
-			&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt); err != nil {
+			&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt, &req.Version); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -111,13 +111,13 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 	err := h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
 		WHERE r.id = $1`, id).Scan(
 		&req.ID, &req.Title, &req.Description, &feishuURL, &acStr,
 		&req.CreatorID, &req.CreatorName, &req.CreatorRole, &req.Status, &req.Priority,
-		&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt,
+		&req.Progress, &deadline, &completedAt, &req.CreatedAt, &req.UpdatedAt, &req.Version,
 	)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -197,11 +197,11 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	err = h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
 			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
-			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at
+			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r JOIN users u ON u.id = r.creator_id WHERE r.id = $1`, reqID).Scan(
 		&result.ID, &result.Title, &result.Description, &feishuURL, &acStr,
 		&result.CreatorID, &result.CreatorName, &result.CreatorRole, &result.Status, &result.Priority,
-		&result.Progress, &deadline, &completedAt, &result.CreatedAt, &result.UpdatedAt,
+		&result.Progress, &deadline, &completedAt, &result.CreatedAt, &result.UpdatedAt, &result.Version,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -226,6 +226,9 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Status != nil && !isRequirementStatus(*req.Status) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid requirement status"})
+		return
+	}
+	if !requireBaseVersion(w, req.BaseVersion) {
 		return
 	}
 	allowed, permErr := h.canManageRequirement(u, id)
@@ -284,13 +287,13 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(sets) == 0 {
-		h.Get(w, r)
+		writeNoFieldsToUpdate(w)
 		return
 	}
 
-	sets = append(sets, "updated_at = now()")
-	args = append(args, id)
-	query := fmt.Sprintf("UPDATE requirements SET %s WHERE id = $%d", strings.Join(sets, ", "), argIdx)
+	sets = append(sets, "version = version + 1", "updated_at = now()")
+	args = append(args, id, req.BaseVersion)
+	query := fmt.Sprintf("UPDATE requirements SET %s WHERE id = $%d AND version = $%d", strings.Join(sets, ", "), argIdx, argIdx+1)
 
 	res, err := h.db.Exec(query, args...)
 	if err != nil {
@@ -298,7 +301,7 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeRequirementNotFoundOrConflict(w, h.db, id)
 		return
 	}
 
@@ -308,6 +311,14 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
+	var req model.RequirementVersionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if !requireBaseVersion(w, req.BaseVersion) {
+		return
+	}
 	allowed, permErr := h.canManageRequirement(u, id)
 	if permErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
@@ -320,17 +331,26 @@ func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.db.Exec(`
 		UPDATE requirements
-		SET status = 'todo', completed_at = NULL, updated_at = now()
-		WHERE id = $1 AND status = 'cancelled'`, id)
+		SET status = 'todo', completed_at = NULL, version = version + 1, updated_at = now()
+		WHERE id = $1 AND status = 'cancelled' AND version = $2`, id, req.BaseVersion)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		var exists bool
-		_ = h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)`, id).Scan(&exists)
-		if !exists {
+		var currentVersion int64
+		var status string
+		err := h.db.QueryRow(`SELECT version, status FROM requirements WHERE id = $1`, id).Scan(&currentVersion, &status)
+		if err == sql.ErrNoRows {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if currentVersion != req.BaseVersion {
+			writeEditConflict(w, currentVersion)
 			return
 		}
 		writeJSON(w, http.StatusConflict, map[string]string{
@@ -346,6 +366,10 @@ func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
+	baseVersion, ok := parseBaseVersionFromQuery(w, r)
+	if !ok {
+		return
+	}
 	allowed, permErr := h.canManageRequirement(u, id)
 	if permErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
@@ -363,12 +387,16 @@ func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	var existing string
-	if err := tx.QueryRow("SELECT id FROM requirements WHERE id = $1 FOR UPDATE", id).Scan(&existing); err == sql.ErrNoRows {
+	var currentVersion int64
+	if err := tx.QueryRow("SELECT version FROM requirements WHERE id = $1 FOR UPDATE", id).Scan(&currentVersion); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	} else if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if currentVersion != baseVersion {
+		writeEditConflict(w, currentVersion)
 		return
 	}
 
@@ -405,7 +433,7 @@ func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
 }
 
 func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
@@ -445,6 +473,14 @@ func (h *RequirementHandler) GetAC(w http.ResponseWriter, r *http.Request) {
 func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
+	var req model.RegenerateACRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if !requireBaseVersion(w, req.BaseVersion) {
+		return
+	}
 	allowed, permErr := h.canManageRequirement(u, id)
 	if permErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": permErr.Error()})
@@ -456,13 +492,18 @@ func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request
 	}
 
 	var title, description string
-	err := h.db.QueryRow("SELECT title, description FROM requirements WHERE id = $1", id).Scan(&title, &description)
+	var currentVersion int64
+	err := h.db.QueryRow("SELECT title, description, version FROM requirements WHERE id = $1", id).Scan(&title, &description, &currentVersion)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if currentVersion != req.BaseVersion {
+		writeEditConflict(w, currentVersion)
 		return
 	}
 
@@ -480,14 +521,18 @@ func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, err = h.db.Exec("UPDATE requirements SET acceptance_criteria = $1, updated_at = now() WHERE id = $2",
-		arrayToTextArray(ac), id)
+	res, err := h.db.Exec("UPDATE requirements SET acceptance_criteria = $1, version = version + 1, updated_at = now() WHERE id = $2 AND version = $3",
+		arrayToTextArray(ac), id, req.BaseVersion)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeRequirementNotFoundOrConflict(w, h.db, id)
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"acceptance_criteria": ac})
+	h.Get(w, r)
 }
 
 func (h *RequirementHandler) loadTeams(req *model.Requirement) {
@@ -513,7 +558,7 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, u *model.Use
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
-			t.completed_at, t.created_at, t.updated_at
+			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
 		LEFT JOIN users a ON a.id = t.assignee_id
@@ -532,7 +577,7 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, u *model.Use
 				&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
 				&ac, &assigneeID, &assigneeName, &task.CreatorTLID,
 				&task.Status, &task.Priority, &task.Progress, &dueDate,
-				&completedAt, &task.CreatedAt, &task.UpdatedAt,
+				&completedAt, &task.CreatedAt, &task.UpdatedAt, &task.Version,
 			) != nil {
 				continue
 			}

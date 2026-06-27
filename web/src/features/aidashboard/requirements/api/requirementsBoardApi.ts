@@ -14,6 +14,7 @@ import {
   fetchTaskAssignees,
   fetchTeams,
   followTarget,
+  regenerateAC,
   removeTaskDependency,
   restoreRequirement,
   unfollowTarget,
@@ -65,7 +66,8 @@ function normalizeRequirement(requirement: Requirement): MockRequirement {
     can_manage_ac: requirement.can_manage_ac,
     can_create_task: requirement.can_create_task,
     created_at: requirement.created_at,
-    updated_at: requirement.updated_at
+    updated_at: requirement.updated_at,
+    version: requirement.version
   };
 }
 
@@ -93,7 +95,8 @@ function normalizeTask(task: Task): MockTask {
     can_manage_dependencies: task.can_manage_dependencies,
     can_delete: task.can_delete,
     created_at: task.created_at,
-    updated_at: task.updated_at
+    updated_at: task.updated_at,
+    version: task.version
   };
 }
 
@@ -121,23 +124,27 @@ export const requirementsBoardApi = {
   },
 
   async updateRequirement(id: string, input: UpdateBoardRequirementInput) {
-    return normalizeRequirement(await updateRequirement(id, input as Record<string, unknown>));
+    return normalizeRequirement(await updateRequirement(id, input as unknown as Record<string, unknown>));
   },
 
-  async updateRequirementStage(id: string, status: RequirementStage) {
-    return normalizeRequirement(await updateRequirement(id, { status }));
+  async updateRequirementStage(id: string, status: RequirementStage, baseVersion: number) {
+    return normalizeRequirement(await updateRequirement(id, { status, base_version: baseVersion }));
   },
 
-  async cancelRequirement(id: string) {
-    return normalizeRequirement(await cancelRequirement(id));
+  async cancelRequirement(id: string, baseVersion: number) {
+    return normalizeRequirement(await cancelRequirement(id, baseVersion));
   },
 
-  async restoreRequirement(id: string) {
-    return normalizeRequirement(await restoreRequirement(id));
+  async restoreRequirement(id: string, baseVersion: number) {
+    return normalizeRequirement(await restoreRequirement(id, baseVersion));
   },
 
-  async deleteRequirement(id: string) {
-    return deleteRequirement(id);
+  async deleteRequirement(id: string, baseVersion: number) {
+    return deleteRequirement(id, baseVersion);
+  },
+
+  async regenerateAC(id: string, baseVersion: number) {
+    return normalizeRequirement(await regenerateAC(id, baseVersion));
   },
 
   async listTasks(requirementId?: string) {
@@ -167,27 +174,27 @@ export const requirementsBoardApi = {
   },
 
   async updateTask(id: string, input: UpdateBoardTaskInput) {
-    return normalizeTask(await updateTask(id, input as Record<string, unknown>));
+    return normalizeTask(await updateTask(id, input as unknown as Record<string, unknown>));
   },
 
-  async deleteTask(id: string) {
-    return deleteTask(id);
+  async deleteTask(id: string, baseVersion: number) {
+    return deleteTask(id, baseVersion);
   },
 
-  async updateTaskProgress(taskId: string, progress: number) {
-    return normalizeTask(await updateTaskProgress(taskId, progress));
+  async updateTaskProgress(taskId: string, progress: number, baseVersion: number) {
+    return normalizeTask(await updateTaskProgress(taskId, progress, baseVersion));
   },
 
-  async updateTaskStatus(taskId: string, status: Exclude<MockTaskStatus, "blocked">) {
-    return normalizeTask(await updateTaskStatus(taskId, status));
+  async updateTaskStatus(taskId: string, status: Exclude<MockTaskStatus, "blocked">, baseVersion: number) {
+    return normalizeTask(await updateTaskStatus(taskId, status, baseVersion));
   },
 
-  async addTaskDependency(taskId: string, dependsOnId: string) {
-    return normalizeTask(await addTaskDependency(taskId, dependsOnId));
+  async addTaskDependency(taskId: string, dependsOnId: string, baseVersion: number) {
+    return normalizeTask(await addTaskDependency(taskId, dependsOnId, baseVersion));
   },
 
-  async removeTaskDependency(taskId: string, dependsOnId: string) {
-    return normalizeTask(await removeTaskDependency(taskId, dependsOnId));
+  async removeTaskDependency(taskId: string, dependsOnId: string, baseVersion: number) {
+    return normalizeTask(await removeTaskDependency(taskId, dependsOnId, baseVersion));
   },
 
   async listTeams() {
