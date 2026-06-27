@@ -32,6 +32,7 @@ import { useAuth } from "@/shared/auth/authContext";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 import { appendSearch } from "@/shared/utils/urlQuery";
+import { invalidateRequirementTaskWorkspace } from "../../requirements/queryInvalidation";
 
 const { Text } = Typography;
 
@@ -137,7 +138,7 @@ export function ProductsPage() {
       updateSessionTask(sessionId, taskId),
     onSuccess: () => {
       message.success("任务关联已更新");
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void invalidateRequirementTaskWorkspace(queryClient);
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "更新失败")
   });
@@ -146,7 +147,7 @@ export function ProductsPage() {
     mutationFn: (sessionId: string) => withdrawSession(sessionId),
     onSuccess: () => {
       message.success("Session 已撤回");
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void invalidateRequirementTaskWorkspace(queryClient);
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "撤回失败")
   });
@@ -428,4 +429,3 @@ export function ProductsPage() {
     </PagePanel>
   );
 }
-

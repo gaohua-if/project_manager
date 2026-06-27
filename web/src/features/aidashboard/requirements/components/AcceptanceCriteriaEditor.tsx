@@ -17,7 +17,7 @@ export function AcceptanceCriteriaEditor({
   placeholder = "输入一条可验证的验收标准"
 }: AcceptanceCriteriaEditorProps) {
   const rows = Array.isArray(value)
-    ? value
+    ? [...value]
     : typeof value === "string" && value
       ? value.split("\n")
       : [];

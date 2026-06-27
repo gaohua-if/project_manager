@@ -14,8 +14,19 @@ import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 import "../../aidashboard-pattern.css";
 import { requirementsBoardApi } from "../api/requirementsBoardApi";
 import { AcceptanceCriteriaEditor } from "../components/AcceptanceCriteriaEditor";
-import { normalizeAcceptanceCriteria } from "../components/acceptanceCriteriaUtils";
+import { invalidateRequirementTaskWorkspace } from "../queryInvalidation";
 import type { MockRequirement, RequirementPriority } from "../types";
+import {
+  acceptanceCriteriaRules,
+  descriptionRules,
+  normalizeCriteria,
+  normalizeOptionalText,
+  normalizeRequiredText,
+  optionalUrlRules,
+  requiredArrayRules,
+  requiredSelectRules,
+  titleRules
+} from "../validation/requirementTaskValidation";
 
 interface CreateFormValues {
   title: string;
@@ -45,13 +56,13 @@ export function RequirementCreatePage() {
   const createMutation = useMutation({
     mutationFn: (values: CreateFormValues) =>
       requirementsBoardApi.createRequirement({
-        title: values.title.trim(),
-        description: values.description.trim(),
+        title: normalizeRequiredText(values.title),
+        description: normalizeRequiredText(values.description),
         priority: values.priority,
         deadline: values.deadline?.format("YYYY-MM-DD"),
         team_ids: values.team_ids,
-        feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria)
+        feishu_doc_url: normalizeOptionalText(values.feishu_doc_url),
+        acceptance_criteria: normalizeCriteria(values.acceptance_criteria)
       })
   });
   const submitting = createMutation.isPending;
@@ -68,7 +79,7 @@ export function RequirementCreatePage() {
     setFormError(undefined);
     try {
       const created = await createMutation.mutateAsync(values);
-      await queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      await invalidateRequirementTaskWorkspace(queryClient, { requirementId: created.id });
       markClean();
       setCreatedRequirement(created);
     } catch (error) {
@@ -164,7 +175,7 @@ export function RequirementCreatePage() {
                   className="aidashboard-form__full-row"
                   label="标题"
                   name="title"
-                  rules={[{ required: true, whitespace: true, message: "请输入标题" }]}
+                  rules={titleRules("标题")}
                 >
                   <Input placeholder="例如：控制台日报任务进展上报" />
                 </Form.Item>
@@ -172,7 +183,7 @@ export function RequirementCreatePage() {
                   className="aidashboard-form__full-row"
                   label="描述"
                   name="description"
-                  rules={[{ required: true, whitespace: true, message: "请输入描述" }]}
+                  rules={descriptionRules("描述")}
                 >
                   <Input.TextArea rows={5} placeholder="详细描述需求背景、目标和范围" />
                 </Form.Item>
@@ -184,7 +195,7 @@ export function RequirementCreatePage() {
                 <h2>需求验收标准（可选）</h2>
                 <p>逐条定义需求级完成条件；P0 不要求任务关联或覆盖这些标准。</p>
               </div>
-              <Form.Item label="标准列表" name="acceptance_criteria">
+              <Form.Item label="标准列表" name="acceptance_criteria" rules={acceptanceCriteriaRules()}>
                 <AcceptanceCriteriaEditor placeholder="例如：用户可以完成日报生成并发送" />
               </Form.Item>
             </section>
@@ -198,7 +209,7 @@ export function RequirementCreatePage() {
                 <Form.Item
                   label="优先级"
                   name="priority"
-                  rules={[{ required: true, message: "请选择优先级" }]}
+                  rules={requiredSelectRules("优先级")}
                 >
                   <Select
                     options={[
@@ -215,7 +226,7 @@ export function RequirementCreatePage() {
                 <Form.Item
                   label="飞书文档"
                   name="feishu_doc_url"
-                  rules={[{ type: "url", message: "请输入有效的文档链接" }]}
+                  rules={optionalUrlRules("飞书文档链接")}
                 >
                   <Input placeholder="https://..." />
                 </Form.Item>
@@ -223,7 +234,7 @@ export function RequirementCreatePage() {
               <Form.Item
                 label="参与团队"
                 name="team_ids"
-                rules={[{ required: true, message: "至少选择一个团队", type: "array", min: 1 }]}
+                rules={requiredArrayRules("团队")}
               >
                 <Select
                   mode="multiple"

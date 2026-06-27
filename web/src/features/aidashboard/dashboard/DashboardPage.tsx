@@ -89,6 +89,7 @@ import {
   type DashboardTokenRange,
   type DashboardTokenReport
 } from "./dashboardTokenStats";
+import { invalidateRequirementTaskWorkspace } from "../requirements/queryInvalidation";
 import {
   DailyReportGenerateModal,
   type DailyGenerateScope
@@ -1434,16 +1435,12 @@ export function DashboardPage() {
       );
       setEditingTaskKey(null);
       setEditingTaskDraft(null);
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void invalidateRequirementTaskWorkspace(queryClient, { taskId: task.taskId });
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, task) => {
       if (isEditConflict(error)) {
         message.warning("内容已被其他人更新，请刷新后再操作");
-        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+        void invalidateRequirementTaskWorkspace(queryClient, { taskId: task.taskId });
         return;
       }
       message.error(error instanceof Error ? error.message : "任务更新失败");

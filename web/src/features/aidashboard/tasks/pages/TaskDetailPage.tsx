@@ -25,6 +25,7 @@ import { buildListReturnUrl } from "@/shared/utils/urlQuery";
 import "../../aidashboard-pattern.css";
 import { TaskPriorityTag, TaskStatusTag } from "../../dashboard/shared";
 import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
+import { invalidateRequirementTaskWorkspace } from "../../requirements/queryInvalidation";
 import type { MockTaskDependency, MockTaskStatus, MockTokenSource } from "../../requirements/types";
 
 const { Text } = Typography;
@@ -85,20 +86,21 @@ export function TaskDetailPage() {
   const statusMutation = useMutation({
     mutationFn: (status: Exclude<MockTaskStatus, "blocked">) =>
       requirementsBoardApi.updateTaskStatus(id, status, task?.version ?? 0),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("任务状态已更新");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      queryClient.setQueryData(["requirements-board", "task", id], updated);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => {
       if (isEditConflict(error)) {
         message.warning("内容已被其他人更新，请刷新后再操作");
-        void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
-        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+        void invalidateRequirementTaskWorkspace(queryClient, {
+          requirementId: task?.requirement_id,
+          taskId: id
+        });
         return;
       }
       message.error(error instanceof Error ? error.message : "状态更新失败");
@@ -108,21 +110,22 @@ export function TaskDetailPage() {
   const progressMutation = useMutation({
     mutationFn: (nextProgress: number) =>
       requirementsBoardApi.updateTaskProgress(id, nextProgress, task?.version ?? 0),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       setProgressOverride(null);
       message.success("任务进度已保存");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      queryClient.setQueryData(["requirements-board", "task", id], updated);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => {
       if (isEditConflict(error)) {
         message.warning("内容已被其他人更新，请刷新后再操作");
-        void queryClient.invalidateQueries({ queryKey: ["requirements-board", "task", id] });
-        void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+        void invalidateRequirementTaskWorkspace(queryClient, {
+          requirementId: task?.requirement_id,
+          taskId: id
+        });
         return;
       }
       message.error(error instanceof Error ? error.message : "进度保存失败");

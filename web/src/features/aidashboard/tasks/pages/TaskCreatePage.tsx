@@ -21,9 +21,17 @@ import { buildCreateSuccessUrl } from "@/shared/utils/urlQuery";
 
 import "../../aidashboard-pattern.css";
 import { AcceptanceCriteriaEditor } from "../../requirements/components/AcceptanceCriteriaEditor";
-import { normalizeAcceptanceCriteria } from "../../requirements/components/acceptanceCriteriaUtils";
 import { requirementsBoardApi } from "../../requirements/api/requirementsBoardApi";
+import { invalidateRequirementTaskWorkspace } from "../../requirements/queryInvalidation";
 import type { MockTaskPriority } from "../../requirements/types";
+import {
+  acceptanceCriteriaRules,
+  dependencyArrayRules,
+  normalizeCriteria,
+  normalizeRequiredText,
+  requiredSelectRules,
+  titleRules
+} from "../../requirements/validation/requirementTaskValidation";
 
 interface CreateTaskFormValues {
   title: string;
@@ -80,8 +88,8 @@ export function TaskCreatePage() {
     mutationFn: (values: CreateTaskFormValues) =>
       requirementsBoardApi.createTask({
         requirement_id: values.requirement_id,
-        title: values.title.trim(),
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        title: normalizeRequiredText(values.title),
+        acceptance_criteria: normalizeCriteria(values.acceptance_criteria),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -107,7 +115,10 @@ export function TaskCreatePage() {
     setFormError(undefined);
     try {
       const created = await createMutation.mutateAsync(values);
-      await queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      await invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: created.requirement_id,
+        taskId: created.id
+      });
       markClean();
       navigate(`/tasks/${created.id}`, { replace: true });
     } catch (error) {
@@ -171,14 +182,14 @@ export function TaskCreatePage() {
                   className="aidashboard-form__full-row"
                   label="任务标题"
                   name="title"
-                  rules={[{ required: true, whitespace: true, message: "请输入标题" }]}
+                  rules={titleRules("任务标题")}
                 >
                   <Input placeholder="例如：实现日报聚合接口" />
                 </Form.Item>
                 <Form.Item
                   label="所属需求"
                   name="requirement_id"
-                  rules={[{ required: true, message: "请选择需求" }]}
+                  rules={requiredSelectRules("需求")}
                 >
                   <Select
                     placeholder="选择需求"
@@ -194,7 +205,7 @@ export function TaskCreatePage() {
                 <Form.Item
                   label="负责人"
                   name="assignee_id"
-                  rules={[{ required: true, message: "请选择负责人" }]}
+                  rules={requiredSelectRules("负责人")}
                 >
                   <Select
                     placeholder="选择负责人"
@@ -213,7 +224,7 @@ export function TaskCreatePage() {
                 <Form.Item
                   label="优先级"
                   name="priority"
-                  rules={[{ required: true, message: "请选择优先级" }]}
+                  rules={requiredSelectRules("优先级")}
                 >
                   <Select
                     options={[
@@ -230,6 +241,7 @@ export function TaskCreatePage() {
                   className="aidashboard-form__full-row"
                   label="上游依赖"
                   name="dependency_task_ids"
+                  rules={dependencyArrayRules()}
                   tooltip="选择当前任务依赖的同需求下其它任务，被依赖任务未完成时本任务会显示为阻塞"
                 >
                   <Select
@@ -250,6 +262,7 @@ export function TaskCreatePage() {
                   className="aidashboard-form__full-row"
                   label="验收标准"
                   name="acceptance_criteria"
+                  rules={acceptanceCriteriaRules()}
                 >
                   <AcceptanceCriteriaEditor placeholder="例如：接口返回字段符合前端展示需要" />
                 </Form.Item>

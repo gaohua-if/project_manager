@@ -49,7 +49,7 @@ import {
 import type { TableProps } from "antd";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "@/shared/auth/authContext";
@@ -60,13 +60,24 @@ import { appendSearch } from "@/shared/utils/urlQuery";
 
 import { TaskStatusTag } from "../../dashboard/shared";
 import { AcceptanceCriteriaEditor } from "../components/AcceptanceCriteriaEditor";
-import { normalizeAcceptanceCriteria } from "../components/acceptanceCriteriaUtils";
 import {
   RequirementMetricCard,
   RequirementMetricGrid,
   type RequirementMetricTone
 } from "../components/RequirementMetricCard";
 import { requirementsBoardApi } from "../api/requirementsBoardApi";
+import { invalidateRequirementTaskWorkspace } from "../queryInvalidation";
+import {
+  acceptanceCriteriaRules,
+  dependencyArrayRules,
+  descriptionRules,
+  normalizeCriteria,
+  normalizeOptionalText,
+  normalizeRequiredText,
+  optionalUrlRules,
+  requiredSelectRules,
+  titleRules
+} from "../validation/requirementTaskValidation";
 import type {
   FavoriteTargetType,
   MockAssignee,
@@ -90,18 +101,10 @@ type MessageApi = {
   warning: (content: string) => unknown;
 };
 
-function invalidateRequirementWorkspaces(queryClient: QueryClient) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["requirements-board"] }),
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
-  ]);
-}
-
 function handleEditConflict(error: unknown, messageApi: MessageApi, queryClient: QueryClient) {
   if (!isEditConflict(error)) return false;
   messageApi.warning(EDIT_CONFLICT_MESSAGE);
-  void invalidateRequirementWorkspaces(queryClient);
+  void invalidateRequirementTaskWorkspace(queryClient);
   return true;
 }
 
@@ -386,9 +389,7 @@ export function RequirementsListPage() {
       requirementsBoardApi.toggleFavorite(targetType, targetId),
     onSuccess: (result) => {
       message.success(result.favorited ? "已加入关注" : "已取消关注");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board", "favorites"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      void invalidateRequirementTaskWorkspace(queryClient);
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "关注操作失败")
   });
@@ -427,13 +428,13 @@ export function RequirementsListPage() {
       if (handleEditConflict(error, message, queryClient)) return;
       message.error(error instanceof Error ? error.message : "需求阶段更新失败");
     },
-    onSuccess: () => message.success("需求阶段已更新"),
-    onSettled: () =>
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["requirements-board", "requirements"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] })
-      ])
+    onSuccess: (updated) => {
+      message.success("需求阶段已更新");
+      if (selectedRequirement?.id === updated.id) {
+        setSelectedRequirement(updated);
+      }
+    },
+    onSettled: () => void invalidateRequirementTaskWorkspace(queryClient)
   });
 
   const requirements = requirementsQuery.data ?? EMPTY_REQUIREMENTS;
@@ -452,8 +453,14 @@ export function RequirementsListPage() {
   const navigationRequirement = navigationTask
     ? undefined
     : requirements.find((item) => item.id === searchParams.get("requirementId"));
-  const activeRequirement = selectedRequirement ?? navigationRequirement;
-  const activeTask = selectedTask ?? navigationTask;
+  const selectedRequirementFromLatest = selectedRequirement
+    ? (requirements.find((item) => item.id === selectedRequirement.id) ?? selectedRequirement)
+    : undefined;
+  const selectedTaskFromLatest = selectedTask
+    ? (tasks.find((item) => item.id === selectedTask.id) ?? selectedTask)
+    : undefined;
+  const activeRequirement = selectedRequirementFromLatest ?? navigationRequirement;
+  const activeTask = selectedTaskFromLatest ?? navigationTask;
 
   const clearNavigationTarget = () => {
     setSearchParams(
@@ -876,6 +883,7 @@ export function RequirementsListPage() {
           setCreatorOpen(false);
           clearNavigationTarget();
         }}
+        onSaved={(updated) => setSelectedRequirement(updated)}
         onOpenTask={(task) => setSelectedTask(task)}
       />
       <TaskDrawer
@@ -1381,6 +1389,7 @@ function RequirementDrawer({
   onToggleFavorite,
   onCreatorOpenChange,
   onClose,
+  onSaved,
   onOpenTask
 }: {
   requirement?: MockRequirement;
@@ -1393,6 +1402,7 @@ function RequirementDrawer({
   onToggleFavorite?: () => void;
   onCreatorOpenChange: (open: boolean) => void;
   onClose: () => void;
+  onSaved: (requirement: MockRequirement) => void;
   onOpenTask: (task: MockTask) => void;
 }) {
   const { message, modal } = App.useApp();
@@ -1400,13 +1410,15 @@ function RequirementDrawer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
-  const invalidateBoard = () => invalidateRequirementWorkspaces(queryClient);
+  const invalidateBoard = (requirementId = requirement?.id) =>
+    invalidateRequirementTaskWorkspace(queryClient, { requirementId });
 
   const cancelMutation = useMutation({
     mutationFn: (target: MockRequirement) =>
       requirementsBoardApi.cancelRequirement(target.id, target.version),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("需求已取消");
+      onSaved(updated);
       void invalidateBoard();
     },
     onError: (error) => {
@@ -1418,8 +1430,9 @@ function RequirementDrawer({
   const restoreMutation = useMutation({
     mutationFn: (target: MockRequirement) =>
       requirementsBoardApi.restoreRequirement(target.id, target.version),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("需求已恢复");
+      onSaved(updated);
       void invalidateBoard();
     },
     onError: (error) => {
@@ -1496,10 +1509,10 @@ function RequirementDrawer({
   const linkMutation = useMutation({
     mutationFn: (sourceIds: string[]) =>
       requirementsBoardApi.linkRequirementTokenSources(requirement!.id, sourceIds),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("已关联 session");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      onSaved(updated);
+      void invalidateBoard(updated.id);
       setPickerOpen(false);
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "关联失败")
@@ -1507,11 +1520,10 @@ function RequirementDrawer({
   const unlinkMutation = useMutation({
     mutationFn: (sourceId: string) =>
       requirementsBoardApi.unlinkRequirementTokenSource(requirement!.id, sourceId),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("已移除 session");
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      onSaved(updated);
+      void invalidateBoard(updated.id);
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "移除失败")
   });
@@ -1839,7 +1851,10 @@ function RequirementDrawer({
             open={editOpen}
             requirement={requirement}
             onCancel={() => setEditOpen(false)}
-            onSaved={() => setEditOpen(false)}
+            onSaved={(updated) => {
+              onSaved(updated);
+              setEditOpen(false);
+            }}
           />
         </Space>
       ) : null}
@@ -1856,7 +1871,7 @@ function RequirementEditModal({
   open: boolean;
   requirement: MockRequirement;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (requirement: MockRequirement) => void;
 }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -1883,6 +1898,14 @@ function RequirementEditModal({
     [requirement]
   );
 
+  useEffect(() => {
+    if (open) {
+      form.setFieldsValue(initialValues);
+    } else {
+      form.resetFields();
+    }
+  }, [form, initialValues, open]);
+
   const updateMutation = useMutation({
     mutationFn: (values: {
       title: string;
@@ -1893,18 +1916,18 @@ function RequirementEditModal({
       acceptance_criteria: string[];
     }) =>
       requirementsBoardApi.updateRequirement(requirement.id, {
-        title: values.title.trim(),
-        description: values.description,
+        title: normalizeRequiredText(values.title),
+        description: normalizeRequiredText(values.description),
         priority: values.priority,
         deadline: values.deadline ? values.deadline.format("YYYY-MM-DD") : undefined,
-        feishu_doc_url: values.feishu_doc_url?.trim() || undefined,
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        feishu_doc_url: normalizeOptionalText(values.feishu_doc_url),
+        acceptance_criteria: normalizeCriteria(values.acceptance_criteria),
         base_version: requirement.version
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("需求已更新");
-      void invalidateRequirementWorkspaces(queryClient);
-      onSaved();
+      void invalidateRequirementTaskWorkspace(queryClient, { requirementId: updated.id });
+      onSaved(updated);
     },
     onError: (error) => {
       if (handleEditConflict(error, message, queryClient)) return;
@@ -1936,17 +1959,17 @@ function RequirementEditModal({
         <Form.Item
           label="需求标题"
           name="title"
-          rules={[{ required: true, whitespace: true, message: "请输入需求标题" }]}
+          rules={titleRules("需求标题")}
         >
           <Input placeholder="需求标题" />
         </Form.Item>
-        <Form.Item label="需求描述" name="description">
+        <Form.Item label="需求描述" name="description" rules={descriptionRules("需求描述")}>
           <Input.TextArea rows={3} placeholder="补充背景与目标" />
         </Form.Item>
         <Form.Item
           label="优先级"
           name="priority"
-          rules={[{ required: true, message: "请选择优先级" }]}
+          rules={requiredSelectRules("优先级")}
         >
           <Select
             options={[
@@ -1960,12 +1983,13 @@ function RequirementEditModal({
         <Form.Item label="截止日期" name="deadline">
           <DatePicker style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item label="飞书文档链接" name="feishu_doc_url">
+        <Form.Item label="飞书文档链接" name="feishu_doc_url" rules={optionalUrlRules("飞书文档链接")}>
           <Input placeholder="https://..." />
         </Form.Item>
         <Form.Item
           label="标准列表"
           name="acceptance_criteria"
+          rules={acceptanceCriteriaRules()}
           extra="留空可清空需求验收标准"
         >
           <AcceptanceCriteriaEditor placeholder="输入一条可验证的需求验收标准" />
@@ -2023,8 +2047,8 @@ function TaskCreateModal({
     }) =>
       requirementsBoardApi.createTask({
         requirement_id: requirementId,
-        title: values.title.trim(),
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        title: normalizeRequiredText(values.title),
+        acceptance_criteria: normalizeCriteria(values.acceptance_criteria),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date?.format("YYYY-MM-DD"),
@@ -2033,9 +2057,10 @@ function TaskCreateModal({
     onSuccess: (task) => {
       message.success("任务已创建");
       form.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "follows"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard", "risks"] });
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: task.requirement_id,
+        taskId: task.id
+      });
       onCreated(task);
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "创建任务失败")
@@ -2077,7 +2102,7 @@ function TaskCreateModal({
           <Form.Item
             label="任务标题"
             name="title"
-            rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
+            rules={titleRules("任务标题")}
           >
             <Input placeholder="输入清晰、可交付的任务标题" />
           </Form.Item>
@@ -2085,7 +2110,7 @@ function TaskCreateModal({
             <Form.Item
               label="负责人"
               name="assignee_id"
-              rules={[{ required: true, message: "请选择负责人" }]}
+              rules={requiredSelectRules("负责人")}
             >
               <Select
                 placeholder="选择负责人"
@@ -2100,7 +2125,7 @@ function TaskCreateModal({
             <Form.Item
               label="优先级"
               name="priority"
-              rules={[{ required: true, message: "请选择优先级" }]}
+              rules={requiredSelectRules("优先级")}
             >
               <Select
                 options={[
@@ -2118,7 +2143,7 @@ function TaskCreateModal({
         <section className="requirements-task-modal__section">
           <h4>依赖关系</h4>
           {dependencyOptions.length ? (
-            <Form.Item label="上游依赖" name="dependency_task_ids">
+            <Form.Item label="上游依赖" name="dependency_task_ids" rules={dependencyArrayRules()}>
               <Select
                 mode="multiple"
                 placeholder="选择上游依赖任务"
@@ -2132,7 +2157,7 @@ function TaskCreateModal({
         </section>
         <section className="requirements-task-modal__section">
           <h4>验收标准</h4>
-          <Form.Item label="标准列表" name="acceptance_criteria">
+          <Form.Item label="标准列表" name="acceptance_criteria" rules={acceptanceCriteriaRules()}>
             <AcceptanceCriteriaEditor placeholder="输入一条可验证的任务验收标准" />
           </Form.Item>
         </section>
@@ -2320,7 +2345,10 @@ function TaskDrawerContent({
     mutationFn: () => requirementsBoardApi.deleteTask(task.id, task.version),
     onSuccess: () => {
       message.success("任务已删除");
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: task.requirement_id,
+        taskId: task.id
+      });
       onDeleted();
     },
     onError: (error) => refreshAfterConflict(error, "任务删除失败")
@@ -2340,7 +2368,10 @@ function TaskDrawerContent({
     onSuccess: (updated) => {
       message.success("任务进度已保存");
       onSaved(updated);
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => refreshAfterConflict(error, "进度保存失败")
   });
@@ -2350,7 +2381,10 @@ function TaskDrawerContent({
     onSuccess: (updated) => {
       message.success("任务状态已更新");
       onSaved(updated);
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => refreshAfterConflict(error, "状态更新失败")
   });
@@ -2361,7 +2395,10 @@ function TaskDrawerContent({
       message.success("上游依赖已更新");
       setDependencyDraft(undefined);
       onSaved(updated);
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => refreshAfterConflict(error, "依赖更新失败")
   });
@@ -2371,7 +2408,10 @@ function TaskDrawerContent({
     onSuccess: (updated) => {
       message.success("上游依赖已移除");
       onSaved(updated);
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => refreshAfterConflict(error, "依赖移除失败")
   });
@@ -2394,7 +2434,10 @@ function TaskDrawerContent({
     onSuccess: (updated) => {
       message.success("已关联 session");
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
       setPickerOpen(false);
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "关联失败")
@@ -2404,7 +2447,10 @@ function TaskDrawerContent({
     onSuccess: (updated) => {
       message.success("已移除 session");
       onSaved(updated);
-      void queryClient.invalidateQueries({ queryKey: ["requirements-board"] });
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "移除失败")
   });
@@ -2704,6 +2750,14 @@ function TaskEditModal({
     [task]
   );
 
+  useEffect(() => {
+    if (open) {
+      form.setFieldsValue(initialValues);
+    } else {
+      form.resetFields();
+    }
+  }, [form, initialValues, open]);
+
   const updateMutation = useMutation({
     mutationFn: (values: {
       title: string;
@@ -2713,16 +2767,19 @@ function TaskEditModal({
       acceptance_criteria?: string[];
     }) =>
       requirementsBoardApi.updateTask(task.id, {
-        title: values.title.trim(),
+        title: normalizeRequiredText(values.title),
         assignee_id: values.assignee_id,
         priority: values.priority,
         due_date: values.due_date ? values.due_date.format("YYYY-MM-DD") : undefined,
-        acceptance_criteria: normalizeAcceptanceCriteria(values.acceptance_criteria),
+        acceptance_criteria: normalizeCriteria(values.acceptance_criteria),
         base_version: task.version
       }),
     onSuccess: (updated) => {
       message.success("任务已更新");
-      void invalidateRequirementWorkspaces(queryClient);
+      void invalidateRequirementTaskWorkspace(queryClient, {
+        requirementId: updated.requirement_id,
+        taskId: updated.id
+      });
       onSaved(updated);
     },
     onError: (error) => {
@@ -2755,13 +2812,12 @@ function TaskEditModal({
         <Form.Item
           label="任务标题"
           name="title"
-          rules={[{ required: true, whitespace: true, message: "请输入任务标题" }]}
+          rules={titleRules("任务标题")}
         >
           <Input placeholder="任务标题" />
         </Form.Item>
-        <Form.Item label="负责人" name="assignee_id">
+        <Form.Item label="负责人" name="assignee_id" rules={requiredSelectRules("负责人")}>
           <Select
-            allowClear
             placeholder="选择负责人"
             loading={assigneesQuery.isLoading}
             disabled={assigneesQuery.isLoading || assigneesQuery.isError}
@@ -2774,7 +2830,7 @@ function TaskEditModal({
         <Form.Item
           label="优先级"
           name="priority"
-          rules={[{ required: true, message: "请选择优先级" }]}
+          rules={requiredSelectRules("优先级")}
         >
           <Select
             options={[
@@ -2787,7 +2843,7 @@ function TaskEditModal({
         <Form.Item label="截止日期" name="due_date">
           <DatePicker style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item label="标准列表" name="acceptance_criteria">
+        <Form.Item label="标准列表" name="acceptance_criteria" rules={acceptanceCriteriaRules()}>
           <AcceptanceCriteriaEditor placeholder="输入一条可验证的任务验收标准" />
         </Form.Item>
       </Form>
