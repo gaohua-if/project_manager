@@ -72,6 +72,19 @@ func writeRequirementNotFoundOrConflict(w http.ResponseWriter, db *sql.DB, id st
 	writeEditConflict(w, version)
 }
 
+func writeRequirementForbiddenOrNotFound(w http.ResponseWriter, db *sql.DB, id string, message string) {
+	var exists bool
+	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)`, id).Scan(&exists); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !exists {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": message})
+}
+
 func writeTaskNotFoundOrConflict(w http.ResponseWriter, db *sql.DB, id string) {
 	version, exists, err := currentTaskVersion(db, id)
 	if err != nil {

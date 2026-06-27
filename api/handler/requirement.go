@@ -237,7 +237,7 @@ func (h *RequirementHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to update requirement"})
+		writeRequirementForbiddenOrNotFound(w, h.db, id, "insufficient permissions to update requirement")
 		return
 	}
 
@@ -325,7 +325,7 @@ func (h *RequirementHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to restore requirements"})
+		writeRequirementForbiddenOrNotFound(w, h.db, id, "insufficient permissions to restore requirements")
 		return
 	}
 
@@ -376,7 +376,7 @@ func (h *RequirementHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions to delete requirements"})
+		writeRequirementForbiddenOrNotFound(w, h.db, id, "insufficient permissions to delete requirements")
 		return
 	}
 
@@ -487,7 +487,7 @@ func (h *RequirementHandler) RegenerateAC(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only director/pm/tl can regenerate AC"})
+		writeRequirementForbiddenOrNotFound(w, h.db, id, "only director/pm/tl can regenerate AC")
 		return
 	}
 

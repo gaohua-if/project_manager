@@ -95,3 +95,61 @@ func TestUpdateTaskReturnsConflictForStaleBaseVersion(t *testing.T) {
 		t.Fatalf("sql expectations: %v", err)
 	}
 }
+
+func TestUpdateRequirementReturnsNotFoundWhenPermissionPrecheckMissesMissingRequirement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM requirements WHERE id = \$1\)`).
+		WithArgs("missing-req").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM requirements WHERE id = \$1\)`).
+		WithArgs("missing-req").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+	h := NewRequirementHandler(db, nil)
+	req := httptest.NewRequest(http.MethodPut, "/requirements/missing-req", bytes.NewBufferString(`{"title":"B title","base_version":1}`))
+	req = requestWithUser(requestWithReportID(req, "missing-req"), &model.User{ID: "pm-1", Role: "pm"})
+	rec := httptest.NewRecorder()
+
+	h.Update(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestDeleteRequirementReturnsNotFoundWhenPermissionPrecheckMissesMissingRequirement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM requirements WHERE id = \$1\)`).
+		WithArgs("missing-req").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM requirements WHERE id = \$1\)`).
+		WithArgs("missing-req").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+	h := NewRequirementHandler(db, nil)
+	req := httptest.NewRequest(http.MethodDelete, "/requirements/missing-req?base_version=1", nil)
+	req = requestWithUser(requestWithReportID(req, "missing-req"), &model.User{ID: "pm-1", Role: "pm"})
+	rec := httptest.NewRecorder()
+
+	h.Delete(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
