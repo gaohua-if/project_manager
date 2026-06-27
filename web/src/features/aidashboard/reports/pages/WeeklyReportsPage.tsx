@@ -13,6 +13,7 @@ import {
   Segmented,
   Skeleton,
   Space,
+  Steps,
   Table,
   Tag
 } from "antd";
@@ -41,13 +42,14 @@ import {
   generateDepartmentWeeklyReport,
   generatePersonalWeeklyReport,
   generateTeamWeeklyReport,
+  saveDepartmentWeeklyReportCurrent,
   savePersonalWeeklyReport,
   saveTeamWeeklyReport,
   submitPersonalWeeklyReport,
-  submitTeamWeeklyReportCurrent,
-  updateDepartmentWeeklyReport
+  submitTeamWeeklyReportCurrent
 } from "../../api/client";
 import type {
+  DepartmentTeamWeeklyReportSource,
   DepartmentWeeklyReport,
   DepartmentWeeklyReportSources,
   PaginatedPersonalWeeklyReports,
@@ -158,6 +160,7 @@ export function PersonalWeeklyReportsView({
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [tab, setTab] = useState<"sources" | "draft" | "history">("sources");
+  const [step, setStep] = useState<"sources" | "draft">("sources");
   const [tabTouched, setTabTouched] = useState(false);
   const [preview, setPreview] = useState<PersonalWeeklyReportPreview | null>(null);
   const [content, setContent] = useState("");
@@ -190,8 +193,9 @@ export function PersonalWeeklyReportsView({
     ? selectedDailyReportIds
     : defaultDailyReportIds;
 
-  const effectiveTab =
-    !showHistory && tab === "history"
+  const effectiveTab = modalMode
+    ? step
+    : !showHistory && tab === "history"
       ? "sources"
       : !tabTouched && report && !preview
         ? "draft"
@@ -200,6 +204,8 @@ export function PersonalWeeklyReportsView({
     ? content
     : (preview?.report_markdown ?? report?.content ?? "");
   const collectedDailyCount = sourcesQuery.data?.daily_count ?? 0;
+  const displayWeekStart = formatWeekDate(weekStart);
+  const displayWeekEnd = formatWeekDate(weekEnd);
   const sourceIDs = preview
     ? {
         source_daily_report_ids: preview.source_daily_report_ids
@@ -227,6 +233,7 @@ export function PersonalWeeklyReportsView({
       setPreview(draft);
       setContent(draft.report_markdown);
       setContentTouched(true);
+      setStep("draft");
       setTab("draft");
       setTabTouched(true);
       message.success("个人周报预览已生成");
@@ -282,7 +289,7 @@ export function PersonalWeeklyReportsView({
               key: "week",
               title: "周报周期",
               value: dayjs(weekStart).format("MM-DD"),
-              description: `${weekStart} 至 ${weekEnd}`
+              description: `${displayWeekStart} 至 ${displayWeekEnd}`
             }}
           />
           <RequirementMetricCard
@@ -321,34 +328,45 @@ export function PersonalWeeklyReportsView({
           </strong>
           <span>·</span>
           <span>
-            {weekStart} 至 {weekEnd}
+            {displayWeekStart} 至 {displayWeekEnd}
           </span>
         </div>
         <div className="reports-toolbar__right">
           {scopeTabs}
-          <Segmented
-            value={effectiveTab}
-            onChange={(v) => {
-              setTab(v as "sources" | "draft" | "history");
-              setTabTouched(true);
-            }}
-            options={[
-              { label: "来源确认", value: "sources" },
-              { label: "确认周报", value: "draft" },
-              ...(showHistory ? [{ label: "历史", value: "history" }] : [])
-            ]}
-          />
+          {modalMode ? (
+            <Steps
+              size="small"
+              current={effectiveTab === "sources" ? 0 : 1}
+              items={[{ title: "来源确认" }, { title: "编辑周报" }]}
+            />
+          ) : (
+            <Segmented
+              value={effectiveTab}
+              onChange={(v) => {
+                setTab(v as "sources" | "draft" | "history");
+                setTabTouched(true);
+              }}
+              options={[
+                { label: "来源确认", value: "sources" },
+                { label: "确认周报", value: "draft" },
+                ...(showHistory ? [{ label: "历史", value: "history" }] : [])
+              ]}
+            />
+          )}
           {weekPicker}
           {effectiveTab === "sources" ? (
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateMutation.isPending}
-              disabled={effectiveDailyReportIds.length === 0}
-              onClick={() => generateMutation.mutate()}
-            >
-              生成周报预览
-            </Button>
+            <>
+              {modalMode ? <Button onClick={() => setStep("draft")}>手写周报</Button> : null}
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                loading={generateMutation.isPending}
+                disabled={effectiveDailyReportIds.length === 0}
+                onClick={() => generateMutation.mutate()}
+              >
+                生成周报草稿
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -373,13 +391,13 @@ export function PersonalWeeklyReportsView({
         />
       ) : reportQuery.isLoading && !preview ? (
         <ReportsSkeleton />
-      ) : !editorContent.trim() && !report && !preview ? (
+      ) : !modalMode && !editorContent.trim() && !report && !preview ? (
         <ReportsEmpty description="尚未生成或保存本周周报，请先确认来源。" />
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
             <span className="reports-team-card__title">
-              确认周报 · {weekStart} 至 {weekEnd}
+              确认周报 · {displayWeekStart} 至 {displayWeekEnd}
             </span>
             <span className="reports-team-card__meta">
               <span
@@ -393,7 +411,7 @@ export function PersonalWeeklyReportsView({
                       ? "已保存"
                       : "预览"}
               </span>
-              <span>{weekStart}</span>
+              <span>{displayWeekStart}</span>
             </span>
           </header>
           <p className="reports-team-card__body reports-team-card__body--compact">
@@ -402,6 +420,7 @@ export function PersonalWeeklyReportsView({
           <div className="reports-edit-shell">
             <TextArea
               rows={14}
+              className="reports-weekly-editor"
               value={editorContent}
               onChange={(e) => {
                 setContent(e.target.value);
@@ -411,8 +430,12 @@ export function PersonalWeeklyReportsView({
             <div className="reports-edit-shell__actions">
               <Button
                 onClick={() => {
-                  setTab("sources");
-                  setTabTouched(true);
+                  if (modalMode) {
+                    setStep("sources");
+                  } else {
+                    setTab("sources");
+                    setTabTouched(true);
+                  }
                 }}
               >
                 上一步
@@ -565,8 +588,8 @@ function PersonalWeeklyHistory({
       reports={reports.map((r) => ({
         id: r.id,
         title: "我的周报",
-        date: r.week_start,
-        content: `${r.week_start} 至 ${r.week_end}`,
+        date: formatWeekDate(r.week_start),
+        content: weeklyRange(r.week_start, r.week_end),
         done: r.status === "submitted"
       }))}
     />
@@ -931,6 +954,8 @@ function TeamWeeklyReportsView({
         };
   const submittedLocked = Boolean(report?.submitted_at && !preview);
   const effectiveTab = !showHistory && tab === "history" ? "sources" : tab;
+  const displayWeekStart = formatWeekDate(weekStart);
+  const displayWeekEnd = formatWeekDate(weekEnd);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "team"] });
@@ -1001,7 +1026,7 @@ function TeamWeeklyReportsView({
             key: "week",
             title: "周报周期",
             value: dayjs(weekStart).format("MM-DD"),
-            description: `${weekStart} 至 ${weekEnd}`
+            description: `${displayWeekStart} 至 ${displayWeekEnd}`
           }}
         />
         <RequirementMetricCard
@@ -1047,7 +1072,7 @@ function TeamWeeklyReportsView({
           </strong>
           <span>·</span>
           <span>
-            {weekStart} 至 {weekEnd}
+            {displayWeekStart} 至 {displayWeekEnd}
           </span>
         </div>
         <div className="reports-toolbar__right">
@@ -1108,7 +1133,7 @@ function TeamWeeklyReportsView({
               <span className={`reports-tag ${submittedLocked ? "is-submitted" : "is-team"}`}>
                 {submittedLocked ? "已提交总监" : preview ? "预览" : "草稿"}
               </span>
-              <span>{preview?.week_start ?? report?.week_start ?? weekStart}</span>
+              <span>{formatWeekDate(preview?.week_start ?? report?.week_start ?? weekStart)}</span>
               {canEdit ? (
                 <Button
                   size="small"
@@ -1199,7 +1224,7 @@ function TeamWeeklySources({
                     {item.source_role === "leader" ? "TL 本人" : "成员"}
                   </span>
                 </span>
-                <span className="reports-report-card__date">{item.week_start}</span>
+                <span className="reports-report-card__date">{formatWeekDate(item.week_start)}</span>
               </header>
               <p className="reports-report-card__content">{item.submitted_content}</p>
             </label>
@@ -1233,7 +1258,7 @@ function TeamWeeklySources({
   );
 }
 
-function TeamWeeklyReportModal({
+export function TeamWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
@@ -1292,7 +1317,7 @@ function TeamWeeklyHistory({
       reports={reports.map((r) => ({
         id: r.id,
         title: r.team_name,
-        date: r.week_start,
+        date: formatWeekDate(r.week_start),
         content: r.content,
         done: Boolean(r.submitted_at)
       }))}
@@ -1318,8 +1343,10 @@ function DirectorWeeklyReportsView({
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [tab, setTab] = useState<"sources" | "draft" | "history" | "teams">("sources");
+  const [step, setStep] = useState<"sources" | "draft">("sources");
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState("");
+  const [contentTouched, setContentTouched] = useState(false);
 
   const sourcesQuery = useQuery<DepartmentWeeklyReportSources>({
     queryKey: ["reports", "weekly", "department", "sources", weekStart],
@@ -1349,38 +1376,52 @@ function DirectorWeeklyReportsView({
   const history = historyQuery.data ?? [];
   const teamHistory = teamHistoryQuery.data ?? [];
   const showHistory = !modalMode;
-  const effectiveTab =
-    !showHistory && (tab === "history" || tab === "teams") ? "sources" : tab;
+  const effectiveTab = modalMode
+    ? step
+    : !showHistory && (tab === "history" || tab === "teams") ? "sources" : tab;
+  const editorContent = contentTouched ? content : (report?.content ?? "");
   const submitted = sources?.submitted_team_count ?? 0;
   const total = sources?.total_team_count ?? 0;
   const missing = sources?.missing_teams.length ?? 0;
+  const displayWeekStart = formatWeekDate(weekStart);
+  const displayWeekEnd = formatWeekDate(weekEnd);
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
   const generateMutation = useMutation({
     mutationFn: () => generateDepartmentWeeklyReport(weekStart),
-    onSuccess: () => {
+    onSuccess: (draft) => {
       message.success("部门周报草稿已生成");
+      setContent(draft.content);
+      setContentTouched(true);
       invalidate();
+      setStep("draft");
       setTab("draft");
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "生成失败")
   });
   const saveMutation = useMutation({
-    mutationFn: (id: string) => updateDepartmentWeeklyReport(id, { content }),
+    mutationFn: () =>
+      saveDepartmentWeeklyReportCurrent({ week_start: weekStart, content: editorContent }),
     onSuccess: () => {
       message.success("已保存");
       setEditing(false);
+      setContentTouched(false);
       invalidate();
       onDone?.();
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
   const archiveMutation = useMutation({
-    mutationFn: (id: string) =>
-      updateDepartmentWeeklyReport(id, { content: content || report?.content, archive: true }),
+    mutationFn: () =>
+      saveDepartmentWeeklyReportCurrent({
+        week_start: weekStart,
+        content: editorContent,
+        archive: true
+      }),
     onSuccess: () => {
       message.success("部门周报已归档");
       setEditing(false);
+      setContentTouched(false);
       invalidate();
       onDone?.();
     },
@@ -1405,7 +1446,7 @@ function DirectorWeeklyReportsView({
             key: "week",
             title: "周报周期",
             value: dayjs(weekStart).format("MM-DD"),
-            description: `${weekStart} 至 ${weekEnd}`
+              description: `${displayWeekStart} 至 ${displayWeekEnd}`
           }}
         />
         <RequirementMetricCard
@@ -1457,35 +1498,46 @@ function DirectorWeeklyReportsView({
           </strong>
           <span>·</span>
           <span>
-            {weekStart} 至 {weekEnd}
+            {displayWeekStart} 至 {displayWeekEnd}
           </span>
         </div>
         <div className="reports-toolbar__right">
           {scopeTabs}
-          <Segmented
-            value={effectiveTab}
-            onChange={(v) => setTab(v as "sources" | "draft" | "history" | "teams")}
-            options={[
-              { label: "来源确认", value: "sources" },
-              { label: "周报草稿", value: "draft" },
-              ...(showHistory
-                ? [
-                    { label: "小组记录", value: "teams" },
-                    { label: "部门历史", value: "history" }
-                  ]
-                : [])
-            ]}
-          />
+          {modalMode ? (
+            <Steps
+              size="small"
+              current={effectiveTab === "sources" ? 0 : 1}
+              items={[{ title: "来源确认" }, { title: "编辑周报" }]}
+            />
+          ) : (
+            <Segmented
+              value={effectiveTab}
+              onChange={(v) => setTab(v as "sources" | "draft" | "history" | "teams")}
+              options={[
+                { label: "来源确认", value: "sources" },
+                { label: "周报草稿", value: "draft" },
+                ...(showHistory
+                  ? [
+                      { label: "小组记录", value: "teams" },
+                      { label: "部门历史", value: "history" }
+                    ]
+                  : [])
+              ]}
+            />
+          )}
           {weekPicker}
           {effectiveTab === "sources" ? (
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateMutation.isPending}
-              onClick={() => generateMutation.mutate()}
-            >
-              生成部门周报草稿
-            </Button>
+            <>
+              {modalMode ? <Button onClick={() => setStep("draft")}>手写周报</Button> : null}
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                loading={generateMutation.isPending}
+                onClick={() => generateMutation.mutate()}
+              >
+                生成部门周报草稿
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -1511,7 +1563,7 @@ function DirectorWeeklyReportsView({
             reports={history.map((r) => ({
               id: r.id,
               title: "部门周报",
-              date: r.week_start,
+              date: formatWeekDate(r.week_start),
               content: r.content,
               done: Boolean(r.archived_at)
             }))}
@@ -1526,51 +1578,76 @@ function DirectorWeeklyReportsView({
         />
       ) : reportQuery.isLoading ? (
         <ReportsSkeleton />
-      ) : !report ? (
+      ) : !modalMode && !report ? (
         <ReportsEmpty description="尚未生成部门周报草稿，请先确认小组周报来源。" />
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
             <span className="reports-team-card__title">部门周报</span>
             <span className="reports-team-card__meta">
-              <span className={`reports-tag ${report.archived_at ? "is-submitted" : "is-team"}`}>
-                {report.archived_at ? "已归档" : "草稿"}
+              <span className={`reports-tag ${report?.archived_at ? "is-submitted" : "is-team"}`}>
+                {report?.archived_at ? "已归档" : report ? "草稿" : "未保存"}
               </span>
-              <span>{report.week_start}</span>
-              {!editing ? (
+              <span>{formatWeekDate(report?.week_start ?? weekStart)}</span>
+              {!modalMode && !editing ? (
                 <Button
                   size="small"
                   onClick={() => {
                     setEditing(true);
-                    setContent(report.content);
+                    setContent(editorContent);
+                    setContentTouched(true);
                   }}
                 >
                   编辑
                 </Button>
               ) : null}
-              {!editing && !report.archived_at ? (
+              {!modalMode && !editing && !report?.archived_at ? (
                 <Button
                   size="small"
                   type="primary"
                   loading={archiveMutation.isPending}
-                  onClick={() => archiveMutation.mutate(report.id)}
+                  onClick={() => archiveMutation.mutate()}
                 >
                   归档
                 </Button>
               ) : null}
             </span>
           </header>
-          {editing ? (
+          {modalMode || editing || !report ? (
             <div className="reports-edit-shell">
-              <TextArea rows={12} value={content} onChange={(e) => setContent(e.target.value)} />
+              <TextArea
+                rows={12}
+                className="reports-weekly-editor"
+                value={editorContent}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  setContentTouched(true);
+                }}
+              />
               <div className="reports-edit-shell__actions">
-                <Button onClick={() => setEditing(false)}>取消</Button>
+                <Button
+                  onClick={() => {
+                    if (modalMode) {
+                      setStep("sources");
+                    } else {
+                      setEditing(false);
+                    }
+                  }}
+                >
+                  {modalMode ? "上一步" : "取消"}
+                </Button>
+                <Button
+                  loading={saveMutation.isPending}
+                  onClick={() => saveMutation.mutate()}
+                >
+                  保存周报
+                </Button>
                 <Button
                   type="primary"
-                  loading={saveMutation.isPending}
-                  onClick={() => saveMutation.mutate(report.id)}
+                  loading={archiveMutation.isPending}
+                  onClick={() => archiveMutation.mutate()}
                 >
-                  保存
+                  归档部门周报
                 </Button>
               </div>
             </div>
@@ -1589,6 +1666,7 @@ function DepartmentWeeklySources({
   query: UseQueryResult<DepartmentWeeklyReportSources>;
 }) {
   const sources = query.data;
+  const [activeSource, setActiveSource] = useState<DepartmentTeamWeeklyReportSource | null>(null);
   if (query.isError)
     return (
       <Alert
@@ -1601,34 +1679,63 @@ function DepartmentWeeklySources({
   if (query.isLoading) return <ReportsSkeleton />;
   if (!sources) return <ReportsEmpty description="暂无来源" />;
   return (
-    <div className="reports-member-grid">
-      {sources.submitted_team_reports.map((item) => (
-        <article key={item.team_id} className="reports-report-card is-auto">
-          <header className="reports-report-card__head">
-            <span className="reports-report-card__head-left">
-              <span className="reports-report-card__author">{item.team_name}</span>
-              <span className="reports-tag is-submitted">已提交</span>
-            </span>
-          </header>
-          <p className="reports-report-card__content">{item.content}</p>
-        </article>
-      ))}
-      {sources.missing_teams.map((item) => (
-        <article key={item.team_id} className="reports-report-card is-missing">
-          <header className="reports-report-card__head">
-            <span className="reports-report-card__head-left">
-              <span className="reports-report-card__author">{item.team_name}</span>
-              <span className="reports-tag is-missing">未提交</span>
-            </span>
-          </header>
-          <span className="reports-report-card__empty">该小组尚未提交本周周报。</span>
-        </article>
-      ))}
-    </div>
+    <>
+      <div className="reports-source-list">
+        {sources.submitted_team_reports.map((item) => (
+          <div key={item.team_id} className="reports-source-list__item">
+            <div className="reports-source-list__main reports-source-list__main--readonly">
+              <div className="reports-source-list__content">
+                <div className="reports-source-list__head">
+                  <strong>{item.team_name}</strong>
+                  <span className="reports-tag is-submitted">已提交</span>
+                  <span className="reports-tag is-team">小组周报</span>
+                  <span className="reports-source-list__meta">
+                    {item.leader_name ? `负责人 ${item.leader_name}` : "小组来源"}
+                  </span>
+                  <Button
+                    type="link"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveSource(item);
+                    }}
+                  >
+                    查看全文
+                  </Button>
+                </div>
+                <p>{summarizeSourceContent(item.content)}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+        {sources.missing_teams.map((item) => (
+          <div key={item.team_id} className="reports-source-list__item is-muted">
+            <div className="reports-source-list__main reports-source-list__main--readonly">
+              <div className="reports-source-list__content">
+                <div className="reports-source-list__head">
+                  <strong>{item.team_name}</strong>
+                  <span className="reports-tag is-missing">未提交</span>
+                  <span className="reports-tag is-team">小组周报</span>
+                </div>
+                <p>该小组尚未提交本周周报，不参与本次部门周报生成。</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Drawer
+        title={activeSource ? `${activeSource.team_name} 小组周报原文` : "小组周报原文"}
+        open={Boolean(activeSource)}
+        size={560}
+        onClose={() => setActiveSource(null)}
+      >
+        <pre className="reports-source-content">{activeSource?.content}</pre>
+      </Drawer>
+    </>
   );
 }
 
-function DepartmentWeeklyReportModal({
+export function DepartmentWeeklyReportModal({
   open,
   weekStart,
   weekEnd,

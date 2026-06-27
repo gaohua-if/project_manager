@@ -177,7 +177,7 @@
 }
 
 .console-report-workflow-modal .reports-source-list {
-  max-height: min(48vh, 440px);
+  max-height: min(42vh, 360px);
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -189,11 +189,19 @@
   border-radius: 8px;
 }
 
+.reports-source-list__item.is-muted {
+  background: #fbfdff;
+}
+
 .reports-source-list__main {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   align-items: flex-start;
+}
+
+.reports-source-list__main--readonly {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .reports-source-list__main > .ant-checkbox-wrapper {
@@ -224,6 +232,12 @@
   height: 22px;
   padding: 0 2px;
   font-size: 12px;
+}
+
+.reports-source-list__meta {
+  color: #7a879a;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .reports-source-list__content p {
@@ -309,6 +323,13 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.reports-weekly-editor.ant-input {
+  height: min(46vh, 420px);
+  min-height: 300px;
+  resize: none;
+  overflow-y: auto;
 }
 
 .reports-team-card {

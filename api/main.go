@@ -152,6 +152,7 @@ func main() {
 		r.Get("/reports/department/weekly/sources", reportH.GetDepartmentWeeklyReportSources)
 		r.Get("/reports/department/weekly/current", reportH.GetDepartmentWeeklyReportCurrent)
 		r.Post("/reports/department/weekly/current/generate", reportH.GenerateDepartmentWeeklyReport)
+		r.Put("/reports/department/weekly/current", reportH.SaveDepartmentWeeklyReportCurrent)
 		r.Get("/reports/department/weekly", reportH.ListDepartmentWeeklyReports)
 		r.Put("/reports/department/weekly/{id}", reportH.UpdateDepartmentWeeklyReport)
 		r.Get("/reports/department", reportH.ListDepartmentReports)

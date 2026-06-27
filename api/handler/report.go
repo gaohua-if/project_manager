@@ -2144,6 +2144,66 @@ func (h *ReportHandler) GenerateDepartmentWeeklyReport(w http.ResponseWriter, r 
 	writeJSON(w, http.StatusOK, report)
 }
 
+func (h *ReportHandler) SaveDepartmentWeeklyReportCurrent(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can save department weekly reports"})
+		return
+	}
+	var req struct {
+		WeekStart string `json:"week_start"`
+		Content   string `json:"content"`
+		Archive   bool   `json:"archive,omitempty"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	weekStart, weekEnd, ok := weeklyRangeFromValue(w, req.WeekStart)
+	if !ok {
+		return
+	}
+	sources, err := h.buildDepartmentWeeklyReportSources(weekStart, weekEnd)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sourceIDs := make([]string, 0, len(sources.SubmittedTeamReports))
+	for _, item := range sources.SubmittedTeamReports {
+		if item.ReportID != nil && *item.ReportID != "" {
+			sourceIDs = append(sourceIDs, *item.ReportID)
+		}
+	}
+	var reportID string
+	err = h.db.QueryRow(`
+		INSERT INTO department_weekly_reports (
+			week_start, content, source_team_weekly_report_ids, archived_at
+		)
+		VALUES ($1, $2, $3, CASE WHEN $4 THEN now() ELSE NULL END)
+		ON CONFLICT (week_start)
+		DO UPDATE SET
+			content = EXCLUDED.content,
+			source_team_weekly_report_ids = EXCLUDED.source_team_weekly_report_ids,
+			archived_at = CASE
+				WHEN $4 THEN COALESCE(department_weekly_reports.archived_at, now())
+				ELSE department_weekly_reports.archived_at
+			END,
+			updated_at = now()
+		RETURNING id::text`,
+		weekStart, req.Content, pq.Array(sourceIDs), req.Archive,
+	).Scan(&reportID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := h.getDepartmentWeeklyReportByID(reportID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
 func (h *ReportHandler) UpdateDepartmentWeeklyReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
