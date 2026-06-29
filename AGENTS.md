@@ -52,6 +52,11 @@ cd api && go test ./...
 cd daemon && go test ./...
 ```
 
+When the user asks to run Go tests with Docker, do not pull Go images or guess
+patch-version tags. First use a locally available Go image tag, and run Docker
+with `--pull=never` so a missing tag fails fast instead of downloading. If no
+local Go image works, stop and report that the local Docker image is missing.
+
 ### Frontend
 
 ```bash

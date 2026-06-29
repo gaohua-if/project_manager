@@ -1,6 +1,7 @@
 # Go
 api/bin/
 api/tmp/
+tmp/
 
 # Node
 web/node_modules/
