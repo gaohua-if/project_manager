@@ -1,4 +1,4 @@
-﻿import { RobotOutlined } from "@ant-design/icons";
+﻿import { EditOutlined } from "@ant-design/icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -136,7 +136,7 @@ export function ReportsPage() {
           { label: "我的日报记录", value: "personal" },
           { label: "部门日报记录", value: "department" }
         ]
-      : user?.role === "team_leader" || user?.role === "pm"
+      : user?.role === "team_leader"
         ? [
             { label: "我的日报记录", value: "personal" },
             { label: "小组日报记录", value: "team" }
@@ -151,8 +151,8 @@ export function ReportsPage() {
   const to = dateRange?.[1].format("YYYY-MM-DD");
   const [teamDetailReportId, setTeamDetailReportId] = useState<string | null>(null);
   const generateLabel =
-    activeTab === "team" ? "生成今日小组日报" : activeTab === "department" ? "生成今日部门日报" : "生成今日日报";
-  const canGenerate = activeTab !== "team" || user?.role === "team_leader" || user?.role === "pm";
+    activeTab === "team" ? "管理今日小组日报" : activeTab === "department" ? "管理今日部门日报" : "管理今日日报";
+  const canGenerate = activeTab !== "team" || user?.role === "team_leader";
 
   const handleTabChange = (value: DailyTab) => {
     setSearchParams((current) => {
@@ -181,7 +181,7 @@ export function ReportsPage() {
             <RangePicker value={dateRange} onChange={(value) => setDateRange(value as [Dayjs, Dayjs] | null)} />
           </Space>
           {canGenerate ? (
-            <Button type="primary" icon={<RobotOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
+            <Button type="primary" icon={<EditOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
               {generateLabel}
             </Button>
           ) : null}

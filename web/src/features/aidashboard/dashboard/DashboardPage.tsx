@@ -1472,47 +1472,12 @@ export function DashboardPage() {
       setDepartmentWeeklyOpen(true);
       return;
     }
-    const nextStep = step ?? getInitialReportModalStep(reportItem);
-    setDraftMarkdownTouched(false);
-    if (reportItem.kind === "personal_daily" && nextStep === "sessions") {
-      setSelectedSessionIds([]);
-      setValidatedDraftSessionIds([]);
-      setSessionSelectionTouched(false);
-      setTaskSuggestions([]);
-      setDraftMarkdown("");
-    }
-    if (reportItem.kind === "department_daily" && nextStep === "source") {
-      setDraftError(null);
-      setDepartmentDraft(null);
-      setDraftMarkdown("");
-    }
-    if (reportItem.kind === "team_daily") {
-      setDraftError(null);
-      setTeamDraft(null);
-      setDraftMarkdownTouched(false);
-      setDraftMarkdown(nextStep === "editor" ? (teamReportQuery.data?.content ?? "") : "");
-    }
-    setActiveReportId(reportItem.id);
-    setReportSkillDraft(
-      reportSkillOptions.some((skill) => skill.value === reportItem.skill)
-        ? reportItem.skill
-        : REPORT_SKILL_OPTIONS[0].value
-    );
-    if (
-      nextStep !== "sessions" &&
-      reportItem.kind !== "department_daily" &&
-      reportItem.kind !== "team_daily"
-    ) {
-      setDraftMarkdown(getDefaultDraftMarkdown(reportItem));
-    }
-    setDraftError(null);
-    setReportModalStep(nextStep);
-    setIsReportModalOpen(true);
+    void step;
   };
 
   const uploadReportSkill = (file: File) => {
     if (!file.name.toLowerCase().endsWith(".md")) {
-      message.error("请上传 markdown 格式的 skill.md 文件");
+      message.error("旧报告配置流程已停用");
       return false;
     }
 
@@ -1620,6 +1585,25 @@ export function DashboardPage() {
     setEditingTaskKey(task.key);
     setEditingTaskDraft({ ...task });
   };
+
+  // Legacy report workflow is disabled for this round; Dashboard entries route to the report management modals above.
+  void setActiveReportId;
+  void draftError;
+  void modifiedTaskCount;
+  void handleSelectedSessionIdsChange;
+  void handleDraftMarkdownChange;
+  void uploadReportSkill;
+  void startGenerateDraft;
+  void saveDraft;
+  void goBackReportModalStep;
+  void sendReport;
+  void openTaskEditModal;
+  void getInitialReportModalStep;
+  void getReportModalTitle;
+  void getReportModalWidth;
+  void getDefaultDraftMarkdown;
+  void renderReportModalFooter;
+  void ReportModalContent;
 
   const saveTaskEdit = () => {
     if (!editingTaskKey || !editingTaskDraft) return;
@@ -1845,65 +1829,6 @@ export function DashboardPage() {
         />
       ) : null}
 
-      <Modal
-        className="console-report-workflow-modal"
-        title={getReportModalTitle(activeReport, reportModalStep)}
-        open={isReportModalOpen}
-        width={getReportModalWidth(activeReport, reportModalStep)}
-        footer={renderReportModalFooter({
-          step: reportModalStep,
-          report: activeReport,
-          selectedCount: effectiveSelectedSessionIds.length,
-          teamSubmittedCount: teamSourcesQuery.data?.submitted ?? 0,
-          departmentSubmittedCount: departmentSourcesQuery.data?.submitted_team_count ?? 0,
-          modifiedTaskCount,
-          isSessionLoading: reportSessionsQuery.isLoading,
-          isGenerating:
-            draftMutation.isPending ||
-            teamGenerateMutation.isPending ||
-            departmentGenerateMutation.isPending,
-          isSaving:
-            saveReportMutation.isPending ||
-            saveTeamMutation.isPending ||
-            saveDepartmentMutation.isPending,
-          onCancel: () => setIsReportModalOpen(false),
-          onNext: startGenerateDraft,
-          onGenerate: startGenerateDraft,
-          onBack: goBackReportModalStep,
-          onSave: saveDraft,
-          onSend: sendReport
-        })}
-        onCancel={() => setIsReportModalOpen(false)}
-      >
-        <ReportModalContent
-          step={reportModalStep}
-          report={activeReport}
-          coverage={effectiveCoverage}
-          teamSources={teamSourcesQuery.data ?? null}
-          teamSourcesLoading={teamSourcesQuery.isLoading}
-          teamSourcesError={teamSourcesQuery.isError ? "成员日报收集情况加载失败" : null}
-          departmentSources={departmentSourcesQuery.data ?? null}
-          departmentSourcesLoading={departmentSourcesQuery.isLoading}
-          departmentSourcesError={
-            departmentSourcesQuery.isError ? "小组日报收集情况加载失败" : null
-          }
-          selectedSessionIds={effectiveSelectedSessionIds}
-          selectedSkill={reportSkillDraft}
-          skillOptions={reportSkillOptions}
-          uploadedSkills={uploadedReportSkills}
-          sessionOptions={sessionOptions}
-          isSessionLoading={reportSessionsQuery.isLoading}
-          sessionError={reportSessionsQuery.isError ? "Session 加载失败，请稍后重试" : null}
-          draftError={draftError}
-          taskSuggestions={taskSuggestions}
-          draftMarkdown={effectiveDraftMarkdown}
-          onSelectedSessionIdsChange={handleSelectedSessionIdsChange}
-          onSelectedSkillChange={setReportSkillDraft}
-          onSkillUpload={uploadReportSkill}
-          onEditTask={openTaskEditModal}
-          onDraftMarkdownChange={handleDraftMarkdownChange}
-        />
-      </Modal>
       <TaskProgressEditModal
         task={editingTaskDraft}
         open={Boolean(editingTaskDraft)}
@@ -3123,16 +3048,16 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 
 function getReportSourceSteps(report: ReportItem) {
   if (report.kind === "personal_daily") {
-    return [{ title: "选择 session" }, { title: "编辑内容" }];
+    return [{ title: "报告内容" }, { title: "编辑内容" }];
   }
 
-  return [{ title: "确认来源" }, { title: "编辑内容" }];
+  return [{ title: "报告内容" }, { title: "编辑内容" }];
 }
 
 function getReportSourceTitle(report: ReportItem) {
   if (report.scope === "team") return "查看成员日报收集情况";
   if (report.scope === "department") return "查看小组日报收集情况";
-  return "生成个人周报";
+  return "管理个人周报";
 }
 
 function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
@@ -3144,20 +3069,20 @@ function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
     return `各组发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
   }
 
-  return "系统将读取本周个人日报、任务、风险与阻塞生成周报。";
+  return "旧报告配置流程已停用。";
 }
 
 function getEditorMeta(report: ReportItem) {
   if (report.kind === "personal_daily") {
-    return [`已选 ${report.sessionCount} 个 session`, report.skill];
+    return [`已关联 ${report.sessionCount} 条记录`, report.skill];
   }
 
   if (report.kind === "department_daily") {
-    return [`本日报基于 ${report.sessionCount} 个已发送小组日报生成`, "来源：小组日报"];
+    return [`已关联 ${report.sessionCount} 个小组日报`, "来源：小组日报"];
   }
 
   if (report.kind === "team_daily") {
-    return [`本日报基于 ${report.sessionCount} 份已发送成员日报生成`, "来源：成员原始日报"];
+    return [`已关联 ${report.sessionCount} 份成员日报`, "来源：成员原始日报"];
   }
 
   return [report.sourceSummary, report.skill];
@@ -3165,7 +3090,7 @@ function getEditorMeta(report: ReportItem) {
 
 function getSendButtonText(report: ReportItem) {
   if (report.scope === "team")
-    return report.kind.includes("weekly") ? "提交给总监" : "保存并发送给总监";
+    return report.kind.includes("weekly") ? "保存周报" : "保存小组日报";
   if (report.scope === "department") return report.kind.includes("weekly") ? "保存周报" : "保存部门日报";
   return report.kind.includes("weekly") ? "保存周报" : "保存日报";
 }
@@ -3332,7 +3257,7 @@ function getUploadedSkillName(fileName: string, content: string) {
     .replace(/\.[^.]+$/, "")
     .replace(/[-_]+/g, " ")
     .trim();
-  const rawName = frontmatterName || baseName || "上传 Skill";
+  const rawName = frontmatterName || baseName || "旧配置";
 
   return /skill/i.test(rawName) || rawName.includes("Skill") ? rawName : `${rawName} Skill`;
 }
@@ -3553,7 +3478,7 @@ function ReportModalContent({
       <div className="console-report-modal">
         <Steps size="small" current={0} items={getReportSourceSteps(report)} />
         <div className="console-session-modal__section">
-          <strong>选择生成来源</strong>
+          <strong>报告内容</strong>
           <span>
             {isSessionLoading
               ? "正在加载今日已上传 session。"
@@ -3949,8 +3874,8 @@ function GenerationSettingsPanel({
     >
       <div className="console-generation-settings__head">
         <span>
-          <strong>Skill 预设</strong>
-          <em>选择日报生成口径；上传 skill.md 后会加入预设，并用于本次生成。</em>
+          <strong>旧配置已停用</strong>
+          <em>本轮报告弹窗不再提供旧配置入口。</em>
         </span>
         <Tag color="blue">{selectedSkillLabel}</Tag>
       </div>
@@ -3968,19 +3893,19 @@ function GenerationSettingsPanel({
           />
         </label>
         <div className="console-generation-settings__upload">
-          <span>上传预设</span>
+          <span>旧配置</span>
           <Upload
             accept=".md,text/markdown"
             beforeUpload={(file) => onSkillUpload(file)}
             maxCount={1}
             showUploadList={false}
           >
-            <Button icon={<UploadOutlined />}>上传 skill.md</Button>
+            <Button icon={<UploadOutlined />}>旧配置已停用</Button>
           </Upload>
         </div>
       </div>
       {uploadedSkills.length > 0 ? (
-        <div className="console-generation-settings__presets" aria-label="已上传 Skill">
+        <div className="console-generation-settings__presets" aria-label="已停用旧配置">
           {uploadedSkills.map((skill) => (
             <Tag key={skill.value} color={skill.value === selectedSkill ? "blue" : "default"}>
               {skill.label}
