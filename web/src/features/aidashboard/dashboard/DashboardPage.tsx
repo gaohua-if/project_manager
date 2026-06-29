@@ -199,8 +199,8 @@ function createReport(overrides: Omit<ReportItem, "sessionCount" | "generateMode
   };
 }
 
-function findCurrentUserDailyReport(reports: DailyReport[], userId: string | undefined, reportDate: string) {
-  if (!userId) return undefined;
+function findCurrentUserDailyReport(reports: DailyReport[], userId: number | undefined, reportDate: string) {
+  if (userId === undefined) return undefined;
   return reports.find((report) => report.user_id === userId && report.report_date === reportDate);
 }
 

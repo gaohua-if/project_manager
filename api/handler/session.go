@@ -290,7 +290,7 @@ func (h *SessionHandler) BatchUpload(w http.ResponseWriter, r *http.Request) {
 		fileKey := "file_" + su.SessionRef
 		file, header, err := r.FormFile(fileKey)
 		if err == nil {
-			objectName := fmt.Sprintf("sessions/%s/%s.jsonl", u.ID, su.SessionRef)
+			objectName := fmt.Sprintf("sessions/%d/%s.jsonl", u.ID, su.SessionRef)
 			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 			uploadErr := h.store.Upload(ctx, objectName, file, header.Size, "application/x-jsonlines")
 			cancel()
@@ -337,7 +337,7 @@ func sessionModels(su model.SessionUpload) []string {
 	return []string{}
 }
 
-func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.SessionUpload) error {
+func (h *SessionHandler) replaceTokenUsage(sessionID string, userID int64, su model.SessionUpload) error {
 	tx, err := h.db.Begin()
 	if err != nil {
 		return err
@@ -381,7 +381,7 @@ func (h *SessionHandler) replaceTokenUsage(sessionID, userID string, su model.Se
 
 // matchTaskAsync runs AI task-matching inline (kept simple — claude CLI blocks the upload briefly).
 // Failures are non-fatal: the session is still recorded with NULL task_id.
-func (h *SessionHandler) matchTaskAsync(sessionID, userID string, summary *string) {
+func (h *SessionHandler) matchTaskAsync(sessionID string, userID int64, summary *string) {
 	if h.ai == nil {
 		return
 	}
@@ -444,7 +444,7 @@ func (h *SessionHandler) DownloadLog(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 
 	var rawLogURL sql.NullString
-	var ownerID string
+	var ownerID int64
 	err := h.db.QueryRow("SELECT raw_log_url, user_id FROM sessions WHERE id = $1", id).Scan(&rawLogURL, &ownerID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
@@ -555,7 +555,7 @@ func (h *SessionHandler) Withdraw(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
 
-	var ownerID string
+	var ownerID int64
 	err := h.db.QueryRow("SELECT user_id FROM sessions WHERE id = $1", id).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})

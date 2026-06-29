@@ -27,7 +27,7 @@ func requestWithReportID(req *http.Request, id string) *http.Request {
 func TestGenerateTodayDraftRequiresSessionIDs(t *testing.T) {
 	h := NewReportHandler(nil, "http://generator")
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/draft", bytes.NewBufferString(`{"session_ids":[],"skill_id":"default_daily"}`))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.GenerateTodayDraft(rec, req)
@@ -40,7 +40,7 @@ func TestGenerateTodayDraftRequiresSessionIDs(t *testing.T) {
 func TestGenerateTodayDraftRejectsUnsupportedSkill(t *testing.T) {
 	h := NewReportHandler(nil, "http://generator")
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/draft", bytes.NewBufferString(`{"session_ids":["session-1"],"skill_id":"other"}`))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.GenerateTodayDraft(rec, req)
@@ -58,12 +58,12 @@ func TestGenerateTodayDraftRejectsInaccessibleSession(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectQuery("SELECT s.id::text").
-		WithArgs("user-1", sqlmock.AnyArg()).
+		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()))
 
 	h := NewReportHandler(db, "http://generator")
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/draft", bytes.NewBufferString(`{"session_ids":["session-other"],"skill_id":"default_daily","include_task_progress":true}`))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.GenerateTodayDraft(rec, req)
@@ -85,12 +85,12 @@ func TestGenerateTodayDraftSuccessDoesNotWriteDailyReports(t *testing.T) {
 
 	now := time.Date(2026, 6, 24, 9, 30, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT s.id::text").
-		WithArgs("user-1", sqlmock.AnyArg()).
+		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
 			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成 Dashboard 接入", "{}", "logs/session-1.jsonl", nil, "", nil, "", 100, 200, 300).
 			AddRow("session-2", "ref-2", "codex", now.Add(2*time.Hour), nil, nil, "gpt", "补充测试", "{}", "logs/session-2.jsonl", nil, "", nil, "", 20, 30, 50))
 	mock.ExpectQuery("SELECT t.id::text").
-		WithArgs("user-1").
+		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "requirement_id", "requirement_title", "status", "progress", "owner"}).
 			AddRow("task-1", "控制台日报交互设计", "req-1", "日报入口状态优化", "in_progress", 40, "张三"))
 
@@ -128,7 +128,7 @@ func TestGenerateTodayDraftSuccessDoesNotWriteDailyReports(t *testing.T) {
 	h := NewReportHandler(db, generator.URL)
 	reqBody := `{"report_date":"2026-06-24","session_ids":["session-1","session-2"],"skill_id":"default_daily","skill_content":"补充 skill","include_task_progress":true}`
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/draft", bytes.NewBufferString(reqBody))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.GenerateTodayDraft(rec, req)
@@ -160,7 +160,7 @@ func TestUpdateReportPersistsSessionIDsOnSave(t *testing.T) {
 
 	now := time.Date(2026, 6, 24, 19, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT COUNT").
-		WithArgs("user-1", sqlmock.AnyArg()).
+		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 	mock.ExpectExec("UPDATE daily_reports SET").
 		WithArgs("最终日报", sqlmock.AnyArg(), "report-1").
@@ -168,11 +168,11 @@ func TestUpdateReportPersistsSessionIDsOnSave(t *testing.T) {
 	mock.ExpectQuery("SELECT dr.id").
 		WithArgs("report-1").
 		WillReturnRows(sqlmock.NewRows(dailyReportColumns()).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", "default", nil, nil, nil, nil, now, now))
+			AddRow("report-1", int64(1), "张三", "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", "default", nil, nil, nil, nil, now, now))
 
 	h := NewReportHandler(db, "http://generator")
 	req := httptest.NewRequest(http.MethodPut, "/reports/report-1", bytes.NewBufferString(`{"content":"最终日报","session_ids":["session-1","session-2"]}`))
-	req = requestWithUser(requestWithReportID(req, "report-1"), &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(requestWithReportID(req, "report-1"), &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.Update(rec, req)
@@ -202,13 +202,13 @@ func TestGenerateTodayKeepsLegacyGeneratorEndpoint(t *testing.T) {
 	defer generator.Close()
 
 	mock.ExpectQuery("SELECT dr.id").
-		WithArgs("user-1", sqlmock.AnyArg()).
+		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(dailyReportColumns()).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "日报", false, nil, "{session-1}", "default", nil, nil, nil, nil, now, now))
+			AddRow("report-1", int64(1), "张三", "2026-06-24", "日报", false, nil, "{session-1}", "default", nil, nil, nil, nil, now, now))
 
 	h := NewReportHandler(db, generator.URL)
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/generate", nil)
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.GenerateToday(rec, req)

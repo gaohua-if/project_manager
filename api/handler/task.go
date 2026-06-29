@@ -96,7 +96,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		var t model.Task
 		var ac pq.StringArray
 		var dueDate sql.NullString
-		var assigneeID sql.NullString
+		var assigneeID sql.NullInt64
 		var assigneeName sql.NullString
 		var completedAt sql.NullTime
 		if err := rows.Scan(&t.ID, &t.RequirementID, &t.RequirementTitle, &t.Title,
@@ -107,7 +107,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t.AcceptanceCriteria = []string(ac)
-		t.AssigneeID = nullStringPtr(assigneeID)
+		t.AssigneeID = nullInt64Ptr(assigneeID)
 		t.AssigneeName = nullStringPtr(assigneeName)
 		t.DueDate = nullStringPtr(dueDate)
 		t.CompletedAt = nullTimePtr(completedAt)
@@ -128,7 +128,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var t model.Task
 	var ac pq.StringArray
 	var dueDate sql.NullString
-	var assigneeID sql.NullString
+	var assigneeID sql.NullInt64
 	var assigneeName sql.NullString
 	var completedAt sql.NullTime
 
@@ -165,7 +165,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t.AcceptanceCriteria = []string(ac)
-	t.AssigneeID = nullStringPtr(assigneeID)
+	t.AssigneeID = nullInt64Ptr(assigneeID)
 	t.AssigneeName = nullStringPtr(assigneeName)
 	t.DueDate = nullStringPtr(dueDate)
 	t.CompletedAt = nullTimePtr(completedAt)
@@ -185,7 +185,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "requirement_id and title required"})
 		return
 	}
-	if req.AssigneeID == nil || *req.AssigneeID == "" {
+	if req.AssigneeID == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "assignee_id is required"})
 		return
 	}
@@ -214,7 +214,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO tasks (requirement_id, title, acceptance_criteria, assignee_id, creator_tl_id, priority, due_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 		req.RequirementID, req.Title, pq.Array(req.AcceptanceCriteria),
-		nullString(req.AssigneeID), u.ID, req.Priority, nullString(req.DueDate),
+		nullInt64(req.AssigneeID), u.ID, req.Priority, nullString(req.DueDate),
 	).Scan(&taskID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -289,7 +289,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AssigneeID != nil {
 		sets = append(sets, fmt.Sprintf("assignee_id = $%d", argIdx))
-		args = append(args, nullString(req.AssigneeID))
+		args = append(args, nullInt64(req.AssigneeID))
 		argIdx++
 	}
 	if req.Status != nil {
@@ -525,8 +525,8 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	var requirementID string
-	var creatorTL string
-	var assigneeID sql.NullString
+	var creatorTL int64
+	var assigneeID sql.NullInt64
 	err = tx.QueryRow(`SELECT requirement_id, creator_tl_id, assignee_id FROM tasks WHERE id = $1 FOR UPDATE`, id).
 		Scan(&requirementID, &creatorTL, &assigneeID)
 	if err == sql.ErrNoRows {
@@ -624,7 +624,7 @@ func (h *TaskHandler) loadDeps(t *model.Task) {
 	}
 }
 
-func (h *TaskHandler) enrichTask(t *model.Task, userID string) {
+func (h *TaskHandler) enrichTask(t *model.Task, userID int64) {
 	h.loadDeps(t)
 	t.RiskTypes = service.DeriveTaskRisks(*t, time.Now())
 	t.DisplayStatus = service.DisplayTaskStatus(*t)

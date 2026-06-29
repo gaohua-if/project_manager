@@ -7,7 +7,7 @@ ALTER TABLE daily_reports
 
 CREATE TABLE ai_runs (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id),
+    user_id             BIGINT NOT NULL REFERENCES users(id),
     business_type       TEXT NOT NULL,
     business_id         UUID,
     runtime_type        TEXT NOT NULL,

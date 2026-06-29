@@ -14,6 +14,12 @@ type Config struct {
 	ManagedAgentURL    string
 	ManagedAgentToken  string
 
+	// AIHub unified-auth platform (shared trust root with the managed-agent
+	// platform). When AIHubJWTSecret is set, tokens are verified locally;
+	// otherwise Aida introspects via the AIHub userinfo endpoint.
+	AIHubHost       string
+	AIHubJWTSecret  string
+
 	MinioEndpoint         string
 	MinioAccessKey        string
 	MinioSecretKey        string
@@ -34,6 +40,9 @@ func Load() *Config {
 		ReportGeneratorURL: getEnv("REPORT_GENERATOR_URL", ""),
 		ManagedAgentURL:    getEnv("MANAGED_AGENT_URL", ""),
 		ManagedAgentToken:  getEnv("MANAGED_AGENT_TOKEN", ""),
+
+		AIHubHost:      getEnv("AIHUB_HOST", ""),
+		AIHubJWTSecret: getEnv("AIHUB_JWT_SECRET", ""),
 
 		MinioEndpoint:         getEnv("MINIO_ENDPOINT", ""),
 		MinioAccessKey:        getEnv("MINIO_ACCESS_KEY", ""),

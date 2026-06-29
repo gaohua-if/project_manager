@@ -506,7 +506,7 @@ func (h *RequirementHandler) loadTeams(req *model.Requirement) {
 	}
 }
 
-func (h *RequirementHandler) loadProjection(req *model.Requirement, userID string) {
+func (h *RequirementHandler) loadProjection(req *model.Requirement, userID int64) {
 	rows, err := h.db.Query(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
@@ -524,7 +524,8 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 		for rows.Next() {
 			var task model.Task
 			var ac pq.StringArray
-			var assigneeID, assigneeName, dueDate sql.NullString
+			var assigneeID sql.NullInt64
+			var assigneeName, dueDate sql.NullString
 			var completedAt sql.NullTime
 			if rows.Scan(
 				&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
@@ -535,7 +536,7 @@ func (h *RequirementHandler) loadProjection(req *model.Requirement, userID strin
 				continue
 			}
 			task.AcceptanceCriteria = []string(ac)
-			task.AssigneeID = nullStringPtr(assigneeID)
+			task.AssigneeID = nullInt64Ptr(assigneeID)
 			task.AssigneeName = nullStringPtr(assigneeName)
 			task.DueDate = nullStringPtr(dueDate)
 			task.CompletedAt = nullTimePtr(completedAt)

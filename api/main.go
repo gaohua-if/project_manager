@@ -41,7 +41,7 @@ func main() {
 		log.Println("MinIO not configured, raw log upload disabled")
 	}
 
-	authH := handler.NewAuthHandler(database, cfg.JWTSecret)
+	authH := handler.NewAuthHandler(database, service.NewAIHubClient(cfg.AIHubHost), cfg.AIHubJWTSecret)
 	aiClient := service.NewAIClient()
 	managedAgentClient := service.NewManagedAgentClient(cfg.ManagedAgentURL, cfg.ManagedAgentToken)
 	reqH := handler.NewRequirementHandler(database, aiClient)
@@ -71,11 +71,10 @@ func main() {
 	})
 
 	r.Post("/api/v1/auth/login", authH.Login)
-	r.Post("/api/v1/auth/register", authH.Register)
 	r.Get("/api/v1/users", authH.ListUsers)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(handler.AuthMiddleware(cfg.JWTSecret))
+		r.Use(handler.AuthMiddleware(database, service.NewAIHubClient(cfg.AIHubHost), cfg.AIHubJWTSecret))
 
 		r.Get("/auth/me", authH.Me)
 		r.Get("/teams", authH.ListTeams)
@@ -83,7 +82,6 @@ func main() {
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(handler.AdminOnly)
 			r.Put("/users/{id}", authH.AdminUpdateUser)
-			r.Post("/users/{id}/reset-password", authH.AdminResetPassword)
 		})
 
 		r.Get("/requirements", reqH.List)

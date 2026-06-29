@@ -94,8 +94,8 @@ func (h *RequirementHandler) requirementExists(requirementID string) (bool, erro
 type taskAccessRecord struct {
 	ID            string
 	RequirementID string
-	AssigneeID    sql.NullString
-	CreatorTLID   string
+	AssigneeID    sql.NullInt64
+	CreatorTLID   int64
 }
 
 func (h *TaskHandler) loadTaskAccess(taskID string) (taskAccessRecord, error) {
@@ -150,14 +150,14 @@ func (h *TaskHandler) canViewTaskRecord(u *model.User, task taskAccessRecord) (b
 	return allowed, err
 }
 
-func (h *TaskHandler) canCreateTask(u *model.User, requirementID string, assigneeID *string) (bool, string, error) {
+func (h *TaskHandler) canCreateTask(u *model.User, requirementID string, assigneeID *int64) (bool, string, error) {
 	if u == nil {
 		return false, "insufficient permissions to create tasks", nil
 	}
 	if requirementID == "" {
 		return false, "requirement_id and title required", nil
 	}
-	if assigneeID == nil || *assigneeID == "" {
+	if assigneeID == nil || *assigneeID == 0 {
 		return false, "assignee_id is required", nil
 	}
 	switch u.Role {
@@ -221,7 +221,7 @@ func (h *TaskHandler) canManageTask(u *model.User, task taskAccessRecord) (bool,
 		return true, nil
 	}
 	if u.Role == "employee" {
-		return task.AssigneeID.Valid && task.AssigneeID.String == u.ID, nil
+		return task.AssigneeID.Valid && task.AssigneeID.Int64 == u.ID, nil
 	}
 	if u.Role != "team_leader" || !hasTeam(u) {
 		return false, nil
@@ -243,14 +243,14 @@ func (h *TaskHandler) canManageTask(u *model.User, task taskAccessRecord) (bool,
 	return allowed, err
 }
 
-func (h *TaskHandler) canReassignTask(u *model.User, assigneeID *string) (bool, string, error) {
+func (h *TaskHandler) canReassignTask(u *model.User, assigneeID *int64) (bool, string, error) {
 	if u == nil {
 		return false, "insufficient permissions to reassign task", nil
 	}
 	if u.Role == "employee" {
 		return false, "employee cannot reassign tasks", nil
 	}
-	if assigneeID == nil || *assigneeID == "" {
+	if assigneeID == nil || *assigneeID == 0 {
 		return true, "", nil
 	}
 	var ok bool

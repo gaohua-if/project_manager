@@ -19,9 +19,9 @@ export type BoardTaskPriority = TaskPriority;
 
 export type BoardTeam = { id: string; name: string };
 export type BoardAssignee = {
-  id: string;
+  id: number;
   name: string;
-  employee_id: string;
+  aihub_username?: string;
   team_id: string;
 };
 export type BoardTaskDependency = TaskDep;
@@ -41,7 +41,7 @@ export interface BoardRequirement {
   description: string;
   feishu_doc_url?: string;
   acceptance_criteria: string[];
-  creator_id: string;
+  creator_id: number;
   creator_name: string;
   creator_role: string;
   status: RequirementStage;
@@ -63,7 +63,7 @@ export interface BoardTask {
   requirement_title: string;
   title: string;
   acceptance_criteria: string[];
-  assignee_id?: string;
+  assignee_id?: number;
   assignee_name?: string;
   status: BoardTaskStatus;
   priority: BoardTaskPriority;
@@ -101,7 +101,7 @@ export interface CreateBoardTaskInput {
   requirement_id: string;
   title: string;
   acceptance_criteria: string[];
-  assignee_id?: string;
+  assignee_id?: number;
   priority: BoardTaskPriority;
   due_date?: string;
   dependency_task_ids?: string[];
@@ -109,7 +109,7 @@ export interface CreateBoardTaskInput {
 
 export interface UpdateBoardTaskInput {
   title?: string;
-  assignee_id?: string;
+  assignee_id?: number;
   status?: Exclude<BoardTaskStatus, "blocked">;
   priority?: BoardTaskPriority;
   progress?: number;
@@ -120,7 +120,7 @@ export interface UpdateBoardTaskInput {
 export type FavoriteTargetType = FollowTargetType;
 
 export interface BoardFavorite {
-  user_id: string;
+  user_id: number;
   target_type: FavoriteTargetType;
   target_id: string;
   created_at: string;

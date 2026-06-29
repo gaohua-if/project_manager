@@ -189,7 +189,7 @@ export const requirementsBoardApi = {
       .map((user) => ({
         id: user.id,
         name: user.name,
-        employee_id: user.employee_id,
+        aihub_username: user.aihub_username,
         team_id: user.team_id ?? ""
       }));
   },

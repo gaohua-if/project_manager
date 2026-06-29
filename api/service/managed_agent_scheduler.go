@@ -213,7 +213,7 @@ func scanManagedAgentSchedule(row interface{ Scan(dest ...any) error }) (model.M
 func insertManagedAgentRun(
 	ctx context.Context,
 	db *sql.DB,
-	userID string,
+	userID int64,
 	businessType string,
 	agentID string,
 	submit *SubmitManagedTaskResponse,

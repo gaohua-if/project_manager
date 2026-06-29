@@ -115,7 +115,7 @@ func (h *DashboardHandler) Risks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
-func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.DashboardFollowItem, bool) {
+func (h *DashboardHandler) requirementFollowItem(id string, userID int64) (model.DashboardFollowItem, bool) {
 	var req model.Requirement
 	var deadline sql.NullString
 	var updatedAt time.Time
@@ -147,7 +147,7 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 	}, true
 }
 
-func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFollowItem, bool) {
+func (h *DashboardHandler) taskFollowItem(id string, userID int64) (model.DashboardFollowItem, bool) {
 	task, err := h.loadTask(id, userID)
 	if err != nil || task.Status == "done" {
 		return model.DashboardFollowItem{}, false
@@ -185,7 +185,7 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 	}, true
 }
 
-func (h *DashboardHandler) loadTask(id, userID string) (model.Task, error) {
+func (h *DashboardHandler) loadTask(id string, userID int64) (model.Task, error) {
 	row := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
 			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
@@ -210,7 +210,8 @@ type rowScanner interface {
 func scanProjectionTask(row rowScanner) (model.Task, error) {
 	var task model.Task
 	var ac pq.StringArray
-	var assigneeID, assigneeName, dueDate sql.NullString
+	var assigneeID sql.NullInt64
+	var assigneeName, dueDate sql.NullString
 	var completedAt sql.NullTime
 	err := row.Scan(
 		&task.ID, &task.RequirementID, &task.RequirementTitle, &task.Title,
@@ -222,7 +223,7 @@ func scanProjectionTask(row rowScanner) (model.Task, error) {
 		return model.Task{}, err
 	}
 	task.AcceptanceCriteria = []string(ac)
-	task.AssigneeID = nullStringPtr(assigneeID)
+	task.AssigneeID = nullInt64Ptr(assigneeID)
 	task.AssigneeName = nullStringPtr(assigneeName)
 	task.DueDate = nullStringPtr(dueDate)
 	task.CompletedAt = nullTimePtr(completedAt)

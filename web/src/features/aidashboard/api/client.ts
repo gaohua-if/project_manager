@@ -57,12 +57,9 @@ export const fetchTeamActivity = (date?: string) =>
 // ───────────────────────── Admin ─────────────────────────
 
 export const adminUpdateUser = (
-  id: string,
+  id: number,
   data: { role?: string; team_id?: string; clear_team?: boolean }
 ) => unwrap(api.put<unknown>(`/admin/users/${id}`, data));
-
-export const adminResetPassword = (id: string, password: string) =>
-  unwrap(api.post<{ status: string }>(`/admin/users/${id}/reset-password`, { password }));
 
 // ───────────────────────── Requirements ─────────────────────────
 
@@ -99,7 +96,7 @@ export const createTask = (data: {
   requirement_id: string;
   title: string;
   acceptance_criteria?: string[];
-  assignee_id?: string;
+  assignee_id?: number;
   priority: string;
   due_date?: string;
   depends_on_ids?: string[];

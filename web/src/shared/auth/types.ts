@@ -1,8 +1,8 @@
 export type UserRole = "admin" | "director" | "pm" | "team_leader" | "employee";
 
 export interface User {
-  id: string;
-  employee_id: string;
+  id: number;
+  aihub_username?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -12,14 +12,7 @@ export interface User {
 }
 
 export interface LoginCredentials {
-  employee_id: string;
-  password: string;
-}
-
-export interface RegisterPayload {
-  employee_id: string;
-  name: string;
-  email: string;
+  username: string;
   password: string;
 }
 

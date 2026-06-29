@@ -32,6 +32,21 @@ func nullStringPtr(ns sql.NullString) *string {
 	return &ns.String
 }
 
+func nullInt64(n *int64) sql.NullInt64 {
+	if n == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: *n, Valid: true}
+}
+
+func nullInt64Ptr(n sql.NullInt64) *int64 {
+	if !n.Valid {
+		return nil
+	}
+	v := n.Int64
+	return &v
+}
+
 func stringPtr(s string) *string {
 	if s == "" {
 		return nil

@@ -1,7 +1,7 @@
 -- Documents (work product external links)
 CREATE TABLE documents (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id),
+    user_id         BIGINT NOT NULL REFERENCES users(id),
     title           TEXT NOT NULL,
     url             TEXT NOT NULL,
     description     TEXT,

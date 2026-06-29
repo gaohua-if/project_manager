@@ -170,7 +170,7 @@ func (h *DailyReportMCPHandler) getDailyReportContext(r *http.Request, rawArgs j
 	}
 
 	payload := map[string]any{
-		"user": map[string]string{
+		"user": map[string]any{
 			"id":   u.ID,
 			"name": u.Name,
 			"role": u.Role,
@@ -184,7 +184,7 @@ func (h *DailyReportMCPHandler) getDailyReportContext(r *http.Request, rawArgs j
 	return mcpTextResult(payload, false), nil
 }
 
-func (h *DailyReportMCPHandler) loadDailyReportSessionIDs(userID, reportDate string) ([]string, error) {
+func (h *DailyReportMCPHandler) loadDailyReportSessionIDs(userID int64, reportDate string) ([]string, error) {
 	rows, err := h.db.Query(`
 		SELECT id::text
 		FROM sessions
@@ -314,7 +314,7 @@ func (h *DailyReportMCPHandler) saveDailyReportDraft(r *http.Request, rawArgs js
 	}, false), nil
 }
 
-func (h *DailyReportMCPHandler) validateSessionIDs(userID string, sessionIDs []string) error {
+func (h *DailyReportMCPHandler) validateSessionIDs(userID int64, sessionIDs []string) error {
 	if len(sessionIDs) == 0 {
 		return nil
 	}

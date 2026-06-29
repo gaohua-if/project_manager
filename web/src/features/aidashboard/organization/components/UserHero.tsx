@@ -21,7 +21,7 @@ export function UserHero({ user, variant = "default" }: UserHeroProps) {
       <div className="org-user-hero__body">
         <div className="org-user-hero__title">
           <strong>{user.name}</strong>
-          <span className="org-user-hero__employee-id">{user.employee_id}</span>
+          <span className="org-user-hero__employee-id">{user.aihub_username || user.id}</span>
         </div>
         <div className="org-user-hero__chips">
           <span className={`org-role-tag is-${user.role}`}>{ROLE_LABELS[user.role]}</span>

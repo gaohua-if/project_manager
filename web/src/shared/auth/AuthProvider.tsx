@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
-import { AuthRequestError, fetchCurrentUser, loginWithPassword, registerUser } from "./authApi";
+import { AuthRequestError, fetchCurrentUser, loginWithPassword } from "./authApi";
 import { AuthContext } from "./authContext";
 import {
   AUTH_SESSION_CLEARED_EVENT,
@@ -10,7 +10,7 @@ import {
   isAuthSessionStorageKey,
   setAuthSession
 } from "./session";
-import type { LoginCredentials, RegisterPayload, User, UserRole } from "./types";
+import type { LoginCredentials, User, UserRole } from "./types";
 import type { AuthContextValue } from "./authContext";
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -104,25 +104,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload) => {
-    setStatus("initializing");
-    setError(null);
-
-    try {
-      const { token, user: registeredUser } = await registerUser(payload);
-      setAuthSession({ token });
-      setUser(registeredUser);
-      setStatus("authenticated");
-    } catch (registerError) {
-      clearAuthSession();
-      const message =
-        registerError instanceof Error ? registerError.message : "注册失败，请稍后重试";
-      setError(message);
-      setStatus("anonymous");
-      throw registerError;
-    }
-  }, []);
-
   const hasRole = useCallback(
     (role: UserRole | UserRole[]) => {
       if (!user) return false;
@@ -139,7 +120,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       error,
       login,
-      register,
       logout: () => {
         clearAuthSession();
         setUser(null);
@@ -158,7 +138,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       hasRole
     }),
-    [error, hasRole, loadCurrentUser, login, register, resetToAnonymous, status, user]
+    [error, hasRole, loadCurrentUser, login, resetToAnonymous, status, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

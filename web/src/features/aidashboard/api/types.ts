@@ -28,7 +28,7 @@ export interface Requirement {
   description: string;
   feishu_doc_url?: string;
   acceptance_criteria: string[];
-  creator_id: string;
+  creator_id: number;
   creator_name: string;
   creator_role: string;
   status: RequirementStatus;
@@ -66,9 +66,9 @@ export interface Task {
   requirement_title?: string;
   title: string;
   acceptance_criteria: string[];
-  assignee_id?: string;
+  assignee_id?: number;
   assignee_name?: string;
-  creator_tl_id: string;
+  creator_tl_id: number;
   status: TaskStatus;
   display_status: TaskStatus;
   priority: TaskPriority;
@@ -92,7 +92,7 @@ export type TaskDependencyDTO = TaskDep;
 export type FollowTargetType = "requirement" | "task";
 
 export interface RequirementFollowStateDTO {
-  user_id: string;
+  user_id: number;
   target_type: FollowTargetType;
   target_id: string;
   created_at: string;
@@ -142,7 +142,7 @@ export interface DashboardRiskItemDTO {
 export interface Session {
   id: string;
   session_ref: string;
-  user_id: string;
+  user_id: number;
   user_name: string;
   agent_type: string;
   started_at: string;
@@ -169,7 +169,7 @@ export interface PaginatedSessions {
 
 export interface DailyReport {
   id: string;
-  user_id: string;
+  user_id: number;
   user_name: string;
   report_date: string;
   content: string;
@@ -309,7 +309,7 @@ export interface ManagedAgentManualRunPayload {
 
 export interface ManagedAgentSchedule {
   id: string;
-  user_id: string;
+  user_id: number;
   name: string;
   agent_id: string;
   model_id?: string;
@@ -357,7 +357,7 @@ export interface DailyReportAgentIntegration {
 
 export interface AIRun {
   id: string;
-  user_id: string;
+  user_id: number;
   business_type: string;
   runtime_type: string;
   agent_id: string;
@@ -376,7 +376,7 @@ export interface TeamReport {
   id: string;
   team_id: string;
   team_name: string;
-  leader_id: string;
+  leader_id: number;
   leader_name: string;
   report_date: string;
   content: string;
@@ -388,7 +388,7 @@ export interface TeamReport {
 }
 
 export interface TeamMemberReport {
-  user_id: string;
+  user_id: number;
   user_name: string;
   report_id?: string;
   content: string;
@@ -397,7 +397,7 @@ export interface TeamMemberReport {
 
 export interface Document {
   id: string;
-  user_id: string;
+  user_id: number;
   user_name: string;
   title: string;
   url: string;
@@ -435,7 +435,7 @@ export interface TokenAggregation {
 export interface SessionTokens {
   session_id: string;
   session_ref: string;
-  user_id: string;
+  user_id: number;
   user_name: string;
   agent_type: string;
   models: string[];
@@ -448,7 +448,7 @@ export interface SessionTokens {
 }
 
 export interface MemberStat {
-  user_id: string;
+  user_id: number;
   user_name: string;
   active: boolean;
   last_active?: string;
@@ -464,7 +464,7 @@ export interface TeamStat {
 }
 
 export interface IdleWarning {
-  user_id: string;
+  user_id: number;
   user_name: string;
   team_name: string;
   idle_days: number;

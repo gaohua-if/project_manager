@@ -36,7 +36,7 @@ ALTER TABLE tasks
     CHECK (status IN ('todo', 'in_progress', 'done'));
 
 CREATE TABLE IF NOT EXISTS user_follows (
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     target_type TEXT NOT NULL CHECK (target_type IN ('requirement', 'task')),
     target_id   UUID NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

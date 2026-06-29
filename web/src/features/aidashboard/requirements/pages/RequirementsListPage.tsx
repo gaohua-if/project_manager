@@ -1856,7 +1856,7 @@ function TaskCreateModal({
   const queryClient = useQueryClient();
   const [form] = Form.useForm<{
     title: string;
-    assignee_id: string;
+    assignee_id: number;
     priority: MockTaskPriority;
     due_date?: dayjs.Dayjs;
     dependency_task_ids?: string[];
@@ -1877,7 +1877,7 @@ function TaskCreateModal({
   const createMutation = useMutation({
     mutationFn: (values: {
       title: string;
-      assignee_id: string;
+      assignee_id: number;
       priority: MockTaskPriority;
       due_date?: dayjs.Dayjs;
       dependency_task_ids?: string[];
@@ -1948,7 +1948,7 @@ function TaskCreateModal({
             disabled={assigneesQuery.isLoading || assigneesQuery.isError}
             options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
               value: item.id,
-              label: `${item.name} (${item.employee_id})`
+              label: `${item.name} (${item.aihub_username || item.id})`
             }))}
           />
         </Form.Item>
@@ -2496,7 +2496,7 @@ function TaskEditModal({
   const queryClient = useQueryClient();
   const [form] = Form.useForm<{
     title: string;
-    assignee_id?: string;
+    assignee_id?: number;
     priority: MockTaskPriority;
     due_date?: dayjs.Dayjs;
     acceptance_criteria?: string;
@@ -2522,7 +2522,7 @@ function TaskEditModal({
   const updateMutation = useMutation({
     mutationFn: (values: {
       title: string;
-      assignee_id?: string;
+      assignee_id?: number;
       priority: MockTaskPriority;
       due_date?: dayjs.Dayjs;
       acceptance_criteria?: string;
@@ -2585,7 +2585,7 @@ function TaskEditModal({
             disabled={assigneesQuery.isLoading || assigneesQuery.isError}
             options={(assigneesQuery.data ?? []).map((item: MockAssignee) => ({
               value: item.id,
-              label: `${item.name} (${item.employee_id})`
+              label: `${item.name} (${item.aihub_username || item.id})`
             }))}
           />
         </Form.Item>

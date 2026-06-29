@@ -2,7 +2,7 @@
 CREATE TABLE team_reports (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_id         UUID NOT NULL REFERENCES teams(id),
-    leader_id       UUID NOT NULL REFERENCES users(id),
+    leader_id       BIGINT NOT NULL REFERENCES users(id),
     report_date     DATE NOT NULL,
     content         TEXT NOT NULL,
     feishu_doc_url  TEXT,

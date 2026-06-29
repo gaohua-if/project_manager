@@ -9,14 +9,14 @@ type Team struct {
 }
 
 type User struct {
-	ID         string    `json:"id"`
-	EmployeeID string    `json:"employee_id"`
-	Email      string    `json:"email"`
-	Name       string    `json:"name"`
-	Role       string    `json:"role"`
-	TeamID     *string   `json:"team_id,omitempty"`
-	TeamName   *string   `json:"team_name,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	AIHubUsername string    `json:"aihub_username,omitempty"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	Role          string    `json:"role"`
+	TeamID        *string   `json:"team_id,omitempty"`
+	TeamName      *string   `json:"team_name,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Requirement struct {
@@ -25,7 +25,7 @@ type Requirement struct {
 	Description        string                 `json:"description"`
 	FeishuDocURL       *string                `json:"feishu_doc_url,omitempty"`
 	AcceptanceCriteria []string               `json:"acceptance_criteria"`
-	CreatorID          string                 `json:"creator_id"`
+	CreatorID          int64                  `json:"creator_id"`
 	CreatorName        string                 `json:"creator_name"`
 	CreatorRole        string                 `json:"creator_role"`
 	Status             string                 `json:"status"`
@@ -50,9 +50,9 @@ type Task struct {
 	RequirementTitle   string     `json:"requirement_title,omitempty"`
 	Title              string     `json:"title"`
 	AcceptanceCriteria []string   `json:"acceptance_criteria"`
-	AssigneeID         *string    `json:"assignee_id,omitempty"`
+	AssigneeID         *int64     `json:"assignee_id,omitempty"`
 	AssigneeName       *string    `json:"assignee_name,omitempty"`
-	CreatorTLID        string     `json:"creator_tl_id"`
+	CreatorTLID        int64      `json:"creator_tl_id"`
 	Status             string     `json:"status"`
 	DisplayStatus      string     `json:"display_status"`
 	Priority           string     `json:"priority"`
@@ -100,7 +100,7 @@ type RequirementRiskSummaryDTO = RequirementRiskSummary
 type RequirementFollowStateDTO = RequirementFollowState
 
 type UserFollow struct {
-	UserID     string    `json:"user_id"`
+	UserID     int64     `json:"user_id"`
 	TargetType string    `json:"target_type"`
 	TargetID   string    `json:"target_id"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -155,7 +155,7 @@ type DashboardRiskItem struct {
 type Session struct {
 	ID              string     `json:"id"`
 	SessionRef      string     `json:"session_ref"`
-	UserID          string     `json:"user_id"`
+	UserID          int64      `json:"user_id"`
 	UserName        string     `json:"user_name"`
 	AgentType       string     `json:"agent_type"`
 	StartedAt       time.Time  `json:"started_at"`
@@ -183,7 +183,7 @@ type PaginatedSessions struct {
 type TokenUsage struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"session_id"`
-	UserID        string    `json:"user_id"`
+	UserID        int64     `json:"user_id"`
 	TaskID        *string   `json:"task_id,omitempty"`
 	RequirementID *string   `json:"requirement_id,omitempty"`
 	AgentType     string    `json:"agent_type"`
@@ -196,7 +196,7 @@ type TokenUsage struct {
 
 type DailyReport struct {
 	ID                string    `json:"id"`
-	UserID            string    `json:"user_id"`
+	UserID            int64     `json:"user_id"`
 	UserName          string    `json:"user_name"`
 	ReportDate        string    `json:"report_date"`
 	Content           string    `json:"content"`
@@ -215,8 +215,8 @@ type DailyReport struct {
 // Request/Response types
 
 type LoginRequest struct {
-	EmployeeID string `json:"employee_id"`
-	Password   string `json:"password"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type LoginResponse struct {
@@ -224,21 +224,10 @@ type LoginResponse struct {
 	User  User   `json:"user"`
 }
 
-type RegisterRequest struct {
-	EmployeeID string `json:"employee_id"`
-	Name       string `json:"name"`
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-}
-
 type AdminUpdateUserRequest struct {
 	Role      *string `json:"role,omitempty"`
 	TeamID    *string `json:"team_id,omitempty"`
 	ClearTeam bool    `json:"clear_team,omitempty"`
-}
-
-type AdminResetPasswordRequest struct {
-	Password string `json:"password"`
 }
 
 type CreateRequirementRequest struct {
@@ -265,7 +254,7 @@ type CreateTaskRequest struct {
 	RequirementID      string   `json:"requirement_id"`
 	Title              string   `json:"title"`
 	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
-	AssigneeID         *string  `json:"assignee_id,omitempty"`
+	AssigneeID         *int64   `json:"assignee_id,omitempty"`
 	Priority           string   `json:"priority"`
 	DueDate            *string  `json:"due_date,omitempty"`
 	DependsOnIDs       []string `json:"depends_on_ids,omitempty"`
@@ -274,7 +263,7 @@ type CreateTaskRequest struct {
 type UpdateTaskRequest struct {
 	Title              *string   `json:"title,omitempty"`
 	AcceptanceCriteria *[]string `json:"acceptance_criteria,omitempty"`
-	AssigneeID         *string   `json:"assignee_id,omitempty"`
+	AssigneeID         *int64    `json:"assignee_id,omitempty"`
 	Status             *string   `json:"status,omitempty"`
 	Priority           *string   `json:"priority,omitempty"`
 	DueDate            *string   `json:"due_date,omitempty"`
@@ -373,7 +362,7 @@ type ReportDraftTaskCandidate struct {
 }
 
 type ReportDraftGeneratorRequest struct {
-	UserID              string                     `json:"user_id"`
+	UserID              int64                      `json:"user_id"`
 	UserName            string                     `json:"user_name"`
 	ReportDate          string                     `json:"report_date"`
 	Sessions            []ReportDraftSession       `json:"sessions"`
@@ -525,7 +514,7 @@ type ManagedAgentManualRunRequest struct {
 
 type ManagedAgentSchedule struct {
 	ID           string            `json:"id"`
-	UserID       string            `json:"user_id"`
+	UserID       int64             `json:"user_id"`
 	Name         string            `json:"name"`
 	AgentID      string            `json:"agent_id"`
 	ModelID      *string           `json:"model_id,omitempty"`
@@ -557,7 +546,7 @@ type UpsertManagedAgentScheduleRequest struct {
 
 type AIRun struct {
 	ID                string                       `json:"id"`
-	UserID            string                       `json:"user_id"`
+	UserID            int64                        `json:"user_id"`
 	BusinessType      string                       `json:"business_type"`
 	BusinessID        *string                      `json:"business_id,omitempty"`
 	RuntimeType       string                       `json:"runtime_type"`
@@ -581,7 +570,7 @@ type TeamReport struct {
 	ID              string    `json:"id"`
 	TeamID          string    `json:"team_id"`
 	TeamName        string    `json:"team_name"`
-	LeaderID        string    `json:"leader_id"`
+	LeaderID        int64     `json:"leader_id"`
 	LeaderName      string    `json:"leader_name"`
 	ReportDate      string    `json:"report_date"`
 	Content         string    `json:"content"`
@@ -593,7 +582,7 @@ type TeamReport struct {
 }
 
 type TeamMemberReport struct {
-	UserID    string  `json:"user_id"`
+	UserID    int64   `json:"user_id"`
 	UserName  string  `json:"user_name"`
 	ReportID  *string `json:"report_id,omitempty"`
 	Content   string  `json:"content"`
@@ -614,7 +603,7 @@ type ACStatus struct {
 
 type Document struct {
 	ID            string    `json:"id"`
-	UserID        string    `json:"user_id"`
+	UserID        int64     `json:"user_id"`
 	UserName      string    `json:"user_name"`
 	Title         string    `json:"title"`
 	URL           string    `json:"url"`
@@ -658,7 +647,7 @@ type TokenAggregation struct {
 type SessionTokens struct {
 	SessionID           string    `json:"session_id"`
 	SessionRef          string    `json:"session_ref"`
-	UserID              string    `json:"user_id"`
+	UserID              int64     `json:"user_id"`
 	UserName            string    `json:"user_name"`
 	AgentType           string    `json:"agent_type"`
 	Models              []string  `json:"models"`
@@ -696,7 +685,7 @@ type TeamStat struct {
 }
 
 type MemberStat struct {
-	UserID     string  `json:"user_id"`
+	UserID     int64   `json:"user_id"`
 	UserName   string  `json:"user_name"`
 	Active     bool    `json:"active"`
 	LastActive *string `json:"last_active,omitempty"`
@@ -704,7 +693,7 @@ type MemberStat struct {
 }
 
 type IdleWarning struct {
-	UserID   string `json:"user_id"`
+	UserID   int64  `json:"user_id"`
 	UserName string `json:"user_name"`
 	TeamName string `json:"team_name"`
 	IdleDays int    `json:"idle_days"`

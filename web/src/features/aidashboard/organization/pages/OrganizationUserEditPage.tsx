@@ -64,6 +64,7 @@ function ResultPanel({
 
 export function OrganizationUserEditPage() {
   const { id = "" } = useParams<{ id: string }>();
+  const targetUserId = Number(id);
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,7 +83,7 @@ export function OrganizationUserEditPage() {
     queryFn: () => fetchTeams(),
     staleTime: 5 * 60_000
   });
-  const editingUser = usersQuery.data?.find((u) => u.id === id);
+  const editingUser = usersQuery.data?.find((u) => u.id === targetUserId);
 
   const updateMutation = useMutation({
     mutationFn: (values: EditFormValues) => {

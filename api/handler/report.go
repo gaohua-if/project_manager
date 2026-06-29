@@ -128,7 +128,7 @@ func (h *ReportHandler) GenerateToday(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	today := time.Now().Format("2006-01-02")
 
-	body, _ := json.Marshal(map[string]string{
+	body, _ := json.Marshal(map[string]any{
 		"user_id":     u.ID,
 		"report_date": today,
 	})
@@ -251,7 +251,7 @@ func (h *ReportHandler) GenerateTodayDraft(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, draftResp)
 }
 
-func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.ReportDraftSession, error) {
+func loadDraftSessions(db *sql.DB, userID int64, sessionIDs []string) ([]model.ReportDraftSession, error) {
 	rows, err := db.Query(`
 		SELECT s.id::text, s.session_ref, s.agent_type, s.started_at, s.ended_at, s.duration_secs,
 			COALESCE(s.model, ''), COALESCE(s.summary, ''), COALESCE(s.tool_calls_json::text, '{}'),
@@ -303,7 +303,7 @@ func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.
 	return sessions, rows.Err()
 }
 
-func loadDraftTaskCandidates(db *sql.DB, userID string) ([]model.ReportDraftTaskCandidate, error) {
+func loadDraftTaskCandidates(db *sql.DB, userID int64) ([]model.ReportDraftTaskCandidate, error) {
 	rows, err := db.Query(`
 		SELECT t.id::text, t.title, r.id::text, r.title, t.status, t.progress, COALESCE(u.name, '')
 		FROM tasks t
@@ -329,7 +329,7 @@ func loadDraftTaskCandidates(db *sql.DB, userID string) ([]model.ReportDraftTask
 	return tasks, rows.Err()
 }
 
-func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.DailyReport, error) {
+func (h *ReportHandler) getReportByUserDate(userID int64, reportDate string) (*model.DailyReport, error) {
 	dr, err := scanDailyReport(h.db.QueryRow(reportSelectColumns+" WHERE dr.user_id = $1 AND dr.report_date = $2", userID, reportDate))
 	if err != nil {
 		return nil, err
@@ -433,7 +433,7 @@ type reportRunMeta struct {
 	ModelID        *string
 }
 
-func (h *ReportHandler) loadReportRunMeta(userID, runID string) (*reportRunMeta, error) {
+func (h *ReportHandler) loadReportRunMeta(userID int64, runID string) (*reportRunMeta, error) {
 	var meta reportRunMeta
 	var agentVersionID sql.NullInt64
 	var modelID sql.NullString
@@ -453,7 +453,7 @@ func (h *ReportHandler) loadReportRunMeta(userID, runID string) (*reportRunMeta,
 	return &meta, nil
 }
 
-func (h *ReportHandler) validateReportSessionIDs(userID string, sessionIDs []string) error {
+func (h *ReportHandler) validateReportSessionIDs(userID int64, sessionIDs []string) error {
 	if len(sessionIDs) == 0 {
 		return nil
 	}
@@ -470,7 +470,7 @@ func (h *ReportHandler) validateReportSessionIDs(userID string, sessionIDs []str
 	return nil
 }
 
-func (h *ReportHandler) generateReportContent(userID, date string) string {
+func (h *ReportHandler) generateReportContent(userID int64, date string) string {
 	rows, err := h.db.Query(`
 		SELECT s.session_ref, s.started_at, s.ended_at, s.model, s.summary,
 			s.task_id, COALESCE(t.title,'')
@@ -598,7 +598,7 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 	}
 	today := time.Now().Format("2006-01-02")
 
-	body, _ := json.Marshal(map[string]string{
+	body, _ := json.Marshal(map[string]any{
 		"team_id":     *u.TeamID,
 		"leader_id":   u.ID,
 		"report_date": today,

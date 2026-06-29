@@ -9,13 +9,16 @@ CREATE TABLE teams (
 );
 
 -- Users
+-- id is the AIHub user id (BIGINT). Aida uses AIHub as its unified auth provider,
+-- so the user id is owned by AIHub, not generated here.
 CREATE TABLE users (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    feishu_id  TEXT UNIQUE,
-    name       TEXT NOT NULL,
-    role       TEXT NOT NULL CHECK (role IN ('director', 'team_leader', 'pm', 'employee')),
-    team_id    UUID REFERENCES teams(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    id             BIGINT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    aihub_username TEXT,
+    email          TEXT,
+    role           TEXT NOT NULL CHECK (role IN ('director', 'team_leader', 'pm', 'employee')),
+    team_id        UUID REFERENCES teams(id),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_users_team ON users(team_id);
 CREATE INDEX idx_users_role ON users(role);
@@ -27,7 +30,7 @@ CREATE TABLE requirements (
     description         TEXT NOT NULL,
     feishu_doc_url      TEXT,
     acceptance_criteria TEXT[],
-    creator_id          UUID NOT NULL REFERENCES users(id),
+    creator_id          BIGINT NOT NULL REFERENCES users(id),
     creator_role        TEXT NOT NULL,
     status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
     priority            TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
@@ -52,8 +55,8 @@ CREATE TABLE tasks (
     requirement_id          UUID NOT NULL REFERENCES requirements(id),
     title                   TEXT NOT NULL,
     acceptance_criteria_ids INTEGER[],
-    assignee_id             UUID REFERENCES users(id),
-    creator_tl_id           UUID NOT NULL REFERENCES users(id),
+    assignee_id             BIGINT REFERENCES users(id),
+    creator_tl_id           BIGINT NOT NULL REFERENCES users(id),
     status                  TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done', 'blocked')),
     priority                TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
     due_date                DATE,
@@ -77,7 +80,7 @@ CREATE TABLE task_dependencies (
 CREATE TABLE sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_ref     TEXT NOT NULL,
-    user_id         UUID NOT NULL REFERENCES users(id),
+    user_id         BIGINT NOT NULL REFERENCES users(id),
     agent_type      TEXT NOT NULL DEFAULT 'claude_code',
     started_at      TIMESTAMPTZ NOT NULL,
     ended_at        TIMESTAMPTZ,
@@ -102,7 +105,7 @@ CREATE UNIQUE INDEX idx_sessions_ref ON sessions(session_ref, user_id);
 CREATE TABLE token_usage (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id     UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    user_id        UUID NOT NULL REFERENCES users(id),
+    user_id        BIGINT NOT NULL REFERENCES users(id),
     task_id        UUID REFERENCES tasks(id),
     requirement_id UUID REFERENCES requirements(id),
     agent_type     TEXT NOT NULL,
@@ -121,7 +124,7 @@ CREATE INDEX idx_token_model ON token_usage(model);
 -- Daily Reports
 CREATE TABLE daily_reports (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id        UUID NOT NULL REFERENCES users(id),
+    user_id        BIGINT NOT NULL REFERENCES users(id),
     report_date    DATE NOT NULL,
     content        TEXT NOT NULL,
     edited         BOOLEAN NOT NULL DEFAULT FALSE,

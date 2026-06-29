@@ -49,16 +49,16 @@ func TestStartAgentRunAllowsDefaultModelAndRecordsManualRun(t *testing.T) {
 
 	now := time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("INSERT INTO ai_runs").
-		WithArgs("user-1", "manual_agent_run", "agent-1", "task-123", nil, "pending", sqlmock.AnyArg()).
+		WithArgs(int64(1), "manual_agent_run", "agent-1", "task-123", nil, "pending", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-1"))
 	mock.ExpectQuery("SELECT id::text").
-		WithArgs("run-1", "user-1").
+		WithArgs("run-1", int64(1)).
 		WillReturnRows(sqlmock.NewRows(aiRunColumns()).
-			AddRow("run-1", "user-1", "manual_agent_run", nil, "managed_task", "agent-1", nil, "task-123", nil, nil, "pending", []byte(`{"message":"生成日报","params":{"report_date":"2026-06-26"},"trigger_source":"manual"}`), []byte(`{}`), nil, now, nil, now))
+			AddRow("run-1", int64(1), "manual_agent_run", nil, "managed_task", "agent-1", nil, "task-123", nil, nil, "pending", []byte(`{"message":"生成日报","params":{"report_date":"2026-06-26"},"trigger_source":"manual"}`), []byte(`{}`), nil, now, nil, now))
 
 	h := NewManagedAgentHandler(db, service.NewManagedAgentClient(platform.URL, "platform-token"))
 	req := httptest.NewRequest(http.MethodPost, "/ai-assets/agents/agent-1/runs", bytes.NewBufferString(`{"message":"生成日报","params":{"report_date":"2026-06-26"}}`))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	req = requestWithURLParam(req, "agentId", "agent-1")
 	rec := httptest.NewRecorder()
 
@@ -145,22 +145,22 @@ func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
 
 	now := time.Date(2026, 6, 29, 10, 30, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT s.id::text").
-		WithArgs("user-1", sqlmock.AnyArg()).
+		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
 			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成日报", "{}", "logs/session-1.jsonl", nil, "", nil, "", 100, 200, 300))
 	mock.ExpectQuery("INSERT INTO ai_runs").
-		WithArgs("user-1", "daily_report", "aida-daily-report-agent", "task-urls", "Kimi-K2.6", "pending", sqlmock.AnyArg()).
+		WithArgs(int64(1), "daily_report", "aida-daily-report-agent", "task-urls", "Kimi-K2.6", "pending", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-1"))
 	mock.ExpectQuery("SELECT id::text").
-		WithArgs("run-1", "user-1").
+		WithArgs("run-1", int64(1)).
 		WillReturnRows(sqlmock.NewRows(aiRunColumns()).
-			AddRow("run-1", "user-1", "daily_report", nil, "managed_task", "aida-daily-report-agent", nil, "task-urls", nil, "Kimi-K2.6", "pending", []byte(`{"report_date":"2026-06-29","session_ids":["session-1"],"urls":["https://aida.example.com/api/v1/sessions/session-1/log"]}`), []byte(`{}`), nil, now, nil, now))
+			AddRow("run-1", int64(1), "daily_report", nil, "managed_task", "aida-daily-report-agent", nil, "task-urls", nil, "Kimi-K2.6", "pending", []byte(`{"report_date":"2026-06-29","session_ids":["session-1"],"urls":["https://aida.example.com/api/v1/sessions/session-1/log"]}`), []byte(`{}`), nil, now, nil, now))
 
 	h := NewManagedAgentHandler(db, service.NewManagedAgentClient(platform.URL, "platform-token"))
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/managed-agent-runs", bytes.NewBufferString(`{"report_date":"2026-06-29","session_ids":["session-1"],"agent_id":"aida-daily-report-agent"}`))
 	req.Host = "aida.example.com"
 	req.Header.Set("X-Forwarded-Proto", "https")
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.StartDailyReportRun(rec, req)
@@ -194,17 +194,17 @@ func TestCreateAgentScheduleValidatesAndReturnsSchedule(t *testing.T) {
 
 	now := time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("INSERT INTO managed_agent_schedules").
-		WithArgs("user-1", "日报定时", "agent-1", "Kimi-K2.6", "生成日报", sqlmock.AnyArg(), "weekly", sqlmock.AnyArg(), "19:00", "Asia/Shanghai", true).
+		WithArgs(int64(1), "日报定时", "agent-1", "Kimi-K2.6", "生成日报", sqlmock.AnyArg(), "weekly", sqlmock.AnyArg(), "19:00", "Asia/Shanghai", true).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("schedule-1"))
 	mock.ExpectQuery("SELECT id::text").
-		WithArgs("schedule-1", "user-1").
+		WithArgs("schedule-1", int64(1)).
 		WillReturnRows(sqlmock.NewRows(agentScheduleColumns()).
-			AddRow("schedule-1", "user-1", "日报定时", "agent-1", "Kimi-K2.6", "生成日报", []byte(`{"report_date":"today"}`), "weekly", []byte(`[1,2,3,4,5]`), "19:00", "Asia/Shanghai", true, nil, nil, now, now))
+			AddRow("schedule-1", int64(1), "日报定时", "agent-1", "Kimi-K2.6", "生成日报", []byte(`{"report_date":"today"}`), "weekly", []byte(`[1,2,3,4,5]`), "19:00", "Asia/Shanghai", true, nil, nil, now, now))
 
 	h := NewManagedAgentHandler(db, nil)
 	body := `{"name":"日报定时","agent_id":"agent-1","model_id":"Kimi-K2.6","message":"生成日报","params":{"report_date":"today"},"schedule_type":"weekly","weekdays":[1,2,3,4,5],"time_of_day":"19:00","timezone":"Asia/Shanghai","enabled":true}`
 	req := httptest.NewRequest(http.MethodPost, "/ai-assets/agent-schedules", bytes.NewBufferString(body))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.CreateAgentSchedule(rec, req)
@@ -228,7 +228,7 @@ func TestCreateAgentScheduleRejectsInvalidTime(t *testing.T) {
 	h := NewManagedAgentHandler(nil, nil)
 	body := `{"name":"日报定时","agent_id":"agent-1","message":"生成日报","schedule_type":"daily","time_of_day":"25:00"}`
 	req := httptest.NewRequest(http.MethodPost, "/ai-assets/agent-schedules", bytes.NewBufferString(body))
-	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	req = requestWithUser(req, &model.User{ID: 1, Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
 	h.CreateAgentSchedule(rec, req)

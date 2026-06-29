@@ -131,7 +131,7 @@ func (h *DocumentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ownerID string
+	var ownerID int64
 	err := h.db.QueryRow("SELECT user_id FROM documents WHERE id = $1", id).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -171,7 +171,7 @@ func (h *DocumentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
 
-	var ownerID string
+	var ownerID int64
 	err := h.db.QueryRow("SELECT user_id FROM documents WHERE id = $1", id).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})

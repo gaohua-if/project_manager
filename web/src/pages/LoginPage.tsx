@@ -1,7 +1,7 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Spin } from "antd";
 import { useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { runtimeConfig } from "@/config/runtimeConfig";
 import { useAuth } from "@/shared/auth/authContext";
@@ -39,7 +39,7 @@ export function LoginPage() {
         <Card className="login-page__card">
           <div className="login-page__title">
             <h2>{runtimeConfig.appTitle}</h2>
-            <p>使用工号登录</p>
+            <p>使用 AIHub 账号登录</p>
           </div>
 
           {from !== "/" ? <div className="login-page__return-tip">登录后返回：{from}</div> : null}
@@ -47,18 +47,13 @@ export function LoginPage() {
           <Form
             layout="vertical"
             requiredMark={false}
-            initialValues={
-              import.meta.env.DEV
-                ? { employee_id: "admin", password: "123" }
-                : undefined
-            }
             onValuesChange={() => setLoginError(null)}
-            onFinish={async (values: { employee_id: string; password: string }) => {
+            onFinish={async (values: { username: string; password: string }) => {
               setSubmitting(true);
               setLoginError(null);
               try {
                 await login({
-                  employee_id: values.employee_id.trim(),
+                  username: values.username.trim(),
                   password: values.password
                 });
                 navigate(from, { replace: true });
@@ -70,11 +65,11 @@ export function LoginPage() {
             }}
           >
             <Form.Item
-              label="工号"
-              name="employee_id"
-              rules={[{ required: true, message: "请输入工号" }]}
+              label="账号"
+              name="username"
+              rules={[{ required: true, message: "请输入 AIHub 账号" }]}
             >
-              <Input prefix={<UserOutlined />} autoComplete="username" placeholder="如 admin" />
+              <Input prefix={<UserOutlined />} autoComplete="username" placeholder="AIHub 用户名" />
             </Form.Item>
             <Form.Item
               label="密码"
@@ -94,11 +89,6 @@ export function LoginPage() {
               登录
             </Button>
           </Form>
-
-          <div style={{ marginTop: 16, textAlign: "center", fontSize: 13 }}>
-            没有账号？
-            <Link to="/register">注册</Link>
-          </div>
 
           {status === "initializing" && !submitting ? (
             <div className="login-page__session-loading">

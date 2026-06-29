@@ -623,7 +623,7 @@ func (h *ManagedAgentHandler) refreshAIRun(r *http.Request, run *model.AIRun) (*
 
 // insertAIRun persists a freshly submitted managed-agent task as an ai_runs row
 // and returns the new run id. Shared by the manual-agent and daily-report runs.
-func (h *ManagedAgentHandler) insertAIRun(userID, businessType, agentID string, submit *service.SubmitManagedTaskResponse, modelID string, inputRef map[string]any) (string, error) {
+func (h *ManagedAgentHandler) insertAIRun(userID int64, businessType, agentID string, submit *service.SubmitManagedTaskResponse, modelID string, inputRef map[string]any) (string, error) {
 	inputJSON, _ := json.Marshal(inputRef)
 	var runID string
 	err := h.db.QueryRow(`
@@ -690,7 +690,7 @@ func scanAIRun(row rowScanner) (*model.AIRun, error) {
 	return &run, nil
 }
 
-func (h *ManagedAgentHandler) loadAIRun(runID, userID string) (*model.AIRun, error) {
+func (h *ManagedAgentHandler) loadAIRun(runID string, userID int64) (*model.AIRun, error) {
 	return scanAIRun(h.db.QueryRow(aiRunSelectColumns+" WHERE id = $1 AND user_id = $2", runID, userID))
 }
 
@@ -806,7 +806,7 @@ func scanManagedAgentSchedule(row rowScanner) (model.ManagedAgentSchedule, error
 	return schedule, nil
 }
 
-func (h *ManagedAgentHandler) loadManagedAgentSchedule(scheduleID, userID string) (model.ManagedAgentSchedule, error) {
+func (h *ManagedAgentHandler) loadManagedAgentSchedule(scheduleID string, userID int64) (model.ManagedAgentSchedule, error) {
 	return scanManagedAgentSchedule(h.db.QueryRow(managedAgentScheduleSelectColumns+" WHERE id = $1 AND user_id = $2", scheduleID, userID))
 }
 

@@ -1,6 +1,6 @@
 import { runtimeConfig } from "@/config/runtimeConfig";
 
-import type { LoginCredentials, LoginResponse, RegisterPayload, User } from "./types";
+import type { LoginCredentials, LoginResponse, User } from "./types";
 
 export class AuthRequestError extends Error {
   status?: number;
@@ -46,6 +46,24 @@ function pickString(value: unknown, keys: string[]) {
   return null;
 }
 
+function pickNumber(value: unknown, keys: string[]) {
+  const record = getRecord(value);
+  if (!record) return null;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      const parsed = Number(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
 function getErrorMessage(payload: unknown, fallback: string) {
   if (typeof payload === "string" && payload.trim()) return payload.trim();
   return pickString(payload, ["message", "msg", "error"]) ?? fallback;
@@ -56,15 +74,16 @@ function resolveUser(payload: unknown): User {
   if (!record) {
     throw new Error("登录响应格式无效");
   }
-  const id = pickString(record, ["id"]);
-  if (!id) {
+  const id = pickNumber(record, ["id"]);
+  if (id === null) {
     throw new Error("登录响应缺少用户 ID");
   }
+  const username = pickString(record, ["aihub_username", "username", "employee_id"]) ?? "";
   return {
     id,
-    employee_id: pickString(record, ["employee_id"]) ?? "",
+    aihub_username: username,
     email: pickString(record, ["email"]) ?? "",
-    name: pickString(record, ["name"]) ?? "",
+    name: pickString(record, ["name", "nickname"]) ?? username,
     role: (pickString(record, ["role"]) ?? "employee") as User["role"],
     team_id: pickString(record, ["team_id"]) ?? null,
     team_name: pickString(record, ["team_name"]) ?? null,
@@ -94,24 +113,11 @@ export async function loginWithPassword(credentials: LoginCredentials): Promise<
   const payload = await readPayload(response);
   if (!response.ok) {
     throw new AuthRequestError(
-      getErrorMessage(payload, "登录失败，请检查工号或密码"),
+      getErrorMessage(payload, "登录失败，请检查账号或密码"),
       response.status
     );
   }
   return resolveLoginResponse(payload);
-}
-
-export async function registerUser(payload: RegisterPayload): Promise<LoginResponse> {
-  const response = await fetch(getApiUrl(runtimeConfig.authApiBaseUrl, "/auth/register"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const body = await readPayload(response);
-  if (!response.ok) {
-    throw new AuthRequestError(getErrorMessage(body, "注册失败"), response.status);
-  }
-  return resolveLoginResponse(body);
 }
 
 export async function fetchCurrentUser(token: string, signal?: AbortSignal): Promise<User> {

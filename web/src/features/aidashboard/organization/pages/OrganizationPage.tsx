@@ -1,7 +1,6 @@
 import {
   CrownOutlined,
   EditOutlined,
-  KeyOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   SolutionOutlined,
@@ -56,6 +55,9 @@ const ROLE_DESCRIPTION: Record<UserRole, string> = {
   employee: "在所属团队内推进任务"
 };
 
+const EMPTY_USERS: User[] = [];
+const EMPTY_TEAMS: Team[] = [];
+
 function initials(name: string) {
   if (!name) return "?";
   const trimmed = name.trim();
@@ -94,8 +96,8 @@ export function OrganizationPage() {
     staleTime: 5 * 60_000
   });
 
-  const users = usersQuery.data ?? [];
-  const teams = teamsQuery.data ?? [];
+  const users = usersQuery.data ?? EMPTY_USERS;
+  const teams = teamsQuery.data ?? EMPTY_TEAMS;
 
   const roleCounts = useMemo(
     () =>
@@ -108,10 +110,10 @@ export function OrganizationPage() {
 
   const columns: TableProps<User>["columns"] = [
     {
-      title: "工号",
-      dataIndex: "employee_id",
+      title: "AIHub 账号",
+      dataIndex: "aihub_username",
       width: 140,
-      render: (v: string) => <span className="org-employee-id">{v}</span>
+      render: (v: string) => <span className="org-employee-id">{v || "-"}</span>
     },
     {
       title: "姓名",
@@ -150,12 +152,6 @@ export function OrganizationPage() {
                     icon: <EditOutlined />,
                     disabled: u.id === currentUser?.id,
                     onClick: () => navigate(`/organization/users/${u.id}/edit`)
-                  },
-                  {
-                    key: "reset",
-                    label: "重置密码",
-                    icon: <KeyOutlined />,
-                    onClick: () => navigate(`/organization/users/${u.id}/reset-password`)
                   }
                 ]}
               />

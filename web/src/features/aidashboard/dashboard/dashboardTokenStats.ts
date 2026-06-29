@@ -86,7 +86,7 @@ export function aggregateDashboardTokenReport(
   const totalTokens = sessions.reduce((sum, session) => sum + Math.max(0, Number(session.total_tokens ?? 0)), 0);
   const userIds = new Set<string>();
   sessions.forEach((session) => {
-    const key = session.user_id || session.user_name;
+    const key = session.user_id !== undefined ? String(session.user_id) : session.user_name;
     if (key) userIds.add(key);
   });
 

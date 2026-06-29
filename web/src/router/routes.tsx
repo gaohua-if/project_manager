@@ -12,7 +12,6 @@ import {
 import { AIAssetsPage } from "@/features/aidashboard/ai-assets/pages/AIAssetsPage";
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
 import { OrganizationPage } from "@/features/aidashboard/organization/pages/OrganizationPage";
-import { OrganizationPasswordResetPage } from "@/features/aidashboard/organization/pages/OrganizationPasswordResetPage";
 import { OrganizationUserEditPage } from "@/features/aidashboard/organization/pages/OrganizationUserEditPage";
 import { ProductDocumentCreatePage } from "@/features/aidashboard/products/pages/ProductDocumentCreatePage";
 import { ProductsPage } from "@/features/aidashboard/products/pages/ProductsPage";
@@ -53,13 +52,6 @@ export const appRoutes: AppRoute[] = [
     hideInMenu: true,
     roles: ["admin"],
     element: <OrganizationUserEditPage />
-  },
-  {
-    path: "/organization/users/:id/reset-password",
-    title: "重置密码",
-    hideInMenu: true,
-    roles: ["admin"],
-    element: <OrganizationPasswordResetPage />
   },
   {
     path: "/requirements",

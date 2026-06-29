@@ -10,6 +10,8 @@ services:
       CORS_ORIGIN: "http://localhost:5173,http://localhost:3000,http://192.168.28.113:3000,http://192.168.28.113:5173"
       MANAGED_AGENT_URL: "${MANAGED_AGENT_URL:-}"
       MANAGED_AGENT_TOKEN: "${MANAGED_AGENT_TOKEN:-}"
+      AIHUB_HOST: "${AIHUB_HOST:-http://192.168.11.18:30030}"
+      AIHUB_JWT_SECRET: "${AIHUB_JWT_SECRET:-}"
 
   web:
     ports: !override

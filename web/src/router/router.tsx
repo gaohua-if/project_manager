@@ -4,7 +4,6 @@ import { MainLayout } from "@/layouts/MainLayout/MainLayout";
 import { ForbiddenPage } from "@/pages/ForbiddenPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
-import { RegisterPage } from "@/pages/RegisterPage";
 
 import { PermissionGuard } from "./PermissionGuard";
 import { appRoutes } from "./routes";
@@ -14,10 +13,6 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />
-  },
-  {
-    path: "/register",
-    element: <RegisterPage />
   },
   {
     path: "/403",

@@ -26,7 +26,7 @@ import type { MockTaskPriority } from "../../requirements/types";
 interface CreateTaskFormValues {
   title: string;
   requirement_id: string;
-  assignee_id: string;
+  assignee_id: number;
   priority: MockTaskPriority;
   due_date?: dayjs.Dayjs;
   dependency_task_ids?: string[];
@@ -207,7 +207,7 @@ export function TaskCreatePage() {
                     }
                     options={assignees.map((item) => ({
                       value: item.id,
-                      label: `${item.name} (${item.employee_id})`
+                      label: `${item.name} (${item.aihub_username || item.id})`
                     }))}
                   />
                 </Form.Item>
