@@ -26,7 +26,7 @@ func (h *RequirementHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	query := `
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
-			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
+			r.creator_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username),''), r.creator_role, r.status, r.priority,
 			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
@@ -110,7 +110,7 @@ func (h *RequirementHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	err := h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
-			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
+			r.creator_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username),''), r.creator_role, r.status, r.priority,
 			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
@@ -196,7 +196,7 @@ func (h *RequirementHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var completedAt sql.NullTime
 	err = h.db.QueryRow(`
 		SELECT r.id, r.title, r.description, r.feishu_doc_url, r.acceptance_criteria,
-			r.creator_id, COALESCE(u.name,''), r.creator_role, r.status, r.priority,
+			r.creator_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username),''), r.creator_role, r.status, r.priority,
 			r.progress, r.deadline, r.completed_at, r.created_at, r.updated_at, r.version
 		FROM requirements r JOIN users u ON u.id = r.creator_id WHERE r.id = $1`, reqID).Scan(
 		&result.ID, &result.Title, &result.Description, &feishuURL, &acStr,
@@ -556,7 +556,7 @@ func (h *RequirementHandler) loadTeams(req *model.Requirement) {
 func (h *RequirementHandler) loadProjection(req *model.Requirement, u *model.User) {
 	rows, err := h.db.Query(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(COALESCE(NULLIF(a.nickname,''), a.username), ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t

@@ -6,6 +6,12 @@
   gap: 16px;
 }
 
+.org-page-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .org-team-section {
   padding: 16px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
@@ -151,6 +157,13 @@
   font-size: 12px;
 }
 
+.org-team-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .org-role-tag {
   display: inline-flex;
   align-items: center;
@@ -274,6 +287,51 @@
   font-size: 11px;
   background: #f1f5f9;
   border-radius: 6px;
+}
+
+.org-add-user-search {
+  margin-bottom: 12px;
+}
+
+.org-add-user-config {
+  margin-top: 16px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid #e5edf6;
+  border-radius: 10px;
+}
+
+.org-add-user-config__summary {
+  margin-bottom: 12px;
+  color: #526173;
+  font-size: 12px;
+}
+
+.org-add-user-config__summary strong {
+  color: #172033;
+}
+
+.org-aida-status {
+  display: inline-flex;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.org-aida-status.is-not-added {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.org-aida-status.is-added {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.org-aida-status.is-disabled {
+  color: #64748b;
+  background: #f1f5f9;
 }
 
 .org-empty-frame {

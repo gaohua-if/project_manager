@@ -60,7 +60,7 @@ func (h *FollowHandler) Followers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(`
-		SELECT u.id, u.name, u.role, u.team_id, t.name, f.created_at
+		SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username), u.app_role, u.team_id, t.name, f.created_at
 		FROM user_follows f
 		JOIN users u ON u.id = f.user_id
 		LEFT JOIN teams t ON t.id = u.team_id

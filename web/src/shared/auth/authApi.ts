@@ -42,6 +42,9 @@ function pickString(value: unknown, keys: string[]) {
     if (typeof candidate === "string" && candidate.trim()) {
       return candidate.trim();
     }
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
   }
   return null;
 }
@@ -60,16 +63,24 @@ function resolveUser(payload: unknown): User {
   if (!id) {
     throw new Error("登录响应缺少用户 ID");
   }
+  const username = pickString(record, ["username", "employee_id"]) ?? "";
+  const nickname = pickString(record, ["nickname", "name"]) ?? "";
+  const appRole = (pickString(record, ["app_role", "role"]) ?? "employee") as User["role"];
   return {
     id,
-    employee_id: pickString(record, ["employee_id"]) ?? "",
+    username,
+    nickname,
+    employee_id: username,
     email: pickString(record, ["email"]) ?? "",
-    name: pickString(record, ["name"]) ?? "",
-    role: (pickString(record, ["role"]) ?? "employee") as User["role"],
+    name: nickname || username,
+    app_role: appRole,
+    role: appRole,
     team_id: pickString(record, ["team_id"]) ?? null,
     team_name: pickString(record, ["team_name"]) ?? null,
+    local_enabled: getRecord(record)?.local_enabled === false ? false : true,
     status: (pickString(record, ["status"]) ?? "active") as User["status"],
     deactivated_at: pickString(record, ["deactivated_at"]) ?? null,
+    last_synced_at: pickString(record, ["last_synced_at"]) ?? null,
     created_at: pickString(record, ["created_at"]) ?? undefined
   };
 }
@@ -77,7 +88,7 @@ function resolveUser(payload: unknown): User {
 function resolveLoginResponse(payload: unknown): LoginResponse {
   const record = getRecord(payload) ?? {};
   const recordData = getRecord(record.data);
-  const token = pickString(record, ["token"]) ?? pickString(recordData, ["token"]);
+  const token = pickString(record, ["access_token", "token"]) ?? pickString(recordData, ["access_token", "token"]);
   if (!token) {
     throw new Error("登录响应缺少 Token");
   }

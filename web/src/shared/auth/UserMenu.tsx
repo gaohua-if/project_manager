@@ -40,7 +40,7 @@ export function UserMenu() {
   const navigate = useNavigate();
   const { message } = App.useApp();
 
-  const displayName = user?.name?.trim() || user?.employee_id || "未登录";
+  const displayName = user?.nickname?.trim() || user?.name?.trim() || user?.username || user?.employee_id || "未登录";
   const userSummary = user
     ? `${ROLE_LABELS[user.role]}${user.team_name ? " · " + user.team_name : ""}`
     : "平台用户";

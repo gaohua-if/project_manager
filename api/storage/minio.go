@@ -13,8 +13,8 @@ import (
 )
 
 type MinioStorage struct {
-	client           *minio.Client
-	bucket           string
+	client *minio.Client
+	bucket string
 }
 
 func NewMinioStorage(cfg *config.Config) (*MinioStorage, error) {
@@ -40,9 +40,9 @@ func NewMinioStorage(cfg *config.Config) (*MinioStorage, error) {
 	}
 
 	return &MinioStorage{
-		client:           client,
-		bucket:           cfg.MinioBucket,
-		}, nil
+		client: client,
+		bucket: cfg.MinioBucket,
+	}, nil
 }
 
 func (s *MinioStorage) Upload(ctx context.Context, objectName string, reader io.Reader, size int64, contentType string) error {

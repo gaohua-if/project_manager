@@ -41,7 +41,8 @@ func main() {
 		log.Println("MinIO not configured, raw log upload disabled")
 	}
 
-	authH := handler.NewAuthHandler(database, cfg.JWTSecret, cfg.EnablePublicRegister)
+	aihubClient := service.NewAIHubClient(cfg.AIHubHost, cfg.AIHubToken)
+	authH := handler.NewAuthHandler(database, aihubClient, cfg.BootstrapAdminUIDs)
 	aiClient := service.NewAIClient()
 	managedAgentClient := service.NewManagedAgentClient(cfg.ManagedAgentURL, cfg.ManagedAgentToken)
 	reqH := handler.NewRequirementHandler(database, aiClient)
@@ -74,20 +75,22 @@ func main() {
 	r.Post("/api/v1/auth/register", authH.Register)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(handler.AuthMiddleware(database, cfg.JWTSecret))
+		r.Use(handler.AuthMiddleware(database, cfg.AIHubSecret, aihubClient))
 
 		r.Get("/auth/me", authH.Me)
 		r.Get("/users", authH.ListUsers)
+		r.With(handler.AdminOnly).Get("/aihub/users/search", authH.SearchAIHubUsers)
 		r.Get("/task-assignees", authH.ListTaskAssignees)
 		r.Get("/teams", authH.ListTeams)
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(handler.AdminOnly)
-			r.Post("/users", authH.AdminCreateUser)
 			r.Put("/users/{id}", authH.AdminUpdateUser)
-			r.Put("/users/{id}/status", authH.AdminUpdateUserStatus)
-			r.Post("/users/{id}/reset-password", authH.AdminResetPassword)
+			r.Put("/users/{id}/profile", authH.AdminUpdateUser)
+			r.Post("/users/batch", authH.AdminBatchAddUsers)
 			r.Post("/teams", authH.AdminCreateTeam)
+			r.Put("/teams/{id}", authH.AdminUpdateTeam)
+			r.Delete("/teams/{id}", authH.AdminDeleteTeam)
 		})
 
 		r.Get("/requirements", reqH.List)

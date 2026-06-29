@@ -147,7 +147,7 @@ func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
 	mock.ExpectQuery("SELECT s.id::text").
 		WithArgs("user-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
-			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成日报", "{}", "logs/session-1.jsonl", nil, "", nil, "", 100, 200, 300))
+			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成日报", "{}", nil, "", nil, "", 100, 200, 300))
 	mock.ExpectQuery("INSERT INTO ai_runs").
 		WithArgs("user-1", "daily_report", "aida-daily-report-agent", "task-urls", "Kimi-K2.6", "pending", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-1"))

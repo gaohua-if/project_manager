@@ -71,7 +71,7 @@ func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT dr.id::text, dr.user_id::text, u.name, dr.report_date, dr.status, dr.submitted_to, dr.edited,
+		SELECT dr.id::text, dr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.status, dr.submitted_to, dr.edited,
 			COALESCE(cardinality(dr.session_ids), 0), COALESCE(dr.session_ids, '{}'),
 			dr.saved_at, dr.submitted_at, dr.created_at, dr.updated_at
 		FROM daily_reports dr
@@ -141,7 +141,7 @@ func (h *ReportHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT dr.id::text, dr.user_id::text, u.name, dr.report_date, dr.status, dr.submitted_to, dr.edited,
+		SELECT dr.id::text, dr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.status, dr.submitted_to, dr.edited,
 			COALESCE(cardinality(dr.session_ids), 0), COALESCE(dr.session_ids, '{}'),
 			dr.saved_at, dr.submitted_at, dr.created_at, dr.updated_at
 		FROM daily_reports dr
@@ -195,7 +195,7 @@ func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var reportUserTeamID sql.NullString
 
 	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, report_user.name, report_user.team_id::text, dr.report_date, dr.content, dr.edited,
+		SELECT dr.id, dr.user_id, COALESCE(NULLIF(report_user.nickname,''), report_user.username), report_user.team_id::text, dr.report_date, dr.content, dr.edited,
 			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
@@ -241,7 +241,7 @@ func (h *ReportHandler) GetOrCreateToday(w http.ResponseWriter, r *http.Request)
 	var sessionIDsStr string
 
 	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
+		SELECT dr.id, dr.user_id, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.content, dr.edited,
 			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
@@ -470,7 +470,7 @@ func (h *ReportHandler) loadDraftSessions(userID string, sessionIDs []string) ([
 
 func (h *ReportHandler) loadDraftTaskCandidates(userID string) ([]model.ReportDraftTaskCandidate, error) {
 	rows, err := h.db.Query(`
-		SELECT t.id::text, t.title, r.id::text, r.title, t.status, t.progress, COALESCE(u.name, '')
+		SELECT t.id::text, t.title, r.id::text, r.title, t.status, t.progress, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), '')
 		FROM tasks t
 		JOIN requirements r ON r.id = t.requirement_id
 		LEFT JOIN users u ON u.id = t.assignee_id
@@ -494,13 +494,21 @@ func (h *ReportHandler) loadDraftTaskCandidates(userID string) ([]model.ReportDr
 	return tasks, rows.Err()
 }
 
+func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.ReportDraftSession, error) {
+	return (&ReportHandler{db: db}).loadDraftSessions(userID, sessionIDs)
+}
+
+func loadDraftTaskCandidates(db *sql.DB, userID string) ([]model.ReportDraftTaskCandidate, error) {
+	return (&ReportHandler{db: db}).loadDraftTaskCandidates(userID)
+}
+
 func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.DailyReport, error) {
 	var dr model.DailyReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
 	var savedAt, submittedAt sql.NullTime
 	var sessionIDsStr string
 	err := h.db.QueryRow(`
-		SELECT dr.id, dr.user_id, u.name, dr.report_date, dr.content, dr.edited,
+		SELECT dr.id, dr.user_id, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.content, dr.edited,
 			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
@@ -691,7 +699,7 @@ func (h *ReportHandler) ListPersonalWeeklyReports(w http.ResponseWriter, r *http
 	}
 
 	query := `
-		SELECT pwr.id::text, pwr.user_id::text, u.name, pwr.week_start, pwr.week_end, pwr.status,
+		SELECT pwr.id::text, pwr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), pwr.week_start, pwr.week_end, pwr.status,
 			pwr.saved_at, pwr.submitted_at, pwr.submitted_to,
 			COALESCE(cardinality(pwr.source_daily_report_ids), 0),
 			COALESCE(cardinality(pwr.source_session_ids), 0),
@@ -970,7 +978,7 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 	}
 
 	rows, err := h.db.Query(`
-		SELECT u.id, u.name,
+		SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username),
 			dr.id, dr.submitted_content, dr.submitted_at,
 			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
 		FROM users u
@@ -978,8 +986,8 @@ func (h *ReportHandler) ListTeamMemberReports(w http.ResponseWriter, r *http.Req
 			AND dr.report_date = $1
 			AND dr.submitted_at IS NOT NULL
 			AND dr.submitted_content IS NOT NULL
-		WHERE u.team_id = $2 AND u.role = 'employee'
-		ORDER BY u.name`, date, *teamID)
+		WHERE u.team_id = $2 AND u.app_role = 'employee'
+		ORDER BY COALESCE(NULLIF(u.nickname,''), u.username)`, date, *teamID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1036,15 +1044,15 @@ func (h *ReportHandler) GetTeamReportSources(w http.ResponseWriter, r *http.Requ
 	}
 
 	rows, err := h.db.Query(`
-		SELECT u.id, u.name, dr.id, dr.submitted_content, dr.submitted_at,
+		SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username), dr.id, dr.submitted_content, dr.submitted_at,
 			CASE WHEN dr.id IS NOT NULL THEN true ELSE false END
 		FROM users u
 		LEFT JOIN daily_reports dr ON dr.user_id = u.id
 			AND dr.report_date = $1
 			AND dr.submitted_at IS NOT NULL
 			AND dr.submitted_content IS NOT NULL
-		WHERE u.team_id = $2 AND u.role = 'employee'
-		ORDER BY u.name`, date, *teamID)
+		WHERE u.team_id = $2 AND u.app_role = 'employee'
+		ORDER BY COALESCE(NULLIF(u.nickname,''), u.username)`, date, *teamID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1329,11 +1337,11 @@ func (h *ReportHandler) ListTeamReports(w http.ResponseWriter, r *http.Request) 
 	}
 
 	query := `
-		SELECT tr.id::text, tr.team_id::text, t.name, tr.leader_id::text, u.name,
+		SELECT tr.id::text, tr.team_id::text, t.name, tr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			tr.report_date,
-			(SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.role = 'employee') AS member_count,
+			(SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.app_role = 'employee') AS member_count,
 			COALESCE(cardinality(tr.source_daily_report_ids), 0) AS submitted_count,
-			GREATEST((SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.role = 'employee') - COALESCE(cardinality(tr.source_daily_report_ids), 0), 0) AS missing_count,
+			GREATEST((SELECT COUNT(*) FROM users member WHERE member.team_id = tr.team_id AND member.app_role = 'employee') - COALESCE(cardinality(tr.source_daily_report_ids), 0), 0) AS missing_count,
 			tr.status, tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
@@ -1460,7 +1468,7 @@ func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*mod
 	var savedAt, submittedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
-		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
+		SELECT tr.id, tr.team_id, t.name, tr.leader_id, COALESCE(NULLIF(u.nickname,''), u.username),
 			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
 			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
@@ -1494,11 +1502,11 @@ func (h *ReportHandler) loadSubmittedDailyReportIDsByTeam(teamID, reportDate str
 		FROM users u
 		JOIN daily_reports dr ON dr.user_id = u.id
 		WHERE u.team_id = $1
-			AND u.role = 'employee'
+			AND u.app_role = 'employee'
 			AND dr.report_date = $2
 			AND dr.submitted_at IS NOT NULL
 			AND dr.submitted_content IS NOT NULL
-		ORDER BY u.name, dr.created_at`, teamID, reportDate)
+		ORDER BY COALESCE(NULLIF(u.nickname,''), u.username), dr.created_at`, teamID, reportDate)
 	if err != nil {
 		return nil, err
 	}
@@ -1521,7 +1529,7 @@ func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) 
 	var savedAt, submittedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
-		SELECT tr.id, tr.team_id, t.name, tr.leader_id, u.name,
+		SELECT tr.id, tr.team_id, t.name, tr.leader_id, COALESCE(NULLIF(u.nickname,''), u.username),
 			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
 			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
@@ -1562,7 +1570,7 @@ func (h *ReportHandler) GetDepartmentReportSources(w http.ResponseWriter, r *htt
 	}
 
 	rows, err := h.db.Query(`
-		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(u.name, ''),
+		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), ''),
 			tr.id::text, COALESCE(tr.submitted_content, ''), tr.submitted_at,
 			CASE WHEN tr.id IS NOT NULL THEN true ELSE false END
 		FROM teams t
@@ -1825,7 +1833,7 @@ func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.Dep
 
 func (h *ReportHandler) buildDepartmentReportSources(reportDate string) (*model.DepartmentReportSources, error) {
 	rows, err := h.db.Query(`
-		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(u.name, ''),
+		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), ''),
 			tr.id::text, COALESCE(tr.submitted_content, ''), tr.submitted_at,
 			CASE WHEN tr.id IS NOT NULL THEN true ELSE false END
 		FROM teams t
@@ -2209,7 +2217,7 @@ func (h *ReportHandler) ListTeamWeeklyReports(w http.ResponseWriter, r *http.Req
 		return
 	}
 	query := `
-		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
+		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
 			twr.submitted_at, twr.created_at, twr.updated_at
@@ -2532,10 +2540,10 @@ func (h *ReportHandler) buildTeamWeeklyReportSources(teamID, weekStart, weekEnd 
 
 	rows, err := h.db.Query(`
 		WITH eligible_people AS (
-			SELECT u.id, u.name,
-				CASE WHEN u.role = 'team_leader' THEN 'leader' ELSE 'member' END AS source_role
+			SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username),
+				CASE WHEN u.app_role = 'team_leader' THEN 'leader' ELSE 'member' END AS source_role
 			FROM users u
-			WHERE u.team_id = $1 AND u.role IN ('team_leader', 'employee')
+			WHERE u.team_id = $1 AND u.app_role IN ('team_leader', 'employee')
 		)
 		SELECT ep.id::text, ep.name, ep.source_role,
 			pwr.id::text, pwr.week_start, pwr.week_end, pwr.submitted_at,
@@ -2661,7 +2669,7 @@ func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, week
 
 func (h *ReportHandler) buildDepartmentWeeklyReportSources(weekStart, weekEnd string) (*model.DepartmentWeeklyReportSources, error) {
 	rows, err := h.db.Query(`
-		SELECT t.id::text, t.name, twr.leader_id::text, COALESCE(u.name, ''),
+		SELECT t.id::text, t.name, twr.leader_id::text, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), ''),
 			twr.id::text, COALESCE(twr.content, ''), twr.submitted_at,
 			CASE WHEN twr.id IS NOT NULL THEN true ELSE false END
 		FROM teams t
@@ -2712,7 +2720,7 @@ func (h *ReportHandler) buildPersonalWeeklyReportSources(userID, userName, weekS
 	}
 
 	dailyRows, err := h.db.Query(`
-		SELECT dr.id::text, dr.user_id::text, u.name, dr.report_date, dr.content
+		SELECT dr.id::text, dr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.content
 		FROM daily_reports dr
 		JOIN users u ON u.id = dr.user_id
 		WHERE dr.user_id = $1 AND dr.report_date BETWEEN $2 AND $3 AND dr.status IS NOT NULL
@@ -2812,7 +2820,7 @@ func (h *ReportHandler) upsertPersonalWeeklyReport(userID, weekStart, weekEnd st
 
 func (h *ReportHandler) getPersonalWeeklyReportByUserWeek(userID, weekStart string) (*model.PersonalWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT pwr.id::text, pwr.user_id::text, u.name, pwr.week_start, pwr.week_end, pwr.content,
+		SELECT pwr.id::text, pwr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), pwr.week_start, pwr.week_end, pwr.content,
 			pwr.submitted_content, pwr.status, pwr.saved_at, pwr.submitted_at, pwr.submitted_to,
 			pwr.source_daily_report_ids, pwr.source_session_ids, pwr.source_task_ids,
 			pwr.created_at, pwr.updated_at
@@ -2828,7 +2836,7 @@ func (h *ReportHandler) getPersonalWeeklyReportByUserWeek(userID, weekStart stri
 
 func (h *ReportHandler) getPersonalWeeklyReportByID(id string) (*model.PersonalWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT pwr.id::text, pwr.user_id::text, u.name, pwr.week_start, pwr.week_end, pwr.content,
+		SELECT pwr.id::text, pwr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), pwr.week_start, pwr.week_end, pwr.content,
 			pwr.submitted_content, pwr.status, pwr.saved_at, pwr.submitted_at, pwr.submitted_to,
 			pwr.source_daily_report_ids, pwr.source_session_ids, pwr.source_task_ids,
 			pwr.created_at, pwr.updated_at
@@ -2844,7 +2852,7 @@ func (h *ReportHandler) getPersonalWeeklyReportByID(id string) (*model.PersonalW
 
 func (h *ReportHandler) getTeamWeeklyReportByTeamWeek(teamID, weekStart string) (*model.TeamWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
+		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
 			twr.submitted_at, twr.created_at, twr.updated_at
@@ -2858,7 +2866,7 @@ func (h *ReportHandler) getTeamWeeklyReportByTeamWeek(teamID, weekStart string) 
 
 func (h *ReportHandler) getTeamWeeklyReportByID(id string) (*model.TeamWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, u.name,
+		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
 			twr.submitted_at, twr.created_at, twr.updated_at

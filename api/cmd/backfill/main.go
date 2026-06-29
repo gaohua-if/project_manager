@@ -2,7 +2,8 @@
 // in MinIO. Safe to re-run — only updates rows still missing cache data.
 //
 // Usage (inside the api container):
-//   docker compose exec api /usr/local/bin/backfill
+//
+//	docker compose exec api /usr/local/bin/backfill
 package main
 
 import (
@@ -21,13 +22,13 @@ import (
 )
 
 type event struct {
-	Type      string          `json:"type"`
-	Message   json.RawMessage `json:"message,omitempty"`
+	Type    string          `json:"type"`
+	Message json.RawMessage `json:"message,omitempty"`
 }
 
 type assistantMsg struct {
-	Model   string     `json:"model"`
-	Usage   *usageInfo `json:"usage"`
+	Model string     `json:"model"`
+	Usage *usageInfo `json:"usage"`
 }
 
 type usageInfo struct {
@@ -79,8 +80,8 @@ func main() {
 	defer rows.Close()
 
 	type pending struct {
-		id      string
-		logURL  string
+		id     string
+		logURL string
 	}
 	var todo []pending
 	for rows.Next() {

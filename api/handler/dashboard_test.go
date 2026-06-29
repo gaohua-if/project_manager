@@ -360,7 +360,7 @@ func expectTaskDependencies(mock sqlmock.Sqlmock, taskID string, unfinishedCount
 }
 
 func expectAttentionScore(mock sqlmock.Sqlmock, targetType, targetID string, score int) {
-	mock.ExpectQuery(`SELECT COALESCE\(SUM\(CASE u\.role`).
+	mock.ExpectQuery(`SELECT COALESCE\(SUM\(CASE u\.app_role`).
 		WithArgs(targetType, targetID).
 		WillReturnRows(sqlmock.NewRows([]string{"score"}).AddRow(score))
 }

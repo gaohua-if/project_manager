@@ -106,7 +106,7 @@ export function LoginPage() {
               内部系统
             </span>
             <h2 id="login-title">登录工作台</h2>
-            <p>使用工号和密码进入 Aida 控制台。</p>
+            <p>使用统一平台账号进入 Aida 控制台。</p>
           </div>
 
           <Form
@@ -114,16 +114,16 @@ export function LoginPage() {
             requiredMark={false}
             initialValues={
               import.meta.env.DEV
-                ? { employee_id: "admin", password: "123" }
+                ? { username: "admin", password: "123" }
                 : undefined
             }
             onValuesChange={() => setLoginError(null)}
-            onFinish={async (values: { employee_id: string; password: string }) => {
+            onFinish={async (values: { username: string; password: string }) => {
               setSubmitting(true);
               setLoginError(null);
               try {
                 await login({
-                  employee_id: values.employee_id.trim(),
+                  username: values.username.trim(),
                   password: values.password,
                 });
                 navigate(DASHBOARD_PATH, { replace: true });
@@ -136,8 +136,8 @@ export function LoginPage() {
           >
             <Form.Item
               label="工号"
-              name="employee_id"
-              rules={[{ required: true, message: "请输入工号" }]}
+              name="username"
+              rules={[{ required: true, message: "请输入工号或登录名" }]}
             >
               <Input
                 prefix={<UserOutlined />}

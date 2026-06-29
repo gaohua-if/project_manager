@@ -3,6 +3,38 @@
 export interface Team {
   id: string;
   name: string;
+  director_user_id?: string | null;
+  director_name?: string | null;
+}
+
+export type AIHubAidaStatus = "not_added" | "active" | "disabled";
+
+export interface AIHubUser {
+  id: number;
+  username: string;
+  nickname: string;
+  email: string;
+  status?: number;
+  aida_status?: AIHubAidaStatus;
+  aida_status_label?: string;
+  current_app_role?: string | null;
+  current_team_id?: string | null;
+  current_team_name?: string | null;
+}
+
+export interface AdminBatchAddUsersResponse {
+  created: number;
+  skipped: number;
+  skipped_existing?: number;
+  failed: number;
+  results: Array<{
+    id: string;
+    username?: string;
+    nickname?: string;
+    email?: string;
+    status: "created" | "skipped" | "failed";
+    error?: string;
+  }>;
 }
 
 export type RequirementStatus = "todo" | "review" | "active" | "completed" | "cancelled";

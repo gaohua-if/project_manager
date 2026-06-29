@@ -71,7 +71,7 @@ func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name,''), s.agent_type, s.started_at, s.ended_at,
+		SELECT s.id, s.session_ref, s.user_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username),''), s.agent_type, s.started_at, s.ended_at,
 			s.duration_secs, s.model, s.summary, s.tool_calls_json, s.git_commits,
 			s.task_id, COALESCE(t.title,''), s.requirement_id, s.match_confidence,
 			s.raw_log_url, s.uploaded_at
@@ -157,7 +157,7 @@ func (h *SessionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var gitCommits pq.StringArray
 
 	err := h.db.QueryRow(`
-		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name,''), s.agent_type, s.started_at, s.ended_at,
+		SELECT s.id, s.session_ref, s.user_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username),''), s.agent_type, s.started_at, s.ended_at,
 			s.duration_secs, s.model, s.summary, s.tool_calls_json, s.git_commits,
 			s.task_id, COALESCE(t.title,''), s.requirement_id, s.match_confidence,
 			s.raw_log_url, s.uploaded_at

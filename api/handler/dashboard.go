@@ -85,7 +85,7 @@ func (h *DashboardHandler) requirementFollowItem(id, userID string) (model.Dashb
 	var deadline sql.NullString
 	var updatedAt time.Time
 	err := h.db.QueryRow(`
-		SELECT r.id, r.title, r.status, r.deadline, COALESCE(u.name, ''), r.updated_at
+		SELECT r.id, r.title, r.status, r.deadline, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), ''), r.updated_at
 		FROM requirements r
 		JOIN users u ON u.id = r.creator_id
 		WHERE r.id = $1`, id).Scan(&req.ID, &req.Title, &req.Status, &deadline, &req.CreatorName, &updatedAt)
@@ -167,7 +167,7 @@ func (h *DashboardHandler) taskFollowItem(id, userID string) (model.DashboardFol
 func (h *DashboardHandler) loadTask(id, userID string) (model.Task, error) {
 	row := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(COALESCE(NULLIF(a.nickname,''), a.username), ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t
@@ -273,7 +273,7 @@ func (h *DashboardHandler) loadRequirementRiskFacts(userID string, now time.Time
 func (h *DashboardHandler) loadTaskRiskFacts(u *model.User, now time.Time) ([]dashboardTaskRiskFact, error) {
 	rows, err := h.db.Query(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name, ''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(COALESCE(NULLIF(a.nickname,''), a.username), ''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date,
 			t.completed_at, t.created_at, t.updated_at, t.version
 		FROM tasks t
@@ -612,7 +612,7 @@ func (h *DashboardHandler) followAttention(targetType, targetID string) followAt
 	var attention followAttention
 	if err := h.db.QueryRow(`
 		SELECT
-			COALESCE(SUM(CASE u.role
+			COALESCE(SUM(CASE u.app_role
 				WHEN 'director' THEN 100
 				WHEN 'team_leader' THEN 50
 				WHEN 'pm' THEN 40
@@ -631,7 +631,7 @@ func (h *DashboardHandler) followAttention(targetType, targetID string) followAt
 func (h *DashboardHandler) attentionScore(targetType, targetID string) int {
 	var score int
 	if err := h.db.QueryRow(`
-		SELECT COALESCE(SUM(CASE u.role
+		SELECT COALESCE(SUM(CASE u.app_role
 			WHEN 'director' THEN 100
 			WHEN 'team_leader' THEN 50
 			WHEN 'pm' THEN 40

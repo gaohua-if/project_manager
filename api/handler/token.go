@@ -143,7 +143,7 @@ func (h *TokenHandler) ListSessionTokens(w http.ResponseWriter, r *http.Request)
 	}
 
 	q := `
-		SELECT s.id, s.session_ref, s.user_id, COALESCE(u.name, ''), s.agent_type,
+		SELECT s.id, s.session_ref, s.user_id, COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), ''), s.agent_type,
 		       CASE WHEN s.models <> '{}' THEN s.models ELSE ARRAY[s.model] END,
 		       s.summary,
 		       s.started_at,
@@ -244,7 +244,7 @@ func (h *TokenHandler) queryGroups(where string, args []any, groupBy string, tot
 	case "user":
 		extraJoins = "LEFT JOIN users u ON u.id = tu.user_id"
 		groupExpr = "tu.user_id::text"
-		labelExpr = "COALESCE(u.name, '未知')"
+		labelExpr = "COALESCE(COALESCE(NULLIF(u.nickname,''), u.username), '未知')"
 	case "requirement":
 		extraJoins = "LEFT JOIN requirements r ON r.id = tu.requirement_id"
 		groupExpr = "COALESCE(tu.requirement_id::text, 'none')"

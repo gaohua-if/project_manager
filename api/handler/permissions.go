@@ -171,7 +171,14 @@ func (h *TaskHandler) canCreateTask(u *model.User, requirementID string, assigne
 	switch u.Role {
 	case "admin", "director", "pm":
 		var ok bool
-		err := h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND role = 'employee')`, *assigneeID).Scan(&ok)
+		err := h.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM users
+				WHERE id = $1
+				  AND local_enabled = true
+				  AND team_id IS NOT NULL
+				  AND app_role IN ('employee', 'team_leader', 'pm')
+			)`, *assigneeID).Scan(&ok)
 		if err != nil || !ok {
 			return ok, "assignee not found", err
 		}
@@ -192,10 +199,13 @@ func (h *TaskHandler) canCreateTask(u *model.User, requirementID string, assigne
 		err = h.db.QueryRow(`
 			SELECT EXISTS(
 				SELECT 1 FROM users
-				WHERE id = $1 AND role = 'employee' AND team_id = $2
+				WHERE id = $1
+				  AND local_enabled = true
+				  AND app_role IN ('employee', 'team_leader', 'pm')
+				  AND team_id = $2
 			)`, *assigneeID, *u.TeamID).Scan(&ok)
 		if err != nil || !ok {
-			return ok, "assignee must be an employee in your team", err
+			return ok, "assignee must be an enabled task assignee in your team", err
 		}
 		return true, "", nil
 	case "employee":
@@ -260,18 +270,28 @@ func (h *TaskHandler) canReassignTask(u *model.User, assigneeID *string) (bool, 
 	var ok bool
 	var err error
 	if isGlobalTaskManager(u.Role) {
-		err = h.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, *assigneeID).Scan(&ok)
+		err = h.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM users
+				WHERE id = $1
+				  AND local_enabled = true
+				  AND team_id IS NOT NULL
+				  AND app_role IN ('employee', 'team_leader', 'pm')
+			)`, *assigneeID).Scan(&ok)
 	} else if u.Role == "team_leader" && hasTeam(u) {
 		err = h.db.QueryRow(`
 			SELECT EXISTS(
 				SELECT 1 FROM users
-				WHERE id = $1 AND role = 'employee' AND team_id = $2
+				WHERE id = $1
+				  AND local_enabled = true
+				  AND app_role IN ('employee', 'team_leader', 'pm')
+				  AND team_id = $2
 			)`, *assigneeID, *u.TeamID).Scan(&ok)
 	} else {
 		return false, "insufficient permissions to reassign task", nil
 	}
 	if err != nil || !ok {
-		return ok, "assignee must be an employee in your team", err
+		return ok, "assignee must be an enabled task assignee in scope", err
 	}
 	return true, "", nil
 }

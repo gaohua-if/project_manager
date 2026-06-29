@@ -3,19 +3,25 @@ export type UserStatus = "active" | "deactivated";
 
 export interface User {
   id: string;
+  username: string;
+  nickname: string;
   employee_id: string;
   email: string;
   name: string;
+  app_role: UserRole;
   role: UserRole;
   team_id?: string | null;
   team_name?: string | null;
+  local_enabled?: boolean;
   status?: UserStatus;
   deactivated_at?: string | null;
+  last_synced_at?: string | null;
   created_at?: string;
 }
 
 export interface LoginCredentials {
-  employee_id: string;
+  username: string;
+  employee_id?: string;
   password: string;
 }
 

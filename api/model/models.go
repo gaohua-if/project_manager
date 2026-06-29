@@ -3,22 +3,31 @@ package model
 import "time"
 
 type Team struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	DirectorUserID *string   `json:"director_user_id,omitempty"`
+	DirectorName   *string   `json:"director_name,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type User struct {
 	ID            string     `json:"id"`
-	EmployeeID    string     `json:"employee_id"`
+	Username      string     `json:"username"`
+	Nickname      string     `json:"nickname"`
 	Email         string     `json:"email"`
 	Name          string     `json:"name"`
+	EmployeeID    string     `json:"employee_id"`
+	AppRole       string     `json:"app_role"`
 	Role          string     `json:"role"`
 	TeamID        *string    `json:"team_id,omitempty"`
 	TeamName      *string    `json:"team_name,omitempty"`
+	LocalEnabled  bool       `json:"local_enabled"`
 	Status        string     `json:"status"`
+	LastSyncedAt  *time.Time `json:"last_synced_at,omitempty"`
 	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type Requirement struct {
@@ -241,26 +250,26 @@ type TokenUsage struct {
 }
 
 type DailyReport struct {
-	ID               string     `json:"id"`
-	UserID           string     `json:"user_id"`
-	UserName         string     `json:"user_name"`
-	ReportDate       string     `json:"report_date"`
-	Content          string     `json:"content"`
-	SubmittedContent *string    `json:"submitted_content,omitempty"`
-	Status           *string    `json:"status,omitempty"`
-	SubmittedTo      *string    `json:"submitted_to,omitempty"`
-	Edited           bool       `json:"edited"`
-	FeishuDocURL     *string    `json:"feishu_doc_url,omitempty"`
-	SessionIDs       []string   `json:"session_ids"`
-	GenerationMode   string     `json:"generation_mode,omitempty"`
-	ManagedAgentRunID *string   `json:"managed_agent_run_id,omitempty"`
-	AgentID          *string    `json:"agent_id,omitempty"`
-	AgentVersionID   *int       `json:"agent_version_id,omitempty"`
-	ModelID          *string    `json:"model_id,omitempty"`
-	SavedAt          *time.Time `json:"saved_at,omitempty"`
-	SubmittedAt      *time.Time `json:"submitted_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                string     `json:"id"`
+	UserID            string     `json:"user_id"`
+	UserName          string     `json:"user_name"`
+	ReportDate        string     `json:"report_date"`
+	Content           string     `json:"content"`
+	SubmittedContent  *string    `json:"submitted_content,omitempty"`
+	Status            *string    `json:"status,omitempty"`
+	SubmittedTo       *string    `json:"submitted_to,omitempty"`
+	Edited            bool       `json:"edited"`
+	FeishuDocURL      *string    `json:"feishu_doc_url,omitempty"`
+	SessionIDs        []string   `json:"session_ids"`
+	GenerationMode    string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID *string    `json:"managed_agent_run_id,omitempty"`
+	AgentID           *string    `json:"agent_id,omitempty"`
+	AgentVersionID    *int       `json:"agent_version_id,omitempty"`
+	ModelID           *string    `json:"model_id,omitempty"`
+	SavedAt           *time.Time `json:"saved_at,omitempty"`
+	SubmittedAt       *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 type DailyReportListItem struct {
@@ -289,6 +298,7 @@ type PaginatedDailyReports struct {
 // Request/Response types
 
 type LoginRequest struct {
+	Username   string `json:"username"`
 	EmployeeID string `json:"employee_id"`
 	Password   string `json:"password"`
 }
@@ -298,38 +308,54 @@ type LoginResponse struct {
 	User  User   `json:"user"`
 }
 
-type RegisterRequest struct {
-	EmployeeID string `json:"employee_id"`
-	Name       string `json:"name"`
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-}
-
-type AdminCreateUserRequest struct {
-	EmployeeID string  `json:"employee_id"`
-	Name       string  `json:"name"`
-	Email      string  `json:"email"`
-	Password   string  `json:"password"`
-	Role       string  `json:"role"`
-	TeamID     *string `json:"team_id,omitempty"`
-}
-
 type AdminCreateTeamRequest struct {
-	Name string `json:"name"`
+	Name           string  `json:"name"`
+	DirectorUserID *string `json:"director_user_id,omitempty"`
 }
 
 type AdminUpdateUserRequest struct {
-	Role      *string `json:"role,omitempty"`
-	TeamID    *string `json:"team_id,omitempty"`
-	ClearTeam bool    `json:"clear_team,omitempty"`
+	AppRole      *string `json:"app_role,omitempty"`
+	Role         *string `json:"role,omitempty"`
+	TeamID       *string `json:"team_id,omitempty"`
+	ClearTeam    bool    `json:"clear_team,omitempty"`
+	LocalEnabled *bool   `json:"local_enabled,omitempty"`
 }
 
-type AdminUpdateUserStatusRequest struct {
-	Status string `json:"status"`
+type AIHubUserSearchItem struct {
+	ID              int64   `json:"id"`
+	Username        string  `json:"username"`
+	Nickname        string  `json:"nickname"`
+	Email           string  `json:"email"`
+	Status          int     `json:"status,omitempty"`
+	AidaStatus      string  `json:"aida_status"`
+	AidaStatusLabel string  `json:"aida_status_label"`
+	CurrentAppRole  *string `json:"current_app_role,omitempty"`
+	CurrentTeamID   *string `json:"current_team_id,omitempty"`
+	CurrentTeamName *string `json:"current_team_name,omitempty"`
 }
 
-type AdminResetPasswordRequest struct {
-	Password string `json:"password"`
+type AdminBatchAddUsersRequest struct {
+	UserIDs      []int64 `json:"user_ids"`
+	AppRole      string  `json:"app_role"`
+	TeamID       *string `json:"team_id,omitempty"`
+	LocalEnabled *bool   `json:"local_enabled,omitempty"`
+}
+
+type AdminBatchAddUserResult struct {
+	ID       string `json:"id"`
+	Username string `json:"username,omitempty"`
+	Nickname string `json:"nickname,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Status   string `json:"status"`
+	Error    string `json:"error,omitempty"`
+}
+
+type AdminBatchAddUsersResponse struct {
+	Created         int                       `json:"created"`
+	Skipped         int                       `json:"skipped"`
+	SkippedExisting int                       `json:"skipped_existing"`
+	Failed          int                       `json:"failed"`
+	Results         []AdminBatchAddUserResult `json:"results"`
 }
 
 type CreateRequirementRequest struct {

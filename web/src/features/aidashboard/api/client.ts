@@ -4,6 +4,8 @@ import { getAuthSession } from "@/shared/auth/session";
 import { HttpError } from "@/shared/request/types";
 import type { User } from "@/shared/auth/types";
 import type {
+  AIHubUser,
+  AdminBatchAddUsersResponse,
   ACStatus,
   AIRun,
   DashboardFollowFollowerDTO,
@@ -64,7 +66,22 @@ function trimTrailingSlash(value: string) {
 
 // ───────────────────────── Users / Teams ─────────────────────────
 
-export const fetchUsers = () => unwrap(api.get<User[]>("/users"));
+export const fetchUsers = async () => {
+  const payload = await unwrap<User[] | { items?: User[] }>(api.get("/users"));
+  return Array.isArray(payload) ? payload : payload.items ?? [];
+};
+
+export const fetchAIHubUsers = async (params?: { search_key?: string; page_size?: number; page_num?: number }) => {
+  const payload = await unwrap<{ items?: AIHubUser[]; total?: number; page_size?: number; page_num?: number }>(
+    api.get("/aihub/users/search", params)
+  );
+  return {
+    items: payload.items ?? [],
+    total: payload.total ?? 0,
+    page_size: payload.page_size ?? params?.page_size ?? 20,
+    page_num: payload.page_num ?? params?.page_num ?? 1
+  };
+};
 export const fetchTaskAssignees = () => unwrap(api.get<User[]>("/task-assignees"));
 export const fetchTeams = () => unwrap(api.get<Team[]>("/teams"));
 export const fetchTeamActivity = (date?: string) =>
@@ -72,28 +89,24 @@ export const fetchTeamActivity = (date?: string) =>
 
 // ───────────────────────── Admin ─────────────────────────
 
-export const adminCreateUser = (data: {
-  employee_id: string;
-  name: string;
-  email: string;
-  password: string;
-  role: string;
-  team_id?: string;
-}) => unwrap(api.post<User>("/admin/users", data));
-
-export const adminCreateTeam = (data: { name: string }) =>
+export const adminCreateTeam = (data: { name: string; director_user_id?: string }) =>
   unwrap(api.post<Team>("/admin/teams", data));
+export const adminUpdateTeam = (id: string, data: { name: string; director_user_id?: string }) =>
+  unwrap(api.put<Team>(`/admin/teams/${id}`, data));
+export const adminDeleteTeam = (id: string) =>
+  unwrap(api.delete<{ status: string; id: string }>(`/admin/teams/${id}`));
 
 export const adminUpdateUser = (
   id: string,
-  data: { role?: string; team_id?: string; clear_team?: boolean }
-) => unwrap(api.put<unknown>(`/admin/users/${id}`, data));
+  data: { app_role?: string; role?: string; team_id?: string; clear_team?: boolean; local_enabled?: boolean }
+) => unwrap(api.put<unknown>(`/admin/users/${id}/profile`, data));
 
-export const adminUpdateUserStatus = (id: string, status: "active" | "deactivated") =>
-  unwrap(api.put<User>(`/admin/users/${id}/status`, { status }));
-
-export const adminResetPassword = (id: string, password: string) =>
-  unwrap(api.post<{ status: string }>(`/admin/users/${id}/reset-password`, { password }));
+export const adminBatchAddUsers = (data: {
+  user_ids: number[];
+  app_role: string;
+  team_id?: string;
+  local_enabled?: boolean;
+}) => unwrap(api.post<AdminBatchAddUsersResponse>("/admin/users/batch", data));
 
 // ───────────────────────── Requirements ─────────────────────────
 

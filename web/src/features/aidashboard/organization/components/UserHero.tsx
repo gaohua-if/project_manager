@@ -15,13 +15,16 @@ interface UserHeroProps {
 }
 
 export function UserHero({ user, variant = "default" }: UserHeroProps) {
+  const displayName = user.nickname?.trim() || user.name?.trim() || user.username || user.employee_id;
+  const username = user.username || user.employee_id;
+
   return (
     <section className={`org-user-hero is-${variant} role-${user.role}`}>
-      <span className="org-user-hero__avatar">{initials(user.name)}</span>
+      <span className="org-user-hero__avatar">{initials(displayName)}</span>
       <div className="org-user-hero__body">
         <div className="org-user-hero__title">
-          <strong>{user.name}</strong>
-          <span className="org-user-hero__employee-id">{user.employee_id}</span>
+          <strong>{displayName}</strong>
+          {username ? <span className="org-user-hero__employee-id">{username}</span> : null}
         </div>
         <div className="org-user-hero__chips">
           <span className={`org-role-tag is-${user.role}`}>{ROLE_LABELS[user.role]}</span>

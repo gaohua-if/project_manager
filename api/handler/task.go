@@ -25,7 +25,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	query := `
 		SELECT t.id, t.requirement_id, r.title as req_title, t.title,
-			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name,''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(COALESCE(NULLIF(a.nickname,''), a.username),''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at, t.version
 		FROM tasks t
@@ -137,7 +137,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	err := h.db.QueryRow(`
 		SELECT t.id, t.requirement_id, r.title, t.title,
-			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(a.name,''),
+			COALESCE(t.acceptance_criteria, ARRAY[]::text[]), t.assignee_id, COALESCE(COALESCE(NULLIF(a.nickname,''), a.username),''),
 			t.creator_tl_id, t.status, t.priority, t.progress, t.due_date, t.completed_at,
 			t.created_at, t.updated_at, t.version
 		FROM tasks t

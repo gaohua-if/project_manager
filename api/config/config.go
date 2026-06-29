@@ -5,6 +5,10 @@ import "os"
 type Config struct {
 	DatabaseURL          string
 	JWTSecret            string
+	AIHubHost            string
+	AIHubSecret          string
+	AIHubToken           string
+	BootstrapAdminUIDs   string
 	AIAPIURL             string
 	AIAPIKey             string
 	AIModel              string
@@ -27,6 +31,10 @@ func Load() *Config {
 	return &Config{
 		DatabaseURL:          getEnv("DATABASE_URL", "postgres://aidashboard:devpassword@localhost:5432/aidashboard?sslmode=disable"),
 		JWTSecret:            getEnv("JWT_SECRET", "dev-jwt-secret"),
+		AIHubHost:            getEnv("AIHUB_HOST", ""),
+		AIHubSecret:          getEnv("AIHUB_SECRET", getEnv("JWT_SECRET", "dev-jwt-secret")),
+		AIHubToken:           getEnv("AIHUB_SERVICE_TOKEN", getEnv("AIHUB_TOKEN", "")),
+		BootstrapAdminUIDs:   getEnv("AIDA_BOOTSTRAP_ADMIN_UIDS", ""),
 		AIAPIURL:             getEnv("AI_API_URL", ""),
 		AIAPIKey:             getEnv("AI_API_KEY", ""),
 		AIModel:              getEnv("AI_MODEL", ""),

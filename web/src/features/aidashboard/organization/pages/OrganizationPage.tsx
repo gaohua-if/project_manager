@@ -1,7 +1,7 @@
 import {
   CrownOutlined,
+  DeleteOutlined,
   EditOutlined,
-  KeyOutlined,
   PlusOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
@@ -9,21 +9,23 @@ import {
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Form, Input, Modal, Select, message } from "antd";
+import { Alert, Button, Empty, Form, Input, Modal, Select, Switch, Table, message } from "antd";
 import type { TableProps } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 import "../../aidashboard-pattern.css";
 import {
+  adminBatchAddUsers,
   adminCreateTeam,
-  adminCreateUser,
-  adminUpdateUserStatus,
+  adminDeleteTeam,
+  adminUpdateTeam,
+  adminUpdateUser,
+  fetchAIHubUsers,
   fetchTeams,
   fetchUsers
 } from "../../api/client";
-import type { Team } from "../../api/types";
+import type { AIHubUser, Team } from "../../api/types";
 import {
   RequirementMetricCard,
   RequirementMetricGrid,
@@ -33,7 +35,7 @@ import { useAuth } from "@/shared/auth/authContext";
 import { ROLE_LABELS, type User, type UserRole } from "@/shared/auth/types";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { getApiErrorMessage } from "@/shared/request/apiError";
-import { ResourceActions, ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
+import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 import { TableLayout } from "@/shared/components/TableLayout/TableLayout";
 
 import "./OrganizationPage.css";
@@ -56,34 +58,41 @@ const ROLE_ICON: Record<UserRole, JSX.Element> = {
   employee: <UserOutlined />
 };
 
-const ROLE_DESCRIPTION: Record<UserRole, string> = {
-  admin: "可调整任何用户的角色与团队",
-  director: "可统揽全公司视图与全团队数据",
-  pm: "推动需求，组织团队协作",
-  team_leader: "对接团队成员的执行与交付",
-  employee: "在所属团队内推进任务"
-};
-
 const ROLE_OPTIONS = ROLE_ORDER.map((role) => ({ value: role, label: ROLE_LABELS[role] }));
+const EMPTY_USERS: User[] = [];
+const EMPTY_TEAMS: Team[] = [];
 
-interface CreateUserFormValues {
-  employee_id: string;
-  name: string;
-  email: string;
-  role: UserRole;
+interface AddAIHubUserFormValues {
+  app_role: UserRole;
   team_id?: string;
-  password: string;
+  local_enabled?: boolean;
 }
 
 interface CreateTeamFormValues {
   name: string;
+  director_user_id?: string;
 }
 
-const EMPTY_USERS: User[] = [];
-const EMPTY_TEAMS: Team[] = [];
+function displayUser(user: User) {
+  return user.nickname?.trim() || user.name?.trim() || user.username || user.employee_id || `用户 ${user.id}`;
+}
+
+function displayAIHubUser(user: AIHubUser) {
+  return user.nickname?.trim() || user.username || `AIHub 用户 ${user.id}`;
+}
+
+function displayAIHubUserWithUsername(user: AIHubUser) {
+  const name = displayAIHubUser(user);
+  return user.username && user.username !== name ? `${name} (${user.username})` : name;
+}
+
+function displayUserWithUsername(user: User) {
+  const name = displayUser(user);
+  const username = user.username || user.employee_id;
+  return username && username !== name ? `${name} (${username})` : name;
+}
 
 function initials(name: string) {
-  if (!name) return "?";
   const trimmed = name.trim();
   if (!trimmed) return "?";
   return trimmed.length > 2 ? trimmed.slice(0, 2) : trimmed[0];
@@ -95,413 +104,600 @@ function avatarToneClass(role: UserRole) {
   return "is-employee";
 }
 
+function roleRequiresTeam(role?: UserRole) {
+  return role === "employee" || role === "team_leader";
+}
+
+function roleForcesNoTeam(role?: UserRole) {
+  return role === "admin" || role === "director" || role === "pm";
+}
+
+function aidaStatusClass(status?: AIHubUser["aida_status"]) {
+  if (status === "active") return "is-added";
+  if (status === "disabled") return "is-disabled";
+  return "is-not-added";
+}
+
+function aidaStatusLabel(user: AIHubUser) {
+  return user.aida_status_label || "未添加";
+}
+
 export function OrganizationPage() {
   const { user: currentUser } = useAuth();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [addUserSearch, setAddUserSearch] = useState("");
+  const [aihubUsersPage, setAIHubUsersPage] = useState(1);
+  const [aihubUsersPageSize, setAIHubUsersPageSize] = useState(10);
+  const [selectedAIHubUserIDs, setSelectedAIHubUserIDs] = useState<number[]>([]);
+  const [addUserError, setAddUserError] = useState<string>();
+  const [addUserForm] = Form.useForm<AddAIHubUserFormValues>();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
-  const [createUserError, setCreateUserError] = useState<string>();
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [createTeamError, setCreateTeamError] = useState<string>();
-  const [createUserForm] = Form.useForm<CreateUserFormValues>();
   const [createTeamForm] = Form.useForm<CreateTeamFormValues>();
   const isAdmin = currentUser?.role === "admin";
-  const canView = Boolean(
-    currentUser &&
-      (isAdmin ||
-        currentUser.role === "director" ||
-        currentUser.role === "pm" ||
-        currentUser.role === "team_leader")
-  );
 
   const usersQuery = useQuery<User[]>({
     queryKey: ["users"],
     queryFn: () => fetchUsers(),
-    enabled: canView,
+    enabled: isAdmin,
     staleTime: 60_000
   });
   const teamsQuery = useQuery<Team[]>({
     queryKey: ["teams"],
     queryFn: () => fetchTeams(),
-    enabled: canView,
+    enabled: isAdmin,
     staleTime: 5 * 60_000
+  });
+  const aihubUsersQuery = useQuery({
+    queryKey: ["aihub-users", addUserSearch, aihubUsersPage, aihubUsersPageSize],
+    queryFn: () => fetchAIHubUsers({ search_key: addUserSearch, page_size: aihubUsersPageSize, page_num: aihubUsersPage }),
+    enabled: isAdmin && addUserOpen,
+    staleTime: 30_000
   });
 
   const users = usersQuery.data ?? EMPTY_USERS;
-  const activeUsers = users.filter((u) => u.status !== "deactivated");
   const teams = teamsQuery.data ?? EMPTY_TEAMS;
+  const aihubUsers = aihubUsersQuery.data?.items ?? [];
+  const selectedAIHubUsers = aihubUsers.filter((user) => selectedAIHubUserIDs.includes(user.id));
+  const enabledUsers = users.filter((u) => u.local_enabled !== false);
+  const teamMembers = (teamID: string) =>
+    enabledUsers.filter((u) => u.team_id === teamID && (u.role === "team_leader" || u.role === "employee"));
 
-  const createUserMutation = useMutation({
-    mutationFn: (values: CreateUserFormValues) =>
-      adminCreateUser({
-        employee_id: values.employee_id.trim(),
-        name: values.name.trim(),
-        email: values.email.trim(),
-        password: values.password,
-        role: values.role,
-        team_id: values.team_id || undefined
-      }),
+  const roleCounts = ROLE_ORDER.map((role) => ({
+    role,
+    count: enabledUsers.filter((u) => u.role === role).length
+  }));
+
+  const addUserMutation = useMutation({
+    mutationFn: (values: AddAIHubUserFormValues) => {
+      if (selectedAIHubUserIDs.length === 0) {
+        throw new Error("请至少选择一个 AIHub 用户");
+      }
+      if (roleRequiresTeam(values.app_role) && !values.team_id) {
+        throw new Error(teams.length === 0 ? "请先创建小组" : "employee/team_leader 必须选择小组");
+      }
+      return adminBatchAddUsers({
+        user_ids: selectedAIHubUserIDs,
+        app_role: values.app_role,
+        team_id: roleRequiresTeam(values.app_role) ? values.team_id || undefined : undefined,
+        local_enabled: values.local_enabled !== false
+      });
+    },
+    onSuccess: async (result) => {
+      const parts = [`新增 ${result.created} 人`];
+      const skipped = result.skipped_existing ?? result.skipped;
+      if (skipped > 0) parts.push(`跳过 ${skipped} 人`);
+      if (result.failed > 0) parts.push(`失败 ${result.failed} 人`);
+      void message.success(parts.join("，"));
+      setAddUserOpen(false);
+      setAddUserError(undefined);
+      setAddUserSearch("");
+      setSelectedAIHubUserIDs([]);
+      addUserForm.resetFields();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["users"] }),
+        queryClient.invalidateQueries({ queryKey: ["teams"] }),
+        queryClient.invalidateQueries({ queryKey: ["aihub-users"] })
+      ]);
+    },
+    onError: (error) => setAddUserError(getApiErrorMessage(error, "添加 Aida 用户失败"))
+  });
+
+  const saveTeamMutation = useMutation({
+    mutationFn: (values: CreateTeamFormValues) =>
+      editingTeam
+        ? adminUpdateTeam(editingTeam.id, {
+            name: values.name.trim(),
+            director_user_id: values.director_user_id || undefined
+          })
+        : adminCreateTeam({
+            name: values.name.trim(),
+            director_user_id: values.director_user_id || undefined
+          }),
     onSuccess: async () => {
-      setCreateUserOpen(false);
-      setCreateUserError(undefined);
-      createUserForm.resetFields();
+      setCreateTeamOpen(false);
+      setEditingTeam(null);
+      setCreateTeamError(undefined);
+      createTeamForm.resetFields();
+      await queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+    onError: (error) => setCreateTeamError(getApiErrorMessage(error, "保存小组失败，请稍后重试"))
+  });
+
+  const deleteTeamMutation = useMutation({
+    mutationFn: (teamID: string) => adminDeleteTeam(teamID),
+    onSuccess: async () => {
+      void message.success("小组已删除");
+      await queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+    onError: (error) => message.error(getApiErrorMessage(error, "删除小组失败"))
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof adminUpdateUser>[1] }) =>
+      adminUpdateUser(id, data),
+    onSuccess: async () => {
+      void message.success("Aida 用户配置已更新");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["users"] }),
         queryClient.invalidateQueries({ queryKey: ["teams"] })
       ]);
     },
-    onError: (error) => setCreateUserError(getApiErrorMessage(error, "添加账号失败，请稍后重试"))
+    onError: (error) => message.error(getApiErrorMessage(error, "用户配置更新失败"))
   });
 
-  const createTeamMutation = useMutation({
-    mutationFn: (values: CreateTeamFormValues) => adminCreateTeam({ name: values.name.trim() }),
-    onSuccess: async () => {
-      setCreateTeamOpen(false);
-      setCreateTeamError(undefined);
-      createTeamForm.resetFields();
-      await queryClient.invalidateQueries({ queryKey: ["teams"] });
+  const aihubColumns: TableProps<AIHubUser>["columns"] = [
+    {
+      title: "nickname",
+      dataIndex: "nickname",
+      render: (value: string, record) => value || displayAIHubUser(record)
     },
-    onError: (error) => setCreateTeamError(getApiErrorMessage(error, "添加团队失败，请稍后重试"))
-  });
-
-  const updateUserStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "active" | "deactivated" }) =>
-      adminUpdateUserStatus(id, status),
-    onSuccess: async (_, variables) => {
-      message.success(variables.status === "deactivated" ? "账号已停用" : "账号已启用");
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
+    {
+      title: "username",
+      dataIndex: "username",
+      render: (value: string) => value || "-"
     },
-    onError: (error) => message.error(getApiErrorMessage(error, "账号状态更新失败，请稍后重试"))
-  });
-
-  const handleUpdateUserStatus = (target: User) => {
-    const currentStatus = target.status ?? "active";
-    const nextStatus = currentStatus === "deactivated" ? "active" : "deactivated";
-    Modal.confirm({
-      title: nextStatus === "deactivated" ? "停用账号" : "启用账号",
-      content:
-        nextStatus === "deactivated"
-          ? `停用后，${target.name} 将不能登录，历史数据会保留。`
-          : `启用后，${target.name} 可以重新登录。`,
-      okText: nextStatus === "deactivated" ? "停用" : "启用",
-      okButtonProps: { danger: nextStatus === "deactivated" },
-      cancelText: "取消",
-      onOk: () => updateUserStatusMutation.mutateAsync({ id: target.id, status: nextStatus })
-    });
-  };
-
-  const roleCounts = useMemo(
-    () =>
-      ROLE_ORDER.map((role) => ({
-        role,
-        count: activeUsers.filter((u) => u.role === role).length
-      })),
-    [activeUsers]
-  );
+    {
+      title: "email",
+      dataIndex: "email",
+      render: (value: string) => value || "-"
+    },
+    {
+      title: "当前 Aida 状态",
+      dataIndex: "aida_status",
+      width: 140,
+      render: (_: AIHubUser["aida_status"], record) => (
+        <span className={`org-aida-status ${aidaStatusClass(record.aida_status)}`}>{aidaStatusLabel(record)}</span>
+      )
+    }
+  ];
 
   const columns: TableProps<User>["columns"] = [
     {
-      title: "工号",
-      dataIndex: "employee_id",
-      width: 140,
-      render: (v: string) => <span className="org-employee-id">{v}</span>
-    },
-    {
-      title: "姓名",
-      dataIndex: "name",
-      render: (_: string, record: User) => (
-        <span className={`org-name-cell${record.status === "deactivated" ? " is-deactivated" : ""}`}>
+      title: "用户",
+      dataIndex: "nickname",
+      render: (_: string, record) => (
+        <span className={`org-name-cell${record.local_enabled === false ? " is-deactivated" : ""}`}>
           <span className={`org-name-cell__dot is-${record.role}`} aria-hidden="true" />
-          <strong>{record.name}</strong>
+          <span>
+            <strong>{displayUser(record)}</strong>
+            <em>{record.username || record.employee_id || record.email || record.id}</em>
+          </span>
         </span>
       )
+    },
+    {
+      title: "username",
+      dataIndex: "username",
+      width: 150,
+      render: (value: string) => value || "-"
     },
     {
       title: "邮箱",
       dataIndex: "email",
-      render: (v: string) => <span style={{ color: "#7a879a" }}>{v || "-"}</span>
+      render: (value: string) => <span style={{ color: "#7a879a" }}>{value || "-"}</span>
     },
     {
-      title: "角色",
+      title: "Aida 角色",
       dataIndex: "role",
-      width: 120,
-      render: (r: UserRole) => <span className={`org-role-tag is-${r}`}>{ROLE_LABELS[r]}</span>
-    },
-    {
-      title: "状态",
-      dataIndex: "status",
-      width: 110,
-      render: (status: User["status"]) => (
-        <span className={`org-status-tag is-${status ?? "active"}`}>
-          {status === "deactivated" ? "已停用" : "启用"}
-        </span>
+      width: 170,
+      render: (_: UserRole, record) => (
+        <Select
+          size="small"
+          value={record.app_role ?? record.role}
+          options={ROLE_OPTIONS}
+          disabled={updateUserMutation.isPending || record.id === currentUser?.id}
+          onChange={(appRole) =>
+            updateUserMutation.mutate({ id: record.id, data: { app_role: appRole } })
+          }
+        />
       )
     },
-    { title: "团队", dataIndex: "team_name", width: 140, render: (v?: string) => v || "-" },
-    ...(isAdmin
-      ? [
-          {
-            title: "操作",
-            key: "actions",
-            width: 190,
-            render: (_: unknown, u: User) => (
-              <ResourceActions
-                actions={[
-                  {
-                    key: "edit",
-                    label: "编辑",
-                    icon: <EditOutlined />,
-                    disabled: u.id === currentUser?.id,
-                    onClick: () => navigate(`/organization/users/${u.id}/edit`)
-                  },
-                  {
-                    key: "reset",
-                    label: "重置密码",
-                    icon: <KeyOutlined />,
-                    onClick: () => navigate(`/organization/users/${u.id}/reset-password`)
-                  },
-                  {
-                    key: "status",
-                    label: u.status === "deactivated" ? "启用" : "停用",
-                    danger: u.status !== "deactivated",
-                    disabled: u.id === currentUser?.id || updateUserStatusMutation.isPending,
-                    onClick: () => handleUpdateUserStatus(u)
-                  }
-                ]}
-              />
-            )
+    {
+      title: "Aida 小组",
+      dataIndex: "team_id",
+      width: 190,
+      render: (_: string, record) => (
+        <Select
+          size="small"
+          value={roleForcesNoTeam(record.app_role ?? record.role) ? "" : record.team_id ?? ""}
+          options={[
+            { value: "", label: "未分组" },
+            ...teams.map((team) => ({ value: team.id, label: team.name }))
+          ]}
+          disabled={updateUserMutation.isPending || roleForcesNoTeam(record.app_role ?? record.role)}
+          onChange={(teamID) =>
+            updateUserMutation.mutate({
+              id: record.id,
+              data: teamID ? { team_id: teamID } : { clear_team: true }
+            })
           }
-        ]
-      : [])
+        />
+      )
+    },
+    {
+      title: "Aida 访问",
+      dataIndex: "local_enabled",
+      width: 120,
+      render: (value: boolean | undefined, record) => (
+        <Switch
+          checked={value !== false}
+          checkedChildren="允许"
+          unCheckedChildren="关闭"
+          disabled={updateUserMutation.isPending || record.id === currentUser?.id}
+          onChange={(checked) =>
+            updateUserMutation.mutate({ id: record.id, data: { local_enabled: checked } })
+          }
+        />
+      )
+    },
+    {
+      title: "同步时间",
+      dataIndex: "last_synced_at",
+      width: 190,
+      render: (value?: string | null) => (value ? new Date(value).toLocaleString() : "-")
+    }
   ];
 
-  if (!canView) {
+  if (!isAdmin) {
     return (
-      <PagePanel title="组织" description="组织成员和团队信息" className="org-page" showNav={false}>
+      <PagePanel title="组织" description="Aida 用户业务配置与小组管理" className="org-page" showNav={false}>
         <div className="org-empty-frame">
-          <Empty description="仅管理员、总监、PM 和团队负责人可查看组织信息。" />
+          <Empty description="仅管理员可管理 Aida 业务角色、小组和访问权限。" />
         </div>
       </PagePanel>
     );
   }
 
-  const teamsLoading = teamsQuery.isLoading || usersQuery.isLoading;
-
   return (
     <>
       <PagePanel
         title="组织"
-        description={isAdmin ? "管理员视图：可调整角色、团队、密码与账号状态" : "团队成员、活跃度统计"}
+        description="aihub 用户列表与 Aida 业务配置"
         className="org-page aidashboard-list"
         breadcrumbs={[{ title: "组织" }]}
         showNav={false}
-        actions={
-        <Button
-          icon={<ReloadOutlined />}
-          loading={usersQuery.isFetching || teamsQuery.isFetching}
-          onClick={() => {
-            void usersQuery.refetch();
-            void teamsQuery.refetch();
-          }}
-        >
-          刷新
-        </Button>
-      }
-    >
-      <RequirementMetricGrid>
-        {roleCounts.map(({ role, count }) => (
-          <RequirementMetricCard
-            key={role}
-            tone={ROLE_TONE[role]}
-            icon={ROLE_ICON[role]}
-            loading={usersQuery.isLoading}
-            metric={{
-              key: role,
-              title: ROLE_LABELS[role],
-              value: count,
-              description: ROLE_DESCRIPTION[role]
-            }}
-          />
-        ))}
-      </RequirementMetricGrid>
-
-      <section className="org-team-section">
-        <div className="org-team-section__head">
-          <div className="org-section-title">
-            <strong>团队</strong>
-            <span>{teams.length} 个团队 · {activeUsers.length} 名启用成员</span>
-          </div>
-          {isAdmin ? (
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setCreateTeamOpen(true)}>
-              添加团队
-            </Button>
-          ) : null}
-        </div>
-        {teamsLoading ? (
-          <Empty description="加载中" />
-        ) : teams.length === 0 ? (
-          <Empty description="暂无团队" />
-        ) : (
-          <div className="org-team-grid">
-            {teams.map((team) => {
-              const members = users.filter((u) => u.team_id === team.id && u.status !== "deactivated");
-              const leaders = members.filter((u) => u.role === "team_leader");
-              const engineers = members.filter((u) => u.role === "employee");
-              const visibleMembers = members.slice(0, 5);
-              const hidden = members.length - visibleMembers.length;
-              return (
-                <article className="org-team-card" key={team.id}>
-                  <header className="org-team-card__head">
-                    <span className="org-team-card__name">{team.name}</span>
-                    <span className="org-team-card__count">
-                      <strong>{members.length}</strong> 成员
-                    </span>
-                  </header>
-                  <div className="org-team-card__row">
-                    <span className="org-team-card__row-label">TL</span>
-                    {leaders.length ? (
-                      <span>{leaders.map((l) => l.name).join("、")}</span>
-                    ) : (
-                      <span className="org-team-card__empty">未分配</span>
-                    )}
-                  </div>
-                  <div className="org-team-card__row">
-                    <span className="org-team-card__row-label">人员</span>
-                    {members.length ? (
-                      <span className="org-team-card__avatars">
-                        {visibleMembers.map((m) => (
-                          <span
-                            key={m.id}
-                            className={`org-team-card__avatar ${avatarToneClass(m.role)}`}
-                            title={`${m.name}（${ROLE_LABELS[m.role]}）`}
-                          >
-                            {initials(m.name)}
-                          </span>
-                        ))}
-                        {hidden > 0 ? <span className="org-team-card__more">+{hidden}</span> : null}
-                      </span>
-                    ) : (
-                      <span className="org-team-card__empty">暂无成员</span>
-                    )}
-                  </div>
-                  <div className="org-team-card__row">
-                    <span className="org-team-card__row-label">工程师</span>
-                    <span>{engineers.length} 人</span>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <TableLayout
-        operations={
-          isAdmin ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>
-              添加账号
-            </Button>
-          ) : undefined
-        }
       >
-        {usersQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="成员列表加载失败"
-            description={
-              usersQuery.error instanceof Error ? usersQuery.error.message : "请稍后重试"
-            }
-            action={<Button onClick={() => void usersQuery.refetch()}>重试</Button>}
+        <div className="org-page-actions">
+          <Button
+            icon={<PlusOutlined />}
+            type="primary"
+            onClick={() => {
+              setAddUserOpen(true);
+              setAIHubUsersPage(1);
+              setSelectedAIHubUserIDs([]);
+              addUserForm.setFieldsValue({ app_role: "employee", local_enabled: true });
+            }}
+          >
+            从 AIHub 添加用户
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={usersQuery.isFetching || teamsQuery.isFetching}
+            onClick={() => {
+              void usersQuery.refetch();
+              void teamsQuery.refetch();
+            }}
+          >
+            刷新
+          </Button>
+        </div>
+        <RequirementMetricGrid>
+          {roleCounts.map(({ role, count }) => (
+            <RequirementMetricCard
+              key={role}
+              tone={ROLE_TONE[role]}
+              icon={ROLE_ICON[role]}
+              loading={usersQuery.isLoading}
+              metric={{
+                key: role,
+                title: ROLE_LABELS[role],
+                value: count,
+                description: "Aida 本地业务角色"
+              }}
+            />
+          ))}
+        </RequirementMetricGrid>
+
+        <section className="org-team-section">
+          <div className="org-team-section__head">
+            <div className="org-section-title">
+              <strong>小组</strong>
+              <span>
+                {teams.length} 个小组 · {enabledUsers.length} 名允许访问用户
+              </span>
+            </div>
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingTeam(null);
+                createTeamForm.resetFields();
+                setCreateTeamOpen(true);
+              }}
+            >
+              添加小组
+            </Button>
+          </div>
+          {teamsQuery.isLoading ? (
+            <Empty description="加载中" />
+          ) : teams.length === 0 ? (
+            <Empty description="暂无小组" />
+          ) : (
+            <div className="org-team-grid">
+              {teams.map((team) => {
+                const members = teamMembers(team.id);
+                const directors = team.director_name ? [team.director_name] : [];
+                const leaders = members.filter((u) => u.role === "team_leader");
+                const visibleMembers = members.slice(0, 5);
+                const hidden = members.length - visibleMembers.length;
+                return (
+                  <article className="org-team-card" key={team.id}>
+                    <header className="org-team-card__head">
+                      <span className="org-team-card__name">{team.name}</span>
+                      <span className="org-team-card__count">
+                        <strong>{members.length}</strong> 成员
+                      </span>
+                    </header>
+                    <div className="org-team-card__row">
+                      <span className="org-team-card__row-label">所属总监</span>
+                      <span>{directors.length ? directors.join("、") : "未配置"}</span>
+                    </div>
+                    <div className="org-team-card__row">
+                      <span className="org-team-card__row-label">TL</span>
+                      <span>{leaders.length ? leaders.map(displayUser).join("、") : "未分配"}</span>
+                    </div>
+                    <div className="org-team-card__row">
+                      <span className="org-team-card__row-label">人员</span>
+                      {members.length ? (
+                        <span className="org-team-card__avatars">
+                          {visibleMembers.map((member) => (
+                            <span
+                              key={member.id}
+                              className={`org-team-card__avatar ${avatarToneClass(member.role)}`}
+                              title={`${displayUserWithUsername(member)} (${ROLE_LABELS[member.role]})`}
+                            >
+                              {initials(displayUser(member))}
+                            </span>
+                          ))}
+                          {hidden > 0 ? <span className="org-team-card__more">+{hidden}</span> : null}
+                        </span>
+                      ) : (
+                        <span className="org-team-card__empty">暂无成员</span>
+                      )}
+                    </div>
+                    <div className="org-team-card__actions">
+                      <Button
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => {
+                          setEditingTeam(team);
+                          setCreateTeamError(undefined);
+                          createTeamForm.setFieldsValue({
+                            name: team.name,
+                            director_user_id: team.director_user_id || undefined
+                          });
+                          setCreateTeamOpen(true);
+                        }}
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        loading={deleteTeamMutation.isPending}
+                        onClick={() => {
+                          Modal.confirm({
+                            title: "删除小组",
+                            content: `确认删除「${team.name}」？该小组已有成员或业务数据时不能删除。`,
+                            okText: "删除",
+                            okButtonProps: { danger: true },
+                            cancelText: "取消",
+                            onOk: () => deleteTeamMutation.mutateAsync(team.id)
+                          });
+                        }}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <TableLayout>
+          {usersQuery.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="用户列表加载失败"
+              description={usersQuery.error instanceof Error ? usersQuery.error.message : "请稍后重试"}
+              action={<Button onClick={() => void usersQuery.refetch()}>重试</Button>}
+            />
+          ) : null}
+          <ResourceTable<User>
+            rowKey="id"
+            columns={columns}
+            dataSource={users}
+            loading={usersQuery.isLoading}
+            pagination={{ pageSize: 20, showSizeChanger: false }}
           />
-        ) : null}
-        <ResourceTable<User>
-          rowKey="id"
-          columns={columns}
-          dataSource={users}
-          loading={usersQuery.isLoading}
-          pagination={{ pageSize: 20, showSizeChanger: false }}
-        />
-      </TableLayout>
-    </PagePanel>
+        </TableLayout>
+      </PagePanel>
 
       <Modal
-        title="添加账号"
-        open={createUserOpen}
-        confirmLoading={createUserMutation.isPending}
-        okText="创建"
+        title="从 AIHub 添加用户"
+        open={addUserOpen}
+        confirmLoading={addUserMutation.isPending}
+        okButtonProps={{ disabled: selectedAIHubUserIDs.length === 0 }}
+        okText="添加"
         cancelText="取消"
+        width={860}
         onCancel={() => {
-          setCreateUserOpen(false);
-          setCreateUserError(undefined);
-          createUserForm.resetFields();
+          setAddUserOpen(false);
+          setAddUserError(undefined);
+          setAddUserSearch("");
+          setAIHubUsersPage(1);
+          setSelectedAIHubUserIDs([]);
+          addUserForm.resetFields();
         }}
-        onOk={() => createUserForm.submit()}
+        onOk={() => addUserForm.submit()}
         destroyOnHidden
       >
-        {createUserError ? (
-          <Alert type="error" showIcon message={createUserError} className="org-modal-alert" />
-        ) : null}
+        {addUserError ? <Alert type="error" showIcon message={addUserError} className="org-modal-alert" /> : null}
+        <div className="org-add-user-search">
+          <Input.Search
+            allowClear
+            placeholder="按 username / nickname / email 搜索 AIHub 用户"
+            loading={aihubUsersQuery.isFetching}
+            onSearch={(value) => {
+              setAddUserSearch(value);
+              setAIHubUsersPage(1);
+            }}
+            onChange={(event) => {
+              if (!event.target.value) {
+                setAddUserSearch("");
+                setAIHubUsersPage(1);
+              }
+            }}
+          />
+        </div>
+        <Table<AIHubUser>
+          rowKey="id"
+          size="small"
+          columns={aihubColumns}
+          dataSource={aihubUsers}
+          loading={aihubUsersQuery.isFetching}
+          pagination={{
+            current: aihubUsersQuery.data?.page_num ?? aihubUsersPage,
+            pageSize: aihubUsersQuery.data?.page_size ?? aihubUsersPageSize,
+            total: aihubUsersQuery.data?.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 个 AIHub 用户`
+          }}
+          onChange={(pagination) => {
+            setAIHubUsersPage(pagination.current ?? 1);
+            setAIHubUsersPageSize(pagination.pageSize ?? 10);
+          }}
+          rowSelection={{
+            selectedRowKeys: selectedAIHubUserIDs,
+            getCheckboxProps: (record) => ({
+              disabled: record.aida_status === "active" || record.aida_status === "disabled"
+            }),
+            onChange: (keys) => {
+              setSelectedAIHubUserIDs(keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)));
+              setAddUserError(undefined);
+            }
+          }}
+        />
         <Form
-          form={createUserForm}
+          form={addUserForm}
           layout="vertical"
           requiredMark={false}
-          initialValues={{ role: "employee", team_id: "" }}
-          onFinish={(values) => void createUserMutation.mutateAsync(values)}
-          onValuesChange={() => setCreateUserError(undefined)}
+          initialValues={{ app_role: "employee", local_enabled: true }}
+          onFinish={(values) => void addUserMutation.mutateAsync(values)}
+          onValuesChange={() => setAddUserError(undefined)}
         >
-          <Form.Item
-            label="工号 / 登录账号"
-            name="employee_id"
-            rules={[{ required: true, message: "请输入工号" }]}
-          >
-            <Input autoComplete="username" placeholder="例如 zhangsan" />
-          </Form.Item>
-          <Form.Item label="姓名" name="name" rules={[{ required: true, message: "请输入姓名" }]}>
-            <Input placeholder="请输入姓名" />
-          </Form.Item>
-          <Form.Item
-            label="邮箱"
-            name="email"
-            rules={[
-              { required: true, message: "请输入邮箱" },
-              { type: "email", message: "邮箱格式不正确" }
-            ]}
-          >
-            <Input autoComplete="email" placeholder="请输入邮箱" />
-          </Form.Item>
-          <Form.Item label="角色" name="role" rules={[{ required: true, message: "请选择角色" }]}>
-            <Select options={ROLE_OPTIONS} />
-          </Form.Item>
-          <Form.Item label="所属团队" name="team_id">
-            <Select
-              options={[
-                { value: "", label: "无团队" },
-                ...teams.map((team) => ({ value: team.id, label: team.name }))
-              ]}
-            />
-          </Form.Item>
-          <Form.Item
-            label="初始密码"
-            name="password"
-            rules={[
-              { required: true, message: "请输入初始密码" },
-              { min: 8, message: "密码至少 8 位" }
-            ]}
-          >
-            <Input.Password autoComplete="new-password" placeholder="至少 8 位" />
-          </Form.Item>
+          <div className="org-add-user-config">
+            <div className="org-add-user-config__summary">
+              已选择 <strong>{selectedAIHubUserIDs.length}</strong> 个 AIHub 用户
+              {selectedAIHubUsers.length ? `：${selectedAIHubUsers.map(displayAIHubUserWithUsername).join("、")}` : null}
+            </div>
+            {selectedAIHubUserIDs.length > 0 ? (
+              <>
+                <Form.Item label="Aida 角色" name="app_role" rules={[{ required: true, message: "请选择 Aida 角色" }]}>
+                  <Select
+                    options={ROLE_OPTIONS}
+                    onChange={(role: UserRole) => {
+                      if (!roleRequiresTeam(role)) {
+                        addUserForm.setFieldsValue({ team_id: undefined });
+                      }
+                    }}
+                  />
+                </Form.Item>
+                <Form.Item noStyle shouldUpdate={(prev, next) => prev.app_role !== next.app_role}>
+                  {({ getFieldValue }) => {
+                    const appRole = getFieldValue("app_role") as UserRole | undefined;
+                    const needsTeam = roleRequiresTeam(appRole);
+                    return (
+                      <>
+                        {!needsTeam ? (
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="admin、director、pm 为跨组角色，小组将由后端自动清空。"
+                            className="org-modal-alert"
+                          />
+                        ) : null}
+                        {needsTeam && teams.length === 0 ? (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            message="请先创建小组，再添加 employee 或 team_leader。"
+                            className="org-modal-alert"
+                          />
+                        ) : null}
+                        <Form.Item
+                          label="Aida 小组"
+                          name="team_id"
+                          rules={needsTeam ? [{ required: true, message: "employee/team_leader 必须选择小组" }] : undefined}
+                        >
+                          <Select
+                            allowClear
+                            disabled={!needsTeam}
+                            placeholder={needsTeam ? "请选择小组" : "跨组角色无需选择小组"}
+                            options={teams.map((team) => ({ value: team.id, label: team.name }))}
+                          />
+                        </Form.Item>
+                      </>
+                    );
+                  }}
+                </Form.Item>
+                <Form.Item label="Aida 访问" name="local_enabled" valuePropName="checked">
+                  <Switch checkedChildren="允许" unCheckedChildren="关闭" />
+                </Form.Item>
+              </>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先从上方搜索结果中选择用户" />
+            )}
+          </div>
         </Form>
       </Modal>
 
       <Modal
-        title="添加团队"
+        title={editingTeam ? "编辑小组" : "添加小组"}
         open={createTeamOpen}
-        confirmLoading={createTeamMutation.isPending}
-        okText="创建"
+        confirmLoading={saveTeamMutation.isPending}
+        okText={editingTeam ? "保存" : "创建"}
         cancelText="取消"
         onCancel={() => {
           setCreateTeamOpen(false);
+          setEditingTeam(null);
           setCreateTeamError(undefined);
           createTeamForm.resetFields();
         }}
@@ -515,11 +711,24 @@ export function OrganizationPage() {
           form={createTeamForm}
           layout="vertical"
           requiredMark={false}
-          onFinish={(values) => void createTeamMutation.mutateAsync(values)}
+          onFinish={(values) => void saveTeamMutation.mutateAsync(values)}
           onValuesChange={() => setCreateTeamError(undefined)}
         >
-          <Form.Item label="团队名称" name="name" rules={[{ required: true, message: "请输入团队名称" }]}>
-            <Input placeholder="请输入团队名称" />
+          <Form.Item label="小组名称" name="name" rules={[{ required: true, message: "请输入小组名称" }]}>
+            <Input placeholder="请输入小组名称" />
+          </Form.Item>
+          <Form.Item
+            label="所属总监"
+            name="director_user_id"
+            extra="这是小组上级归属，不是团队负责人 TL。"
+          >
+            <Select
+              allowClear
+              placeholder="选择总监"
+              options={users
+                .filter((user) => user.role === "director" && user.local_enabled !== false)
+                .map((user) => ({ value: user.id, label: displayUserWithUsername(user) }))}
+            />
           </Form.Item>
         </Form>
       </Modal>

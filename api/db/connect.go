@@ -42,6 +42,7 @@ func RunMigrations(db *sql.DB) error {
 		path    string
 	}
 	var migrations []migration
+	seenVersions := map[int]string{}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
 			continue
@@ -51,7 +52,12 @@ func RunMigrations(db *sql.DB) error {
 		if err != nil {
 			continue
 		}
-		migrations = append(migrations, migration{version: ver, path: "migrations/" + e.Name()})
+		path := "migrations/" + e.Name()
+		if existing, ok := seenVersions[ver]; ok {
+			return fmt.Errorf("duplicate migration version %d: %s and %s", ver, existing, path)
+		}
+		seenVersions[ver] = path
+		migrations = append(migrations, migration{version: ver, path: path})
 	}
 	sort.Slice(migrations, func(i, j int) bool {
 		return migrations[i].version < migrations[j].version

@@ -20,7 +20,7 @@ func NewDocumentHandler(db *sql.DB) *DocumentHandler {
 func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	query := `
-		SELECT d.id, d.user_id, u.name, d.title, d.url, d.description,
+		SELECT d.id, d.user_id, COALESCE(NULLIF(u.nickname,''), u.username), d.title, d.url, d.description,
 			d.task_id, COALESCE(t.title,''), d.requirement_id, d.uploaded_at
 		FROM documents d
 		JOIN users u ON u.id = d.user_id

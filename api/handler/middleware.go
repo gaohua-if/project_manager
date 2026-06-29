@@ -3,10 +3,12 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/aidashboard/api/model"
+	"github.com/aidashboard/api/service"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -14,7 +16,7 @@ type contextKey string
 
 const userKey contextKey = "user"
 
-func AuthMiddleware(db *sql.DB, jwtSecret string) func(http.Handler) http.Handler {
+func AuthMiddleware(db *sql.DB, aiHubSecret string, aihub *service.AIHubClient) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -22,67 +24,67 @@ func AuthMiddleware(db *sql.DB, jwtSecret string) func(http.Handler) http.Handle
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing authorization header"})
 				return
 			}
-
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenStr == authHeader {
+			if tokenStr == authHeader || strings.TrimSpace(tokenStr) == "" {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid authorization format"})
 				return
 			}
-
-			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-				return []byte(jwtSecret), nil
-			})
-			if err != nil || !token.Valid {
+			uid, err := extractAIHubUID(tokenStr, aiHubSecret)
+			if err != nil || uid == 0 {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
-
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid claims"})
-				return
-			}
-			id, ok := claims["id"].(string)
-			if !ok || id == "" {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid claims"})
-				return
-			}
-
-			user, err := loadActiveUser(db, id)
+			user, err := loadAidaUserByID(db, fmt.Sprint(uid))
 			if err == sql.ErrNoRows {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "user is not synchronized"})
 				return
 			}
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 				return
 			}
-			if user.Status != "active" {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "account deactivated"})
+			if !user.LocalEnabled {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "Aida access disabled"})
 				return
 			}
-
 			ctx := context.WithValue(r.Context(), userKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-func loadActiveUser(db *sql.DB, id string) (*model.User, error) {
-	var user model.User
-	var deactivatedAt sql.NullTime
-	err := db.QueryRow(`
-		SELECT u.id, u.employee_id, COALESCE(u.email,''), u.name, u.role, u.team_id,
-			COALESCE((SELECT name FROM teams WHERE id = u.team_id), ''), u.status, u.deactivated_at, u.created_at
-		FROM users u WHERE u.id = $1`, id).Scan(
-		&user.ID, &user.EmployeeID, &user.Email, &user.Name, &user.Role, &user.TeamID, &user.TeamName,
-		&user.Status, &deactivatedAt, &user.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
+func extractAIHubUID(tokenString, secret string) (int64, error) {
+	claims := jwt.MapClaims{}
+	if secret == "" {
+		_, _, err := jwt.NewParser().ParseUnverified(tokenString, claims)
+		if err != nil {
+			return 0, err
+		}
+		return uidFromClaims(claims)
 	}
-	assignUserDeactivatedAt(&user, deactivatedAt)
-	return &user, nil
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+		return []byte(secret), nil
+	})
+	if err != nil || !token.Valid {
+		return 0, err
+	}
+	return uidFromClaims(claims)
+}
+
+func uidFromClaims(claims jwt.MapClaims) (int64, error) {
+	for _, key := range []string{"uid", "userId", "user_id", "sub", "id"} {
+		if v, ok := claims[key]; ok {
+			switch value := v.(type) {
+			case float64:
+				return int64(value), nil
+			case int64:
+				return value, nil
+			case string:
+				return parseUserID(value), nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("uid not found")
 }
 
 func getUser(r *http.Request) *model.User {
@@ -105,7 +107,6 @@ func requireRoles(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 	}
 }
 
-// AdminOnly gates a route to the admin role. Use as middleware on chi sub-routers.
 func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u := getUser(r)

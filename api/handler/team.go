@@ -69,12 +69,12 @@ func (h *TeamHandler) Activity(w http.ResponseWriter, r *http.Request) {
 		stat := model.TeamStat{TeamID: t.id, TeamName: t.name}
 
 		memberRows, err := h.db.Query(`
-			SELECT u.id, u.name,
+			SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username),
 				EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = u.id AND DATE(s.started_at) = $1) AS active_today,
 				(SELECT MAX(DATE(s2.started_at)) FROM sessions s2 WHERE s2.user_id = u.id) AS last_active
 			FROM users u
-			WHERE u.team_id = $2 AND u.role = 'employee'
-			ORDER BY u.name`, date, t.id)
+			WHERE u.team_id = $2 AND u.app_role = 'employee'
+			ORDER BY COALESCE(NULLIF(u.nickname,''), u.username)`, date, t.id)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
