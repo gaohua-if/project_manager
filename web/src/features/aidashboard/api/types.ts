@@ -307,6 +307,54 @@ export interface ManagedAgentManualRunPayload {
   params?: Record<string, string>;
 }
 
+export interface ManagedAgentSchedule {
+  id: string;
+  user_id: string;
+  name: string;
+  agent_id: string;
+  model_id?: string;
+  message: string;
+  params?: Record<string, string>;
+  schedule_type: "daily" | "weekly";
+  weekdays: number[];
+  time_of_day: string;
+  timezone: string;
+  enabled: boolean;
+  last_run_at?: string;
+  last_ai_run_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertManagedAgentSchedulePayload {
+  name: string;
+  agent_id: string;
+  model_id?: string;
+  message: string;
+  params?: Record<string, string>;
+  schedule_type: "daily" | "weekly";
+  weekdays?: number[];
+  time_of_day: string;
+  timezone?: string;
+  enabled?: boolean;
+}
+
+export interface DailyReportAgentIntegration {
+  mcp: {
+    name: string;
+    url: string;
+    transport: "http";
+    description: string;
+    tools: string[];
+  };
+  skill: {
+    slug: string;
+    version: string;
+    name: string;
+    skill_md: string;
+  };
+}
+
 export interface AIRun {
   id: string;
   user_id: string;

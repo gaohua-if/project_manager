@@ -522,6 +522,38 @@ type ManagedAgentManualRunRequest struct {
 	Params  map[string]string `json:"params,omitempty"`
 }
 
+type ManagedAgentSchedule struct {
+	ID           string            `json:"id"`
+	UserID       string            `json:"user_id"`
+	Name         string            `json:"name"`
+	AgentID      string            `json:"agent_id"`
+	ModelID      *string           `json:"model_id,omitempty"`
+	Message      string            `json:"message"`
+	Params       map[string]string `json:"params,omitempty"`
+	ScheduleType string            `json:"schedule_type"`
+	Weekdays     []int             `json:"weekdays"`
+	TimeOfDay    string            `json:"time_of_day"`
+	Timezone     string            `json:"timezone"`
+	Enabled      bool              `json:"enabled"`
+	LastRunAt    *time.Time        `json:"last_run_at,omitempty"`
+	LastAIRunID  *string           `json:"last_ai_run_id,omitempty"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+}
+
+type UpsertManagedAgentScheduleRequest struct {
+	Name         string            `json:"name"`
+	AgentID      string            `json:"agent_id"`
+	ModelID      string            `json:"model_id,omitempty"`
+	Message      string            `json:"message"`
+	Params       map[string]string `json:"params,omitempty"`
+	ScheduleType string            `json:"schedule_type"`
+	Weekdays     []int             `json:"weekdays,omitempty"`
+	TimeOfDay    string            `json:"time_of_day"`
+	Timezone     string            `json:"timezone,omitempty"`
+	Enabled      *bool             `json:"enabled,omitempty"`
+}
+
 type AIRun struct {
 	ID                string                       `json:"id"`
 	UserID            string                       `json:"user_id"`

@@ -135,6 +135,14 @@ func (c *ManagedAgentClient) GetTaskResult(ctx context.Context, taskID string) (
 	return &out, nil
 }
 
+func (c *ManagedAgentClient) GetTaskStatus(ctx context.Context, taskID string) (*ManagedTaskStatus, error) {
+	var out ManagedTaskStatus
+	if err := c.do(ctx, http.MethodGet, "/api/task/"+taskID+"/status", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *ManagedAgentClient) do(ctx context.Context, method, path string, in any, out any) error {
 	if !c.Configured() {
 		return errors.New("managed agent platform is not configured")

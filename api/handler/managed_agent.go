@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
@@ -114,10 +115,6 @@ func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	req.ModelID = strings.TrimSpace(req.ModelID)
-	if req.ModelID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model_id is required"})
-		return
-	}
 
 	params := map[string]string{"message": req.Message}
 	for key, value := range req.Params {
@@ -134,8 +131,9 @@ func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Reque
 	}
 
 	inputRef := map[string]any{
-		"message": req.Message,
-		"params":  req.Params,
+		"message":        req.Message,
+		"params":         req.Params,
+		"trigger_source": "manual",
 	}
 	runID, err := h.insertAIRun(u.ID, "manual_agent_run", agentID, submitResp, req.ModelID, inputRef)
 	if err != nil {
@@ -224,6 +222,207 @@ func (h *ManagedAgentHandler) ListAgentRuns(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
 
+func (h *ManagedAgentHandler) DailyReportIntegration(w http.ResponseWriter, r *http.Request) {
+	mcpURL := absoluteRequestURL(r, "/api/v1/mcp/daily-report")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mcp": map[string]any{
+			"name":        "Aida Daily Report MCP",
+			"url":         mcpURL,
+			"transport":   "http",
+			"description": "Provides daily report context and draft saving tools for Managed Agents.",
+			"tools": []string{
+				"aida_daily_report_get_context",
+				"aida_daily_report_save_draft",
+			},
+		},
+		"skill": map[string]string{
+			"slug":     service.DailyReportSkillSlug,
+			"version":  service.DailyReportSkillVersion,
+			"name":     service.DailyReportSkillName,
+			"skill_md": service.DailyReportSkillMarkdown(mcpURL),
+		},
+	})
+}
+
+func (h *ManagedAgentHandler) ListAgentSchedules(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	rows, err := h.db.Query(managedAgentScheduleSelectColumns+" WHERE user_id = $1 ORDER BY created_at DESC", u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	items := []model.ManagedAgentSchedule{}
+	for rows.Next() {
+		item, err := scanManagedAgentSchedule(rows)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"schedules": items})
+}
+
+func (h *ManagedAgentHandler) CreateAgentSchedule(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	var req model.UpsertManagedAgentScheduleRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	normalized, err := normalizeManagedAgentScheduleRequest(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	paramsJSON, _ := json.Marshal(normalized.Params)
+	weekdaysJSON, _ := json.Marshal(normalized.Weekdays)
+
+	var id string
+	err = h.db.QueryRow(`
+		INSERT INTO managed_agent_schedules (
+			user_id, name, agent_id, model_id, message, params_json,
+			schedule_type, weekdays_json, time_of_day, timezone, enabled
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id::text`,
+		u.ID, normalized.Name, normalized.AgentID, nullString(&normalized.ModelID),
+		normalized.Message, paramsJSON, normalized.ScheduleType, weekdaysJSON,
+		normalized.TimeOfDay, normalized.Timezone, normalized.Enabled,
+	).Scan(&id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	schedule, err := h.loadManagedAgentSchedule(id, u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, schedule)
+}
+
+func (h *ManagedAgentHandler) UpdateAgentSchedule(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	scheduleID := chi.URLParam(r, "scheduleId")
+	var req model.UpsertManagedAgentScheduleRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	normalized, err := normalizeManagedAgentScheduleRequest(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	paramsJSON, _ := json.Marshal(normalized.Params)
+	weekdaysJSON, _ := json.Marshal(normalized.Weekdays)
+
+	res, err := h.db.Exec(`
+		UPDATE managed_agent_schedules
+		SET name = $1, agent_id = $2, model_id = $3, message = $4,
+			params_json = $5, schedule_type = $6, weekdays_json = $7,
+			time_of_day = $8, timezone = $9, enabled = $10, updated_at = now()
+		WHERE id = $11 AND user_id = $12`,
+		normalized.Name, normalized.AgentID, nullString(&normalized.ModelID),
+		normalized.Message, paramsJSON, normalized.ScheduleType, weekdaysJSON,
+		normalized.TimeOfDay, normalized.Timezone, normalized.Enabled, scheduleID, u.ID,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	schedule, err := h.loadManagedAgentSchedule(scheduleID, u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, schedule)
+}
+
+func (h *ManagedAgentHandler) DeleteAgentSchedule(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	scheduleID := chi.URLParam(r, "scheduleId")
+	res, err := h.db.Exec(`DELETE FROM managed_agent_schedules WHERE id = $1 AND user_id = $2`, scheduleID, u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *ManagedAgentHandler) RunAgentScheduleNow(w http.ResponseWriter, r *http.Request) {
+	if !h.ensureConfigured(w) {
+		return
+	}
+	u := getUser(r)
+	scheduleID := chi.URLParam(r, "scheduleId")
+	schedule, err := h.loadManagedAgentSchedule(scheduleID, u.ID)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	params := map[string]string{"message": schedule.Message, "trigger_source": "manual", "schedule_id": schedule.ID}
+	for key, value := range schedule.Params {
+		params[key] = value
+	}
+	modelID := ""
+	if schedule.ModelID != nil {
+		modelID = *schedule.ModelID
+	}
+	submitResp, err := h.client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
+		AgentID: schedule.AgentID,
+		ModelID: modelID,
+		Params:  params,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	inputRef := map[string]any{
+		"schedule_id":    schedule.ID,
+		"schedule_name":  schedule.Name,
+		"message":        schedule.Message,
+		"params":         schedule.Params,
+		"trigger_source": "manual",
+	}
+	runID, err := h.insertAIRun(u.ID, "manual_agent_run", schedule.AgentID, submitResp, modelID, inputRef)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	_, _ = h.db.Exec(`
+		UPDATE managed_agent_schedules
+		SET last_run_at = now(), last_ai_run_id = $1, updated_at = now()
+		WHERE id = $2 AND user_id = $3`, runID, schedule.ID, u.ID)
+	run, err := h.loadAIRun(runID, u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
 func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureConfigured(w) {
 		return
@@ -257,33 +456,17 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "one or more sessions are not accessible"})
 		return
 	}
-	tasks, err := loadDraftTaskCandidates(h.db, u.ID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	orderedSessions := orderDraftSessions(sessions, req.SessionIDs)
-	contextPayload := map[string]any{
-		"user": map[string]string{
-			"id":   u.ID,
-			"name": u.Name,
-			"role": u.Role,
-		},
-		"report_date":     reportDate,
-		"sessions":        orderedSessions,
-		"task_candidates": tasks,
-	}
-	contextJSON, _ := json.Marshal(contextPayload)
-	contract := `Return strict JSON only: {"report_markdown":"...","task_progress_suggestions":[{"task_id":"...","task_title":"...","requirement_id":"...","requirement_title":"...","suggested_status":"todo|in_progress|done","suggested_progress":0,"evidence_session_ids":["..."],"evidence_session_titles":["..."],"reason":"..."}]}. Do not invent facts outside the provided Aida context.`
+	sessionIDsJSON, _ := json.Marshal(req.SessionIDs)
 
 	submitResp, err := h.client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
 		AgentID: req.AgentID,
 		ModelID: req.ModelID,
 		Params: map[string]string{
-			"aida_context":    string(contextJSON),
-			"output_contract": contract,
-			"report_date":     reportDate,
+			"message":                   "Generate an Aida daily report. Use the bound Aida Daily Report MCP tool aida_daily_report_get_context to read context, then return strict JSON.",
+			"aida_daily_report_mcp_url": absoluteRequestURL(r, "/api/v1/mcp/daily-report"),
+			"output_contract":           service.DailyReportOutputContract(),
+			"report_date":               reportDate,
+			"session_ids_json":          string(sessionIDsJSON),
 		},
 	})
 	if err != nil {
@@ -497,12 +680,130 @@ func (h *ManagedAgentHandler) loadAIRun(runID, userID string) (*model.AIRun, err
 	return scanAIRun(h.db.QueryRow(aiRunSelectColumns+" WHERE id = $1 AND user_id = $2", runID, userID))
 }
 
+const managedAgentScheduleSelectColumns = `SELECT id::text, user_id::text, name, agent_id, model_id, message,
+			params_json, schedule_type, weekdays_json, time_of_day, timezone, enabled,
+			last_run_at, last_ai_run_id::text, created_at, updated_at
+		FROM managed_agent_schedules`
+
+type normalizedManagedAgentScheduleRequest struct {
+	Name         string
+	AgentID      string
+	ModelID      string
+	Message      string
+	Params       map[string]string
+	ScheduleType string
+	Weekdays     []int
+	TimeOfDay    string
+	Timezone     string
+	Enabled      bool
+}
+
+func normalizeManagedAgentScheduleRequest(req model.UpsertManagedAgentScheduleRequest) (normalizedManagedAgentScheduleRequest, error) {
+	normalized := normalizedManagedAgentScheduleRequest{
+		Name:         strings.TrimSpace(req.Name),
+		AgentID:      strings.TrimSpace(req.AgentID),
+		ModelID:      strings.TrimSpace(req.ModelID),
+		Message:      strings.TrimSpace(req.Message),
+		ScheduleType: strings.TrimSpace(req.ScheduleType),
+		TimeOfDay:    strings.TrimSpace(req.TimeOfDay),
+		Timezone:     strings.TrimSpace(req.Timezone),
+		Enabled:      true,
+		Params:       map[string]string{},
+	}
+	if req.Enabled != nil {
+		normalized.Enabled = *req.Enabled
+	}
+	if normalized.ScheduleType == "" {
+		normalized.ScheduleType = "daily"
+	}
+	if normalized.Timezone == "" {
+		normalized.Timezone = "Asia/Shanghai"
+	}
+	for key, value := range req.Params {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		normalized.Params[key] = strings.TrimSpace(value)
+	}
+
+	if normalized.Name == "" {
+		return normalized, fmt.Errorf("name is required")
+	}
+	if normalized.AgentID == "" {
+		return normalized, fmt.Errorf("agent_id is required")
+	}
+	if normalized.Message == "" {
+		return normalized, fmt.Errorf("message is required")
+	}
+	if _, err := time.Parse("15:04", normalized.TimeOfDay); err != nil {
+		return normalized, fmt.Errorf("time_of_day must use HH:mm")
+	}
+	if _, err := time.LoadLocation(normalized.Timezone); err != nil {
+		return normalized, fmt.Errorf("timezone is invalid")
+	}
+
+	switch normalized.ScheduleType {
+	case "daily":
+		normalized.Weekdays = []int{}
+	case "weekly":
+		seen := map[int]bool{}
+		for _, weekday := range req.Weekdays {
+			if weekday < 1 || weekday > 7 {
+				return normalized, fmt.Errorf("weekdays must be between 1 and 7")
+			}
+			if !seen[weekday] {
+				normalized.Weekdays = append(normalized.Weekdays, weekday)
+				seen[weekday] = true
+			}
+		}
+		if len(normalized.Weekdays) == 0 {
+			return normalized, fmt.Errorf("weekdays is required for weekly schedules")
+		}
+	default:
+		return normalized, fmt.Errorf("schedule_type must be daily or weekly")
+	}
+	return normalized, nil
+}
+
+func scanManagedAgentSchedule(row rowScanner) (model.ManagedAgentSchedule, error) {
+	var schedule model.ManagedAgentSchedule
+	var modelID, lastRunID sql.NullString
+	var paramsRaw, weekdaysRaw []byte
+	var lastRunAt sql.NullTime
+	if err := row.Scan(
+		&schedule.ID, &schedule.UserID, &schedule.Name, &schedule.AgentID, &modelID,
+		&schedule.Message, &paramsRaw, &schedule.ScheduleType, &weekdaysRaw,
+		&schedule.TimeOfDay, &schedule.Timezone, &schedule.Enabled, &lastRunAt,
+		&lastRunID, &schedule.CreatedAt, &schedule.UpdatedAt,
+	); err != nil {
+		return schedule, err
+	}
+	schedule.ModelID = nullStringPtr(modelID)
+	schedule.LastAIRunID = nullStringPtr(lastRunID)
+	if lastRunAt.Valid {
+		schedule.LastRunAt = &lastRunAt.Time
+	}
+	_ = json.Unmarshal(paramsRaw, &schedule.Params)
+	_ = json.Unmarshal(weekdaysRaw, &schedule.Weekdays)
+	if schedule.Params == nil {
+		schedule.Params = map[string]string{}
+	}
+	return schedule, nil
+}
+
+func (h *ManagedAgentHandler) loadManagedAgentSchedule(scheduleID, userID string) (model.ManagedAgentSchedule, error) {
+	return scanManagedAgentSchedule(h.db.QueryRow(managedAgentScheduleSelectColumns+" WHERE id = $1 AND user_id = $2", scheduleID, userID))
+}
+
 func normalizeManagedRunStatus(status string) string {
 	switch strings.ToLower(status) {
 	case "completed", "complete", "done", "success", "succeeded":
 		return "succeeded"
 	case "failed", "error", "cancelled", "canceled":
 		return "failed"
+	case "timeout", "timed_out":
+		return "timeout"
 	case "running", "in_progress", "processing":
 		return "running"
 	default:
@@ -526,4 +827,19 @@ func nullableInt(v int) any {
 		return nil
 	}
 	return v
+}
+
+func absoluteRequestURL(r *http.Request, path string) string {
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		proto = "http"
+		if r.TLS != nil {
+			proto = "https"
+		}
+	}
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	return proto + "://" + host + path
 }

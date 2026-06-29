@@ -167,8 +167,8 @@ func TestUpdateReportPersistsSessionIDsOnSave(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("SELECT dr.id").
 		WithArgs("report-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "report_date", "content", "edited", "feishu_doc_url", "session_ids", "created_at", "updated_at"}).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", now, now))
+		WillReturnRows(sqlmock.NewRows(dailyReportColumns()).
+			AddRow("report-1", "user-1", "张三", "2026-06-24", "最终日报", true, nil, "{session-1,session-2}", "default", nil, nil, nil, nil, now, now))
 
 	h := NewReportHandler(db, "http://generator")
 	req := httptest.NewRequest(http.MethodPut, "/reports/report-1", bytes.NewBufferString(`{"content":"最终日报","session_ids":["session-1","session-2"]}`))
@@ -203,8 +203,8 @@ func TestGenerateTodayKeepsLegacyGeneratorEndpoint(t *testing.T) {
 
 	mock.ExpectQuery("SELECT dr.id").
 		WithArgs("user-1", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "report_date", "content", "edited", "feishu_doc_url", "session_ids", "created_at", "updated_at"}).
-			AddRow("report-1", "user-1", "张三", "2026-06-24", "日报", false, nil, "{session-1}", now, now))
+		WillReturnRows(sqlmock.NewRows(dailyReportColumns()).
+			AddRow("report-1", "user-1", "张三", "2026-06-24", "日报", false, nil, "{session-1}", "default", nil, nil, nil, nil, now, now))
 
 	h := NewReportHandler(db, generator.URL)
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/generate", nil)
@@ -227,5 +227,13 @@ func draftSessionColumns() []string {
 		"model", "summary", "tool_calls_json",
 		"task_id", "task_title", "requirement_id", "requirement_title",
 		"input_tokens", "output_tokens", "total_tokens",
+	}
+}
+
+func dailyReportColumns() []string {
+	return []string{
+		"id", "user_id", "name", "report_date", "content", "edited",
+		"feishu_doc_url", "session_ids", "generation_mode", "managed_agent_run_id",
+		"agent_id", "agent_version_id", "model_id", "created_at", "updated_at",
 	}
 }
