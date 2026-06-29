@@ -246,6 +246,22 @@ function PriorityPill({ priority }: { priority: RequirementPriority | MockTaskPr
   );
 }
 
+function RequirementTeamCell({ requirement }: { requirement: MockRequirement }) {
+  const teams = requirement.team_names.length ? requirement.team_names : [requirement.creator_name || "未分配团队"];
+  const visibleTeams = teams.slice(0, 2);
+  const restCount = Math.max(0, teams.length - visibleTeams.length);
+  const title = teams.join("、");
+
+  return (
+    <span className="requirements-tree__team" title={title}>
+      {visibleTeams.map((team) => (
+        <span key={team}>{team}</span>
+      ))}
+      {restCount ? <em>+{restCount}</em> : null}
+    </span>
+  );
+}
+
 function RequirementPriorityTag({ priority }: { priority: RequirementPriority }) {
   const meta = PRIORITY_META[priority];
   return <Tag color={meta.color}>{meta.label}</Tag>;
@@ -1045,36 +1061,39 @@ function RequirementTree({
     {
       title: "需求",
       key: "title",
-      width: 420,
-      render: (_, requirement) => {
-        const ownerLine =
-          requirement.team_names.join("、") || requirement.creator_name || "未分配团队";
-        return (
-          <div className="requirements-tree__title-main">
-            <strong title={requirement.title}>{requirement.title}</strong>
-            <small title={ownerLine}>{ownerLine}</small>
-          </div>
-        );
-      }
+      width: 300,
+      ellipsis: true,
+      render: (_, requirement) => (
+        <strong className="requirements-tree__title" title={requirement.title}>
+          {requirement.title}
+        </strong>
+      )
+    },
+    {
+      title: "团队",
+      key: "owner",
+      width: 150,
+      ellipsis: true,
+      render: (_, requirement) => <RequirementTeamCell requirement={requirement} />
     },
     {
       title: "阶段",
       dataIndex: "status",
       key: "status",
-      width: 96,
+      width: 92,
       render: (stage: RequirementStage) => <RequirementStageTag stage={stage} />
     },
     {
       title: "优先级",
       dataIndex: "priority",
       key: "priority",
-      width: 86,
+      width: 80,
       render: (priority: RequirementPriority) => <PriorityPill priority={priority} />
     },
     {
       title: "任务进度",
       key: "progress",
-      width: 124,
+      width: 112,
       render: (_, requirement) => {
         const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
         const doneTasks = requirementTasks.filter((task) => task.status === "done").length;
@@ -1088,30 +1107,28 @@ function RequirementTree({
     {
       title: "风险",
       key: "risk",
-      width: 104,
+      width: 112,
       render: (_, requirement) => {
         const requirementTasks = tasksByRequirement.get(requirement.id) ?? [];
         const blockedTasks = requirementTasks.filter((task) => task.status === "blocked").length;
-        const riskSummary = blockedTasks ? `${blockedTasks} 个上游阻塞` : "正常";
-        return (
-          <span
-            className={`requirements-tree__risk ${blockedTasks ? "is-danger" : ""}`}
-            title={riskSummary}
-          >
-            {riskSummary}
-          </span>
-        );
+        if (!blockedTasks) return <span className="requirements-tree__risk">正常</span>;
+        return <span className="requirements-tree__risk is-danger">阻塞 {blockedTasks} 个</span>;
       }
     },
     {
-      title: "截止 / 更新",
-      key: "updated",
-      width: 128,
+      title: "截止",
+      key: "deadline",
+      width: 96,
       render: (_, requirement) => (
-        <div className="requirements-tree__update">
-          <span>{formatDate(requirement.deadline)}</span>
-          <small>{formatRecentUpdate(requirement.updated_at)}</small>
-        </div>
+        <span className="requirements-tree__text">{formatDate(requirement.deadline)}</span>
+      )
+    },
+    {
+      title: "更新",
+      key: "updated",
+      width: 96,
+      render: (_, requirement) => (
+        <span className="requirements-tree__text">{formatRecentUpdate(requirement.updated_at)}</span>
       )
     },
     {
@@ -1125,6 +1142,7 @@ function RequirementTree({
           <Space size={2} className="requirements-tree__actions">
             {!requirementTasks.length && requirement.can_create_task ? (
               <Button
+                className="requirements-tree__action-primary"
                 size="small"
                 type="link"
                 onClick={(event) => {
@@ -1136,6 +1154,9 @@ function RequirementTree({
               </Button>
             ) : null}
             <Button
+              className={`requirements-tree__action-follow${
+                favoriteRequirementIds.has(requirement.id) ? " is-active" : ""
+              }`}
               size="small"
               type="link"
               onClick={(event) => {
@@ -1192,7 +1213,6 @@ function RequirementTree({
                     >
                       <div className="requirements-tree__task-main">
                         <strong title={task.title}>{task.title}</strong>
-                        <small>{formatDateTime(task.updated_at)} 更新</small>
                       </div>
                       <div className="requirements-tree__task-meta">
                         <TaskStatusPill status={task.status} />
@@ -1207,6 +1227,7 @@ function RequirementTree({
                       </div>
                       <Space size={2} className="requirements-tree__task-actions">
                         <Button
+                          className="requirements-tree__action-secondary"
                           size="small"
                           type="link"
                           onClick={(event) => {
@@ -1217,6 +1238,9 @@ function RequirementTree({
                           详情
                         </Button>
                         <Button
+                          className={`requirements-tree__action-follow${
+                            favoriteTaskIds.has(task.id) ? " is-active" : ""
+                          }`}
                           size="small"
                           type="link"
                           onClick={(event) => {

@@ -6,4 +6,26 @@
 
 .markdown-viewer .toastui-editor-contents {
   font-size: 14px;
+  line-height: 1.7;
+}
+
+.markdown-viewer .toastui-editor-contents > :first-child {
+  margin-top: 0;
+}
+
+.markdown-viewer .toastui-editor-contents > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-viewer .toastui-editor-contents p,
+.markdown-viewer .toastui-editor-contents ul,
+.markdown-viewer .toastui-editor-contents ol,
+.markdown-viewer .toastui-editor-contents pre,
+.markdown-viewer .toastui-editor-contents blockquote {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.markdown-viewer .toastui-editor-contents li + li {
+  margin-top: 4px;
 }

@@ -1159,6 +1159,64 @@ func (h *ReportHandler) GenerateTeamReport(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, tr)
 }
 
+func (h *ReportHandler) SaveTeamReportToday(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can save team reports"})
+		return
+	}
+
+	var req struct {
+		ReportDate string  `json:"report_date"`
+		Content    *string `json:"content"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Content == nil || strings.TrimSpace(*req.Content) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
+		return
+	}
+
+	reportDate := req.ReportDate
+	if reportDate == "" {
+		reportDate = reportDateFromRequest(r)
+	}
+
+	sourceDailyIDs, err := h.loadSubmittedDailyReportIDsByTeam(*u.TeamID, reportDate)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if _, err := h.db.ExecContext(r.Context(), `
+		INSERT INTO team_reports (
+			team_id, leader_id, report_date, content, status, member_report_ids, source_daily_report_ids, saved_at, updated_at
+		) VALUES ($1, $2, $3, $4, 'saved', $5::uuid[], $5::uuid[], now(), now())
+		ON CONFLICT (team_id, report_date)
+		DO UPDATE SET
+			leader_id = EXCLUDED.leader_id,
+			content = EXCLUDED.content,
+			status = 'saved',
+			member_report_ids = EXCLUDED.member_report_ids,
+			source_daily_report_ids = EXCLUDED.source_daily_report_ids,
+			saved_at = now(),
+			updated_at = now()`,
+		*u.TeamID, u.ID, reportDate, *req.Content, pq.Array(sourceDailyIDs),
+	); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	report, err := h.getTeamReportByTeamDate(*u.TeamID, reportDate)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
 func (h *ReportHandler) SubmitTeamReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
@@ -1430,6 +1488,33 @@ func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*mod
 	return &tr, nil
 }
 
+func (h *ReportHandler) loadSubmittedDailyReportIDsByTeam(teamID, reportDate string) ([]string, error) {
+	rows, err := h.db.Query(`
+		SELECT dr.id::text
+		FROM users u
+		JOIN daily_reports dr ON dr.user_id = u.id
+		WHERE u.team_id = $1
+			AND u.role = 'employee'
+			AND dr.report_date = $2
+			AND dr.submitted_at IS NOT NULL
+			AND dr.submitted_content IS NOT NULL
+		ORDER BY u.name, dr.created_at`, teamID, reportDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) {
 	var tr model.TeamReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
@@ -1594,6 +1679,70 @@ func (h *ReportHandler) GenerateDepartmentReport(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, dr)
 }
 
+func (h *ReportHandler) SaveDepartmentReportToday(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
+	if u.Role != "director" && u.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can save department reports"})
+		return
+	}
+	var req struct {
+		ReportDate string `json:"report_date"`
+		Content    string `json:"content"`
+		Archive    bool   `json:"archive,omitempty"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	reportDate := req.ReportDate
+	if strings.TrimSpace(reportDate) == "" {
+		reportDate = time.Now().Format("2006-01-02")
+	}
+
+	sources, err := h.buildDepartmentReportSources(reportDate)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sourceIDs := make([]string, 0, len(sources.SubmittedTeamReports))
+	for _, item := range sources.SubmittedTeamReports {
+		if item.ReportID != nil && *item.ReportID != "" {
+			sourceIDs = append(sourceIDs, *item.ReportID)
+		}
+	}
+
+	var reportID string
+	err = h.db.QueryRow(`
+		INSERT INTO department_reports (
+			report_date, content, status, source_team_report_ids, saved_at, archived_at
+		)
+		VALUES ($1, $2, 'saved', $3, now(), CASE WHEN $4 THEN now() ELSE NULL END)
+		ON CONFLICT (report_date)
+		DO UPDATE SET
+			content = EXCLUDED.content,
+			status = 'saved',
+			source_team_report_ids = EXCLUDED.source_team_report_ids,
+			saved_at = now(),
+			archived_at = CASE
+				WHEN $4 THEN COALESCE(department_reports.archived_at, now())
+				ELSE department_reports.archived_at
+			END,
+			updated_at = now()
+		RETURNING id::text`,
+		reportDate, req.Content, pq.Array(sourceIDs), req.Archive,
+	).Scan(&reportID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	dr, err := h.getDepartmentReportByID(reportID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, dr)
+}
+
 func (h *ReportHandler) GetDepartmentReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
@@ -1672,6 +1821,61 @@ func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.Dep
 	dr.SavedAt = nullTimePtr(savedAt)
 	dr.ArchivedAt = nullTimePtr(archivedAt)
 	return &dr, nil
+}
+
+func (h *ReportHandler) buildDepartmentReportSources(reportDate string) (*model.DepartmentReportSources, error) {
+	rows, err := h.db.Query(`
+		SELECT t.id::text, t.name, tr.leader_id::text, COALESCE(u.name, ''),
+			tr.id::text, COALESCE(tr.submitted_content, ''), tr.submitted_at,
+			CASE WHEN tr.id IS NOT NULL THEN true ELSE false END
+		FROM teams t
+		LEFT JOIN team_reports tr ON tr.team_id = t.id
+			AND tr.report_date = $1
+			AND tr.submitted_at IS NOT NULL
+			AND tr.submitted_content IS NOT NULL
+		LEFT JOIN users u ON u.id = tr.leader_id
+		ORDER BY t.name`, reportDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sources := &model.DepartmentReportSources{
+		ReportDate:           reportDate,
+		SubmittedTeamReports: []model.DepartmentTeamReportSource{},
+		MissingTeams:         []model.DepartmentMissingTeam{},
+	}
+	for rows.Next() {
+		var item model.DepartmentTeamReportSource
+		var leaderID, reportID, content sql.NullString
+		var submittedAt sql.NullTime
+		if err := rows.Scan(&item.TeamID, &item.TeamName, &leaderID, &item.LeaderName, &reportID, &content, &submittedAt, &item.HasReport); err != nil {
+			return nil, err
+		}
+		item.LeaderID = nullStringPtr(leaderID)
+		item.ReportID = nullStringPtr(reportID)
+		item.TeamReportID = item.ReportID
+		item.TeamLeaderName = item.LeaderName
+		item.SubmittedAt = nullTimePtr(submittedAt)
+		if content.Valid {
+			item.Content = content.String
+		}
+		sources.TotalTeamCount++
+		if item.HasReport {
+			sources.SubmittedTeamCount++
+			sources.SubmittedTeamReports = append(sources.SubmittedTeamReports, item)
+		} else {
+			sources.MissingTeams = append(sources.MissingTeams, model.DepartmentMissingTeam{
+				TeamID:   item.TeamID,
+				TeamName: item.TeamName,
+			})
+		}
+	}
+	sources.MissingTeamCount = len(sources.MissingTeams)
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sources, nil
 }
 
 func (h *ReportHandler) getDepartmentReportByID(id string) (*model.DepartmentReport, error) {
@@ -1807,7 +2011,7 @@ func (h *ReportHandler) GenerateTeamWeeklyReport(w http.ResponseWriter, r *http.
 		return
 	}
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can generate team weekly reports"})
 		return
 	}
@@ -1876,7 +2080,7 @@ func (h *ReportHandler) GenerateTeamWeeklyReport(w http.ResponseWriter, r *http.
 
 func (h *ReportHandler) SaveTeamWeeklyReportCurrent(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can save team weekly reports"})
 		return
 	}
@@ -1903,7 +2107,7 @@ func (h *ReportHandler) SaveTeamWeeklyReportCurrent(w http.ResponseWriter, r *ht
 
 func (h *ReportHandler) SubmitTeamWeeklyReportCurrent(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can submit team weekly reports"})
 		return
 	}
@@ -1931,7 +2135,7 @@ func (h *ReportHandler) SubmitTeamWeeklyReportCurrent(w http.ResponseWriter, r *
 func (h *ReportHandler) UpdateTeamWeeklyReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can update team weekly reports"})
 		return
 	}
@@ -1974,7 +2178,7 @@ func (h *ReportHandler) UpdateTeamWeeklyReport(w http.ResponseWriter, r *http.Re
 func (h *ReportHandler) SubmitTeamWeeklyReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u := getUser(r)
-	if u.Role != "team_leader" || u.TeamID == nil {
+	if (u.Role != "team_leader" && u.Role != "pm") || u.TeamID == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only team leaders can submit team weekly reports"})
 		return
 	}
@@ -2400,9 +2604,6 @@ func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, week
 		return nil, err
 	}
 	sourceIDs := teamWeeklyPersonalSourceIDs(sources, sourcePersonalWeeklyIDs)
-	if len(sourceIDs) == 0 {
-		return nil, fmt.Errorf("source_personal_weekly_report_ids is required")
-	}
 	sourceDailyIDs := []string{}
 	sourceTeamReportIDs := []string{}
 	sourceTaskIDs := []string{}

@@ -163,6 +163,24 @@
   font-weight: 600;
 }
 
+.reports-detail-modal.ant-modal {
+  max-width: min(920px, calc(100vw - 32px));
+}
+
+.reports-detail-modal .ant-modal-content {
+  display: flex;
+  max-height: calc(100vh - 32px);
+  flex-direction: column;
+}
+
+.reports-detail-modal .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 128px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .reports-day-section {
   display: grid;
   gap: 12px;

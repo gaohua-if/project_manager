@@ -66,6 +66,7 @@ import {
   RequirementMetricGrid
 } from "../../requirements/components/RequirementMetricCard";
 import { useAuth } from "@/shared/auth/authContext";
+import { MarkdownViewer } from "@/shared/components/MarkdownViewer/MarkdownViewer";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
 import "./ReportsPage.css";
@@ -138,7 +139,7 @@ function teamWeeklyStatus(report: TeamWeeklyReport) {
 }
 
 function departmentWeeklyStatus(report: DepartmentWeeklyReport) {
-  return report.archived_at ? <Tag color="green">已归档</Tag> : <Tag color="blue">已保存</Tag>;
+  return report.content?.trim() ? <Tag color="green">已保存</Tag> : <Tag color="blue">未生成</Tag>;
 }
 
 export function PersonalWeeklyReportsView({
@@ -147,6 +148,7 @@ export function PersonalWeeklyReportsView({
   weekPicker,
   scopeTabs,
   modalMode = false,
+  readOnly = false,
   onDone
 }: {
   weekStart: string;
@@ -154,6 +156,7 @@ export function PersonalWeeklyReportsView({
   weekPicker: ReactNode;
   scopeTabs?: ReactNode;
   modalMode?: boolean;
+  readOnly?: boolean;
   onDone?: () => void;
 }) {
   const { user } = useAuth();
@@ -270,11 +273,65 @@ export function PersonalWeeklyReportsView({
   const canSubmit =
     user?.role === "employee" || user?.role === "pm" || user?.role === "team_leader";
   const submitLabel = user?.role === "employee" ? "保存并发送给 TL" : "保存并发送给总监";
+  const openManualEditor = () => {
+    setPreview(null);
+    setContent(report?.content ?? "");
+    setContentTouched(true);
+    if (modalMode) {
+      setStep("draft");
+      return;
+    }
+    setTab("draft");
+    setTabTouched(true);
+  };
+
+  if (readOnly) {
+    return (
+      <PagePanel
+        title="我的周报"
+        description="周报详情"
+        breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
+        className="reports-page aidashboard-list"
+        showNav={false}
+      >
+        {reportQuery.isError ? (
+          <Alert type="error" showIcon message="我的周报加载失败" description={errorMessage(reportQuery.error)} />
+        ) : reportQuery.isLoading ? (
+          <ReportsSkeleton />
+        ) : !report ? (
+          <ReportsEmpty description="暂无周报详情" />
+        ) : (
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <Card>
+              <Space size="large" wrap>
+                <span>周期：{weeklyRange(report.week_start, report.week_end)}</span>
+                <span>状态：{report.status === "submitted" ? "已发送" : "已保存"}</span>
+                <span>更新时间：{formatDateTime(report.updated_at)}</span>
+                <span>来源日报数：{report.source_daily_report_ids.length}</span>
+                <span>来源 session 数：{report.source_session_ids.length}</span>
+              </Space>
+            </Card>
+            <Card title="周报正文">
+              {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
+            </Card>
+            <Card title="来源日报 / 工作记录">
+              <PersonalWeeklySources
+                query={sourcesQuery}
+                selectedDailyReportIds={report.source_daily_report_ids}
+                onSelectedDailyReportIdsChange={() => undefined}
+                readonly
+              />
+            </Card>
+          </Space>
+        )}
+      </PagePanel>
+    );
+  }
 
   return (
     <PagePanel
       title="我的周报"
-      description="先确认本周来源，再生成预览并保存或发送"
+      description="支持手写周报，也支持先确认本周来源后生成、保存或发送。"
       breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
@@ -356,16 +413,17 @@ export function PersonalWeeklyReportsView({
           {weekPicker}
           {effectiveTab === "sources" ? (
             <>
-              {modalMode ? <Button onClick={() => setStep("draft")}>手写周报</Button> : null}
-              <Button
-                type="primary"
-                icon={<RobotOutlined />}
-                loading={generateMutation.isPending}
-                disabled={effectiveDailyReportIds.length === 0}
-                onClick={() => generateMutation.mutate()}
-              >
-                生成周报草稿
-              </Button>
+              <Button onClick={openManualEditor}>手写周报</Button>
+              {effectiveDailyReportIds.length > 0 ? (
+                <Button
+                  type="primary"
+                  icon={<RobotOutlined />}
+                  loading={generateMutation.isPending}
+                  onClick={() => generateMutation.mutate()}
+                >
+                  生成个人周报
+                </Button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -391,8 +449,8 @@ export function PersonalWeeklyReportsView({
         />
       ) : reportQuery.isLoading && !preview ? (
         <ReportsSkeleton />
-      ) : !modalMode && !editorContent.trim() && !report && !preview ? (
-        <ReportsEmpty description="尚未生成或保存本周周报，请先确认来源。" />
+      ) : !modalMode && !editorContent.trim() && !report && !preview && !contentTouched ? (
+        <ReportsEmpty description="尚未生成或保存本周周报，可直接手写，或先确认来源后生成。" />
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
@@ -464,12 +522,14 @@ export function PersonalWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
+  readOnly = false,
   onClose,
   onDone
 }: {
   open: boolean;
   weekStart: string;
   weekEnd: string;
+  readOnly?: boolean;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -489,6 +549,7 @@ export function PersonalWeeklyReportModal({
         weekEnd={weekEnd}
         weekPicker={<span />}
         modalMode
+        readOnly={readOnly}
         onDone={onDone}
       />
     </Modal>
@@ -498,11 +559,13 @@ export function PersonalWeeklyReportModal({
 function PersonalWeeklySources({
   query,
   selectedDailyReportIds,
-  onSelectedDailyReportIdsChange
+  onSelectedDailyReportIdsChange,
+  readonly = false
 }: {
   query: UseQueryResult<PersonalWeeklyReportSources>;
   selectedDailyReportIds: string[];
   onSelectedDailyReportIdsChange: (ids: string[]) => void;
+  readonly?: boolean;
 }) {
   const sources = query.data;
   const [activeSource, setActiveSource] = useState<PersonalWeeklyReportSources["daily_reports"][number] | null>(
@@ -521,6 +584,47 @@ function PersonalWeeklySources({
   if (!sources) return <ReportsEmpty description="暂无来源" />;
   if (sources.daily_reports.length === 0)
     return <ReportsEmpty description="本周暂无可用于生成周报的日报" />;
+  if (readonly)
+    return (
+      <>
+        <div className="reports-source-list">
+          {sources.daily_reports
+            .filter((item) => selectedDailyReportIds.includes(item.report_id))
+            .map((item) => (
+              <div key={item.report_id} className="reports-source-list__item">
+                <div className="reports-source-list__main reports-source-list__main--readonly">
+                  <div className="reports-source-list__content">
+                    <div className="reports-source-list__head">
+                      <strong>{formatDailySourceTitle(item.report_date)}</strong>
+                      <span className="reports-tag is-submitted">已发送</span>
+                      <span className="reports-tag is-team">个人日报</span>
+                      <Button
+                        type="link"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setActiveSource(item);
+                        }}
+                      >
+                        查看全文
+                      </Button>
+                    </div>
+                    <p>{summarizeSourceContent(item.content)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+        <Drawer
+          title={activeSource ? `${formatDailySourceTitle(activeSource.report_date)}原文` : "日报原文"}
+          open={Boolean(activeSource)}
+          size={560}
+          onClose={() => setActiveSource(null)}
+        >
+          <pre className="reports-source-content">{activeSource?.content}</pre>
+        </Drawer>
+      </>
+    );
   return (
     <>
       <Checkbox.Group
@@ -604,6 +708,7 @@ export function WeeklyReportsPage() {
   const [modalTarget, setModalTarget] = useState<{
     scope: "mine" | "team" | "department";
     weekStart: string;
+    mode: "view" | "edit";
   } | null>(null);
 
   if (!user) return null;
@@ -634,7 +739,7 @@ export function WeeklyReportsPage() {
   return (
     <PagePanel
       title="周报"
-      description="按记录列表查看周报，当前周生成与编辑通过弹窗处理。"
+      description="按记录列表打开周报；当前周生成、编辑与查看统一通过弹窗处理。"
       breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
@@ -658,7 +763,7 @@ export function WeeklyReportsPage() {
           <Button
             type="primary"
             icon={<RobotOutlined />}
-            onClick={() => setModalTarget({ scope: activeTab, weekStart })}
+            onClick={() => setModalTarget({ scope: activeTab, weekStart, mode: "edit" })}
           >
             {generateLabel}
           </Button>
@@ -667,17 +772,17 @@ export function WeeklyReportsPage() {
 
       {activeTab === "mine" ? (
         <PersonalWeeklyRecordsTable
-          onOpen={(recordWeekStart) => setModalTarget({ scope: "mine", weekStart: recordWeekStart })}
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "mine", weekStart: recordWeekStart, mode: "view" })}
         />
       ) : null}
       {activeTab === "team" ? (
         <TeamWeeklyRecordsTable
-          onOpen={(recordWeekStart) => setModalTarget({ scope: "team", weekStart: recordWeekStart })}
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "team", weekStart: recordWeekStart, mode: "view" })}
         />
       ) : null}
       {activeTab === "department" ? (
         <DepartmentWeeklyRecordsTable
-          onOpen={(recordWeekStart) => setModalTarget({ scope: "department", weekStart: recordWeekStart })}
+          onOpen={(recordWeekStart) => setModalTarget({ scope: "department", weekStart: recordWeekStart, mode: "view" })}
         />
       ) : null}
 
@@ -686,6 +791,7 @@ export function WeeklyReportsPage() {
           open
           weekStart={modalTarget.weekStart}
           weekEnd={weekEndOf(modalTarget.weekStart)}
+          readOnly={modalTarget.mode === "view"}
           onClose={() => setModalTarget(null)}
           onDone={invalidateWeekly}
         />
@@ -695,6 +801,7 @@ export function WeeklyReportsPage() {
           open
           weekStart={modalTarget.weekStart}
           weekEnd={weekEndOf(modalTarget.weekStart)}
+          readOnly={modalTarget.mode === "view"}
           onClose={() => setModalTarget(null)}
           onDone={invalidateWeekly}
         />
@@ -704,6 +811,7 @@ export function WeeklyReportsPage() {
           open
           weekStart={modalTarget.weekStart}
           weekEnd={weekEndOf(modalTarget.weekStart)}
+          readOnly={modalTarget.mode === "view"}
           onClose={() => setModalTarget(null)}
           onDone={invalidateWeekly}
         />
@@ -854,7 +962,6 @@ function DepartmentWeeklyRecordsTable({
       width: 150,
       render: (_, record) => record.source_team_weekly_report_ids.length
     },
-    { title: "归档时间", dataIndex: "archived_at", render: formatDateTime },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
       title: "操作",
@@ -891,6 +998,7 @@ function TeamWeeklyReportsView({
   canEdit = false,
   scopeTabs,
   modalMode = false,
+  readOnly = false,
   onDone
 }: {
   weekStart: string;
@@ -899,6 +1007,7 @@ function TeamWeeklyReportsView({
   canEdit?: boolean;
   scopeTabs?: ReactNode;
   modalMode?: boolean;
+  readOnly?: boolean;
   onDone?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -961,6 +1070,12 @@ function TeamWeeklyReportsView({
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "team"] });
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "department"] });
   };
+  const openManualEditor = () => {
+    setPreview(null);
+    setContent(report?.content ?? "");
+    setContentTouched(true);
+    setTab("draft");
+  };
 
   const generateMutation = useMutation({
     mutationFn: () =>
@@ -1008,10 +1123,54 @@ function TeamWeeklyReportsView({
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "提交失败")
   });
 
+  if (readOnly) {
+    return (
+      <PagePanel
+        title="小组周报"
+        description="周报详情"
+        breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
+        className="reports-page aidashboard-list"
+        showNav={false}
+      >
+        {reportQuery.isError ? (
+          <Alert type="error" showIcon message="小组周报加载失败" description={errorMessage(reportQuery.error)} />
+        ) : reportQuery.isLoading ? (
+          <ReportsSkeleton />
+        ) : !report ? (
+          <ReportsEmpty description="暂无周报详情" />
+        ) : (
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <Card>
+              <Space size="large" wrap>
+                <span>周期：{weeklyRange(report.week_start)}</span>
+                <span>小组：{report.team_name}</span>
+                <span>状态：{report.submitted_at ? "已提交" : "已保存"}</span>
+                <span>提交时间：{formatDateTime(report.submitted_at)}</span>
+                <span>更新时间：{formatDateTime(report.updated_at)}</span>
+                <span>来源个人周报数：{report.source_personal_weekly_report_ids.length}</span>
+              </Space>
+            </Card>
+            <Card title="周报正文">
+              {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
+            </Card>
+            <Card title="来源个人周报">
+              <TeamWeeklySources
+                query={sourcesQuery}
+                selectedPersonalWeeklyReportIds={report.source_personal_weekly_report_ids}
+                onSelectedPersonalWeeklyReportIdsChange={() => undefined}
+                readonly
+              />
+            </Card>
+          </Space>
+        )}
+      </PagePanel>
+    );
+  }
+
   return (
     <PagePanel
       title="小组周报"
-      description="先确认本周来源，再生成并提交小组周报"
+      description="支持手写小组周报，也支持先确认本周来源后生成、保存或提交给总监。"
       breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
@@ -1068,7 +1227,7 @@ function TeamWeeklyReportsView({
       <div className="reports-toolbar">
         <div className="reports-toolbar__meta">
           <strong>
-            {effectiveTab === "sources" ? "本周来源确认" : effectiveTab === "draft" ? "小组周报草稿" : "小组周报历史"}
+            {effectiveTab === "sources" ? "本周来源确认" : effectiveTab === "draft" ? "小组周报正文" : "小组周报历史"}
           </strong>
           <span>·</span>
           <span>
@@ -1082,21 +1241,25 @@ function TeamWeeklyReportsView({
             onChange={(v) => setTab(v as "sources" | "draft" | "history")}
             options={[
               { label: "来源确认", value: "sources" },
-              { label: "周报草稿", value: "draft" },
+              { label: "周报正文", value: "draft" },
               ...(showHistory ? [{ label: "历史", value: "history" }] : [])
             ]}
           />
           {weekPicker}
           {canEdit && effectiveTab === "sources" ? (
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateMutation.isPending}
-              disabled={effectivePersonalWeeklyReportIds.length === 0}
-              onClick={() => generateMutation.mutate()}
-            >
-              生成小组周报预览
-            </Button>
+            <Space>
+              <Button onClick={openManualEditor}>手写周报</Button>
+              {effectivePersonalWeeklyReportIds.length > 0 ? (
+                <Button
+                  type="primary"
+                  icon={<RobotOutlined />}
+                  loading={generateMutation.isPending}
+                  onClick={() => generateMutation.mutate()}
+                >
+                  生成小组周报预览
+                </Button>
+              ) : null}
+            </Space>
           ) : null}
         </div>
       </div>
@@ -1121,8 +1284,8 @@ function TeamWeeklyReportsView({
         />
       ) : reportQuery.isLoading && !preview ? (
         <ReportsSkeleton />
-      ) : !editorContent.trim() && !report && !preview ? (
-        <ReportsEmpty description="尚未生成小组周报草稿，请先确认来源。" />
+      ) : !editorContent.trim() && !report && !preview && !contentTouched ? (
+        <ReportsEmpty description="尚未生成或保存小组周报，可直接手写，或先确认来源后生成。" />
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
@@ -1131,7 +1294,7 @@ function TeamWeeklyReportsView({
             </span>
             <span className="reports-team-card__meta">
               <span className={`reports-tag ${submittedLocked ? "is-submitted" : "is-team"}`}>
-                {submittedLocked ? "已提交总监" : preview ? "预览" : "草稿"}
+                {submittedLocked ? "已提交总监" : preview ? "预览" : "正文"}
               </span>
               <span>{formatWeekDate(preview?.week_start ?? report?.week_start ?? weekStart)}</span>
               {canEdit ? (
@@ -1184,11 +1347,13 @@ function TeamWeeklyReportsView({
 function TeamWeeklySources({
   query,
   selectedPersonalWeeklyReportIds,
-  onSelectedPersonalWeeklyReportIdsChange
+  onSelectedPersonalWeeklyReportIdsChange,
+  readonly = false
 }: {
   query: UseQueryResult<TeamWeeklyReportSources>;
   selectedPersonalWeeklyReportIds: string[];
   onSelectedPersonalWeeklyReportIdsChange: (ids: string[]) => void;
+  readonly?: boolean;
 }) {
   const sources = query.data;
   if (query.isError)
@@ -1204,6 +1369,29 @@ function TeamWeeklySources({
   if (!sources) return <ReportsEmpty description="暂无来源" />;
   if (sources.submitted_personal_weekly_reports.length === 0 && sources.missing_people.length === 0)
     return <ReportsEmpty description="暂无小组人员" />;
+  if (readonly)
+    return (
+      <>
+        <div className="reports-member-grid">
+          {sources.submitted_personal_weekly_reports
+            .filter((item) => selectedPersonalWeeklyReportIds.includes(item.report_id))
+            .map((item) => (
+              <article key={item.report_id} className="reports-report-card is-auto">
+                <header className="reports-report-card__head">
+                  <span className="reports-report-card__head-left">
+                    <span className="reports-report-card__author">{item.user_name}</span>
+                    <span className="reports-tag is-team">
+                      {item.source_role === "leader" ? "TL 本人" : "成员"}
+                    </span>
+                  </span>
+                  <span className="reports-report-card__date">{formatWeekDate(item.week_start)}</span>
+                </header>
+                <p className="reports-report-card__content">{item.submitted_content}</p>
+              </article>
+            ))}
+        </div>
+      </>
+    );
   return (
     <>
       {sources.submitted_personal_weekly_reports.length === 0 ? (
@@ -1262,12 +1450,14 @@ export function TeamWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
+  readOnly = false,
   onClose,
   onDone
 }: {
   open: boolean;
   weekStart: string;
   weekEnd: string;
+  readOnly?: boolean;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -1286,8 +1476,9 @@ export function TeamWeeklyReportModal({
         weekStart={weekStart}
         weekEnd={weekEnd}
         weekPicker={<span />}
-        canEdit
+        canEdit={!readOnly}
         modalMode
+        readOnly={readOnly}
         onDone={onDone}
       />
     </Modal>
@@ -1331,6 +1522,7 @@ function DirectorWeeklyReportsView({
   weekPicker,
   scopeTabs,
   modalMode = false,
+  readOnly = false,
   onDone
 }: {
   weekStart: string;
@@ -1338,6 +1530,7 @@ function DirectorWeeklyReportsView({
   weekPicker: React.ReactNode;
   scopeTabs?: ReactNode;
   modalMode?: boolean;
+  readOnly?: boolean;
   onDone?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1385,12 +1578,22 @@ function DirectorWeeklyReportsView({
   const missing = sources?.missing_teams.length ?? 0;
   const displayWeekStart = formatWeekDate(weekStart);
   const displayWeekEnd = formatWeekDate(weekEnd);
+  const openManualEditor = () => {
+    setContent(report?.content ?? "");
+    setContentTouched(true);
+    if (modalMode) {
+      setStep("draft");
+      return;
+    }
+    setTab("draft");
+    setEditing(true);
+  };
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["reports", "weekly"] });
   const generateMutation = useMutation({
     mutationFn: () => generateDepartmentWeeklyReport(weekStart),
     onSuccess: (draft) => {
-      message.success("部门周报草稿已生成");
+      message.success("部门周报已生成");
       setContent(draft.content);
       setContentTouched(true);
       invalidate();
@@ -1411,27 +1614,47 @@ function DirectorWeeklyReportsView({
     },
     onError: (err: unknown) => message.error(err instanceof Error ? err.message : "保存失败")
   });
-  const archiveMutation = useMutation({
-    mutationFn: () =>
-      saveDepartmentWeeklyReportCurrent({
-        week_start: weekStart,
-        content: editorContent,
-        archive: true
-      }),
-    onSuccess: () => {
-      message.success("部门周报已归档");
-      setEditing(false);
-      setContentTouched(false);
-      invalidate();
-      onDone?.();
-    },
-    onError: (err: unknown) => message.error(err instanceof Error ? err.message : "归档失败")
-  });
+  if (readOnly) {
+    return (
+      <PagePanel
+        title="部门周报"
+        description="周报详情"
+        breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
+        className="reports-page aidashboard-list"
+        showNav={false}
+      >
+        {reportQuery.isError ? (
+          <Alert type="error" showIcon message="部门周报加载失败" description={errorMessage(reportQuery.error)} />
+        ) : reportQuery.isLoading ? (
+          <ReportsSkeleton />
+        ) : !report ? (
+          <ReportsEmpty description="暂无周报详情" />
+        ) : (
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <Card>
+              <Space size="large" wrap>
+                <span>周期：{weeklyRange(report.week_start)}</span>
+                <span>状态：已保存</span>
+                <span>更新时间：{formatDateTime(report.updated_at)}</span>
+                <span>来源小组周报数：{report.source_team_weekly_report_ids.length}</span>
+              </Space>
+            </Card>
+            <Card title="周报正文">
+              {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
+            </Card>
+            <Card title="来源小组周报">
+              <DepartmentWeeklySources query={sourcesQuery} />
+            </Card>
+          </Space>
+        )}
+      </PagePanel>
+    );
+  }
 
   return (
     <PagePanel
       title="部门周报"
-      description="基于已提交小组周报生成部门周报"
+      description="支持手写部门周报，也支持基于已提交小组周报生成并保存。"
       breadcrumbs={[{ title: "报告" }, { title: "周报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
@@ -1476,10 +1699,10 @@ function DirectorWeeklyReportsView({
           icon={<RobotOutlined />}
           loading={reportQuery.isLoading}
           metric={{
-            key: "archive",
-            title: "归档状态",
-            value: report?.archived_at ? 1 : 0,
-            description: report?.archived_at ? "已归档" : "待生成或待归档"
+            key: "saved",
+            title: "保存状态",
+            value: report?.content?.trim() ? 1 : 0,
+            description: report?.content?.trim() ? "已保存" : "未生成"
           }}
         />
       </RequirementMetricGrid>
@@ -1491,7 +1714,7 @@ function DirectorWeeklyReportsView({
             {effectiveTab === "sources"
               ? "小组周报收集"
               : effectiveTab === "draft"
-                ? "部门周报草稿"
+                ? "部门周报"
                 : effectiveTab === "teams"
                   ? "小组周报记录"
                   : "部门周报历史"}
@@ -1515,7 +1738,7 @@ function DirectorWeeklyReportsView({
               onChange={(v) => setTab(v as "sources" | "draft" | "history" | "teams")}
               options={[
                 { label: "来源确认", value: "sources" },
-                { label: "周报草稿", value: "draft" },
+                { label: "周报正文", value: "draft" },
                 ...(showHistory
                   ? [
                       { label: "小组记录", value: "teams" },
@@ -1528,15 +1751,17 @@ function DirectorWeeklyReportsView({
           {weekPicker}
           {effectiveTab === "sources" ? (
             <>
-              {modalMode ? <Button onClick={() => setStep("draft")}>手写周报</Button> : null}
-              <Button
-                type="primary"
-                icon={<RobotOutlined />}
-                loading={generateMutation.isPending}
-                onClick={() => generateMutation.mutate()}
-              >
-                生成部门周报草稿
-              </Button>
+              <Button onClick={openManualEditor}>手写周报</Button>
+              {submitted > 0 ? (
+                <Button
+                  type="primary"
+                  icon={<RobotOutlined />}
+                  loading={generateMutation.isPending}
+                  onClick={() => generateMutation.mutate()}
+                >
+                  生成部门周报
+                </Button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -1565,7 +1790,7 @@ function DirectorWeeklyReportsView({
               title: "部门周报",
               date: formatWeekDate(r.week_start),
               content: r.content,
-              done: Boolean(r.archived_at)
+              done: Boolean(r.content?.trim())
             }))}
           />
         )
@@ -1578,15 +1803,15 @@ function DirectorWeeklyReportsView({
         />
       ) : reportQuery.isLoading ? (
         <ReportsSkeleton />
-      ) : !modalMode && !report ? (
-        <ReportsEmpty description="尚未生成部门周报草稿，请先确认小组周报来源。" />
+      ) : !modalMode && !report && !editorContent.trim() && !contentTouched ? (
+        <ReportsEmpty description="尚未生成或保存部门周报，可直接手写，或先确认小组周报来源后生成。" />
       ) : (
         <section className="reports-team-card">
           <header className="reports-team-card__head">
             <span className="reports-team-card__title">部门周报</span>
             <span className="reports-team-card__meta">
-              <span className={`reports-tag ${report?.archived_at ? "is-submitted" : "is-team"}`}>
-                {report?.archived_at ? "已归档" : report ? "草稿" : "未保存"}
+              <span className={`reports-tag ${report?.content?.trim() ? "is-submitted" : "is-team"}`}>
+                {report?.content?.trim() ? "已保存" : "未生成"}
               </span>
               <span>{formatWeekDate(report?.week_start ?? weekStart)}</span>
               {!modalMode && !editing ? (
@@ -1599,16 +1824,6 @@ function DirectorWeeklyReportsView({
                   }}
                 >
                   编辑
-                </Button>
-              ) : null}
-              {!modalMode && !editing && !report?.archived_at ? (
-                <Button
-                  size="small"
-                  type="primary"
-                  loading={archiveMutation.isPending}
-                  onClick={() => archiveMutation.mutate()}
-                >
-                  归档
                 </Button>
               ) : null}
             </span>
@@ -1641,13 +1856,6 @@ function DirectorWeeklyReportsView({
                   onClick={() => saveMutation.mutate()}
                 >
                   保存周报
-                </Button>
-                <Button
-                  type="primary"
-                  loading={archiveMutation.isPending}
-                  onClick={() => archiveMutation.mutate()}
-                >
-                  归档部门周报
                 </Button>
               </div>
             </div>
@@ -1739,12 +1947,14 @@ export function DepartmentWeeklyReportModal({
   open,
   weekStart,
   weekEnd,
+  readOnly = false,
   onClose,
   onDone
 }: {
   open: boolean;
   weekStart: string;
   weekEnd: string;
+  readOnly?: boolean;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -1764,6 +1974,7 @@ export function DepartmentWeeklyReportModal({
         weekEnd={weekEnd}
         weekPicker={<span />}
         modalMode
+        readOnly={readOnly}
         onDone={onDone}
       />
     </Modal>
@@ -1783,7 +1994,7 @@ function WeeklyReportCards({
             <span className="reports-report-card__head-left">
               <span className="reports-report-card__author">{report.title}</span>
               <span className={`reports-tag ${report.done ? "is-submitted" : "is-team"}`}>
-                {report.done ? "已提交/归档" : "草稿"}
+                {report.done ? "已保存" : "未生成"}
               </span>
             </span>
             <span className="reports-report-card__date">{report.date}</span>

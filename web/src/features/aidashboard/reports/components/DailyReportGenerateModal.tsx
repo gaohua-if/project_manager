@@ -1,6 +1,6 @@
 import { FileDoneOutlined, UploadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Checkbox, Empty, Input, Modal, Select, Space, Steps, Tag, Upload } from "antd";
+import { Alert, App, Button, Checkbox, Drawer, Empty, Input, Modal, Select, Space, Steps, Tag, Upload } from "antd";
 import { useState } from "react";
 import dayjs from "dayjs";
 
@@ -9,18 +9,21 @@ import { formatDateTime } from "@/shared/utils/dateTime";
 
 import {
   fetchDepartmentReport,
-  fetchDepartmentReports,
   fetchDepartmentReportSources,
+  fetchDepartmentReportTodayOrNull,
   fetchMyReports,
   fetchReport,
   fetchSessions,
   fetchTeamReport,
   fetchTeamReports,
   fetchTeamReportSources,
+  fetchTeamReportTodayOrNull,
   fetchTodayReport,
   generateDepartmentReport,
   generateTeamReport,
   generateTodayReportDraft,
+  saveDepartmentReportCurrent,
+  saveTeamReportCurrent,
   saveReport,
   submitReport,
   submitTeamReport,
@@ -215,37 +218,25 @@ export function DailyReportGenerateModal({
   const teamReportId = scope === "team" ? reportId ?? existingTeamListQuery.data?.items[0]?.id : undefined;
   const teamReportQuery = useQuery({
     queryKey: ["reports", "daily", "generate-modal", "team-report", teamReportId],
-    queryFn: () => fetchTeamReport(teamReportId ?? ""),
-    enabled: open && scope === "team" && Boolean(teamReportId),
+    queryFn: () => (teamReportId ? fetchTeamReport(teamReportId) : fetchTeamReportTodayOrNull(date)),
+    enabled: open && scope === "team" && (!reportId || Boolean(teamReportId)),
     staleTime: 0
   });
   const currentTeamReport = teamDraft ?? teamReportQuery.data ?? null;
-  const teamLookupLoading = scope === "team" && step === null && !reportId && existingTeamListQuery.isLoading;
-  const hasExistingTeamReport = scope === "team" && Boolean(teamReportId);
+  const teamLookupLoading =
+    scope === "team" && step === null && !reportId && existingTeamListQuery.isLoading;
+  const hasExistingTeamReport = scope === "team" && Boolean(currentTeamReport?.id || teamReportId);
 
-  const existingDepartmentListQuery = useQuery({
-    queryKey: ["reports", "daily", "generate-modal", "department-existing", date],
-    queryFn: () =>
-      fetchDepartmentReports({
-        from: date,
-        to: date,
-        page: "1",
-        page_size: "1"
-      }),
-    enabled: open && scope === "department" && !reportId,
-    staleTime: 0
-  });
-  const departmentReportId = scope === "department" ? reportId ?? existingDepartmentListQuery.data?.items[0]?.id : undefined;
+  const departmentReportId = scope === "department" ? reportId : undefined;
   const departmentReportQuery = useQuery({
     queryKey: ["reports", "daily", "generate-modal", "department-report", departmentReportId],
-    queryFn: () => fetchDepartmentReport(departmentReportId ?? ""),
-    enabled: open && scope === "department" && Boolean(departmentReportId),
+    queryFn: () => (departmentReportId ? fetchDepartmentReport(departmentReportId) : fetchDepartmentReportTodayOrNull(date)),
+    enabled: open && scope === "department",
     staleTime: 0
   });
   const currentDepartmentReport = departmentDraft ?? departmentReportQuery.data ?? null;
-  const departmentLookupLoading =
-    scope === "department" && step === null && !reportId && existingDepartmentListQuery.isLoading;
-  const hasExistingDepartmentReport = scope === "department" && Boolean(departmentReportId);
+  const departmentLookupLoading = scope === "department" && step === null && departmentReportQuery.isLoading;
+  const hasExistingDepartmentReport = scope === "department" && Boolean(currentDepartmentReport?.id || departmentReportId);
 
   const lookupLoading = personalLookupLoading || teamLookupLoading || departmentLookupLoading;
   const effectiveStep: Step =
@@ -341,13 +332,17 @@ export function DailyReportGenerateModal({
         return finalAction ? submitReport(report.id, payload) : saveReport(report.id, payload);
       }
       if (scope === "team") {
-        if (!currentTeamReport) throw new Error("请先生成小组日报");
+        const savedReport = currentTeamReport
+          ? await updateTeamReport(currentTeamReport.id, { content: editorMarkdown })
+          : await saveTeamReportCurrent({ report_date: date, content: editorMarkdown });
         return finalAction
-          ? submitTeamReport(currentTeamReport.id, { content: editorMarkdown })
-          : updateTeamReport(currentTeamReport.id, { content: editorMarkdown });
+          ? submitTeamReport(savedReport.id, { content: editorMarkdown })
+          : savedReport;
       }
-      if (!currentDepartmentReport) throw new Error("请先生成部门日报");
-      return updateDepartmentReport(currentDepartmentReport.id, { content: editorMarkdown, archive: true });
+      if (currentDepartmentReport) {
+        return updateDepartmentReport(currentDepartmentReport.id, { content: editorMarkdown });
+      }
+      return saveDepartmentReportCurrent({ report_date: date, content: editorMarkdown });
     },
     onSuccess: (result, variables) => {
       if (scope === "team") {
@@ -359,7 +354,7 @@ export function DailyReportGenerateModal({
       setDraftTouched(false);
       void queryClient.invalidateQueries({ queryKey: ["reports", "daily"] });
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
-      message.success(variables.finalAction ? (scope === "team" ? "已发送给总监" : scope === "department" ? "已归档" : "日报已发送") : scope === "team" ? "组日报已保存" : "日报已保存");
+      message.success(variables.finalAction ? (scope === "team" ? "已发送给总监" : scope === "department" ? "部门日报已保存" : "日报已发送") : scope === "team" ? "组日报已保存" : "日报已保存");
       onDone?.(result, scope);
       onClose();
     },
@@ -420,7 +415,23 @@ export function DailyReportGenerateModal({
       return;
     }
     if (scope === "team") {
+      if ((teamSourcesQuery.data?.submitted_count ?? teamSourcesQuery.data?.submitted ?? 0) === 0) {
+        setTeamDraft(currentTeamReport);
+        setDraftMarkdown(currentTeamReport?.content ?? "");
+        setDraftTouched(true);
+        setDraftError(null);
+        setStep("editor");
+        return;
+      }
       teamGenerateMutation.mutate();
+      return;
+    }
+    if ((departmentSourcesQuery.data?.submitted_team_count ?? 0) === 0) {
+      setDepartmentDraft(currentDepartmentReport);
+      setDraftMarkdown(currentDepartmentReport?.content ?? "");
+      setDraftTouched(true);
+      setDraftError(null);
+      setStep("editor");
       return;
     }
     departmentGenerateMutation.mutate();
@@ -455,6 +466,22 @@ export function DailyReportGenerateModal({
     onClose();
   };
 
+  const openManualEditor = () => {
+    if (scope === "team") {
+      setTeamDraft(currentTeamReport);
+      setDraftMarkdown(currentTeamReport?.content ?? "");
+    } else if (scope === "department") {
+      setDepartmentDraft(currentDepartmentReport);
+      setDraftMarkdown(currentDepartmentReport?.content ?? "");
+    } else {
+      setDraftMarkdown(personalReport?.content ?? "");
+      setPersonalDraftSessionIds([]);
+    }
+    setDraftTouched(true);
+    setDraftError(null);
+    setStep("editor");
+  };
+
   const saveEditor = (finalAction: boolean) => {
     if (!editorMarkdown.trim()) {
       message.warning("请先填写日报内容");
@@ -486,7 +513,7 @@ export function DailyReportGenerateModal({
             loading={saveMutation.isPending}
             disabled={editorLoading}
           >
-            {scope === "team" ? "保存并发送给总监" : scope === "department" ? "保存归档" : personalSubmitLabel}
+            {scope === "team" ? "保存并发送给总监" : scope === "department" ? "保存部门日报" : personalSubmitLabel}
           </Button>
         )}
       </Space>
@@ -495,24 +522,51 @@ export function DailyReportGenerateModal({
         <Button onClick={handleClose} disabled={isGenerating}>
           稍后处理
         </Button>
-        <Button
-          type="primary"
-          loading={isGenerating}
-          disabled={
-            (scope === "personal" && sessionsQuery.isLoading) ||
-            (scope === "team" && (teamSourcesQuery.data?.submitted_count ?? teamSourcesQuery.data?.submitted ?? 0) === 0) ||
-            (scope === "department" && (departmentSourcesQuery.data?.submitted_team_count ?? 0) === 0)
-          }
-          onClick={handleGenerate}
-        >
-          {scope === "personal"
-            ? effectiveSelectedSessionIds.length > 0
-              ? "生成日报草稿"
-              : "手写日报"
-            : scope === "team"
-              ? "基于已发送成员日报生成组日报"
-              : "基于已发送小组日报生成部门日报"}
-        </Button>
+        {scope === "personal" ? (
+          <>
+            <Button onClick={openManualEditor} disabled={sessionsQuery.isLoading || isGenerating}>
+              手写日报
+            </Button>
+            <Button
+              type="primary"
+              loading={isGenerating}
+              disabled={sessionsQuery.isLoading}
+              onClick={handleGenerate}
+            >
+              生成日报
+            </Button>
+          </>
+        ) : scope === "team" ? (
+          <>
+            <Button onClick={openManualEditor} disabled={isGenerating}>
+              手写组日报
+            </Button>
+            {(teamSourcesQuery.data?.submitted_count ?? teamSourcesQuery.data?.submitted ?? 0) > 0 ? (
+              <Button
+                type="primary"
+                loading={isGenerating}
+                onClick={handleGenerate}
+              >
+                基于已发送成员日报生成组日报
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Button onClick={openManualEditor} disabled={isGenerating}>
+              手写部门日报
+            </Button>
+            {(departmentSourcesQuery.data?.submitted_team_count ?? 0) > 0 ? (
+              <Button
+                type="primary"
+                loading={isGenerating}
+                onClick={handleGenerate}
+              >
+                基于已发送小组日报生成部门日报
+              </Button>
+            ) : null}
+          </>
+        )}
       </Space>
     );
 
@@ -625,10 +679,10 @@ export function DailyReportGenerateModal({
                       ? "当前日报已发送，可继续修改后保存或再次发送。"
                       : personalReport?.status === "saved"
                         ? "当前日报已保存，可继续修改后保存或发送。"
-                        : "检查 Agent 生成结果后保存。"
+                        : "检查生成结果后保存或发送。"
                     : scope === "team"
                       ? "确认组日报内容后保存，或保存并发送给总监。"
-                      : "确认部门日报内容后保存归档。"}
+                      : "确认部门日报内容后保存。"}
                 </span>
               </div>
               {editorLoading ? (
@@ -769,69 +823,77 @@ function DepartmentSourceReview({
 
   const submitted = sources.submitted_team_reports;
   const missing = sources.missing_teams;
+  const activeSource =
+    submitted.find((item) => (item.team_report_id ?? item.report_id ?? item.team_id) === expandedReportId) ?? null;
 
   return (
-    <div className="console-department-source">
-      <div className="console-session-modal__section">
-        <strong>确认小组日报来源</strong>
-        <span>
-          已收集 {sources.submitted_team_count}/{sources.total_team_count} 个小组日报，
-          {missing.length} 个小组未发送。
-        </span>
+    <>
+      <div className="console-department-source">
+        <div className="console-session-modal__section">
+          <strong>确认小组日报来源</strong>
+          <span>
+            已收集 {sources.submitted_team_count}/{sources.total_team_count} 个小组日报，
+            {missing.length} 个小组未发送。
+          </span>
+        </div>
+
+        <section className="console-department-source__block">
+          <div className="console-department-source__head">
+            <strong>已发送小组</strong>
+            <Tag color="blue">{submitted.length} 组</Tag>
+          </div>
+          {submitted.length === 0 ? (
+            <div className="console-session-empty">暂无已发送小组日报</div>
+          ) : (
+            <div className="console-department-source__list">
+              {submitted.map((item) => {
+                const reportId = item.team_report_id ?? item.report_id ?? item.team_id;
+                return (
+                  <article key={reportId} className="console-department-source__item">
+                    <div className="console-department-source__row">
+                      <span>
+                        <strong>{item.team_name}</strong>
+                        <em>{item.team_leader_name || item.leader_name || "未记录 TL"}</em>
+                      </span>
+                      <span>
+                        <time>{item.submitted_at ? formatDateTime(item.submitted_at, "HH:mm") : "-"}</time>
+                        <Button size="small" onClick={() => onExpandedReportIdChange(reportId)}>
+                          查看原文
+                        </Button>
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="console-department-source__block">
+          <div className="console-department-source__head">
+            <strong>未发送小组</strong>
+            <Tag color={missing.length > 0 ? "gold" : "green"}>{missing.length} 组</Tag>
+          </div>
+          {missing.length === 0 ? (
+            <div className="console-session-empty">所有小组均已发送</div>
+          ) : (
+            <div className="console-department-source__missing">
+              {missing.map((team) => (
+                <Tag key={team.team_id} color="gold">{team.team_name}</Tag>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-
-      <section className="console-department-source__block">
-        <div className="console-department-source__head">
-          <strong>已发送小组</strong>
-          <Tag color="blue">{submitted.length} 组</Tag>
-        </div>
-        {submitted.length === 0 ? (
-          <div className="console-session-empty">暂无已发送小组日报</div>
-        ) : (
-          <div className="console-department-source__list">
-            {submitted.map((item) => {
-              const reportId = item.team_report_id ?? item.report_id ?? item.team_id;
-              const expanded = expandedReportId === reportId;
-              return (
-                <article key={reportId} className="console-department-source__item">
-                  <div className="console-department-source__row">
-                    <span>
-                      <strong>{item.team_name}</strong>
-                      <em>{item.team_leader_name || item.leader_name || "未记录 TL"}</em>
-                    </span>
-                    <span>
-                      <time>{item.submitted_at ? formatDateTime(item.submitted_at, "HH:mm") : "-"}</time>
-                      <Button size="small" onClick={() => onExpandedReportIdChange(expanded ? null : reportId)}>
-                        {expanded ? "收起原文" : "查看原文"}
-                      </Button>
-                    </span>
-                  </div>
-                  {expanded ? (
-                    <pre className="console-department-source__content">{item.content || "暂无内容"}</pre>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="console-department-source__block">
-        <div className="console-department-source__head">
-          <strong>未发送小组</strong>
-          <Tag color={missing.length > 0 ? "gold" : "green"}>{missing.length} 组</Tag>
-        </div>
-        {missing.length === 0 ? (
-          <div className="console-session-empty">所有小组均已发送</div>
-        ) : (
-          <div className="console-department-source__missing">
-            {missing.map((team) => (
-              <Tag key={team.team_id} color="gold">{team.team_name}</Tag>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+      <Drawer
+        title={activeSource ? `${activeSource.team_name} 小组日报原文` : "小组日报原文"}
+        open={Boolean(activeSource)}
+        size={560}
+        onClose={() => onExpandedReportIdChange(null)}
+      >
+        <pre className="reports-source-content">{activeSource?.content || "暂无小组日报原文"}</pre>
+      </Drawer>
+    </>
   );
 }
 

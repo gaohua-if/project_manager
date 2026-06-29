@@ -13,12 +13,16 @@ export function MarkdownViewer({ value }: MarkdownViewerProps) {
   const viewerRef = useRef<Viewer | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const viewer = new Viewer({ el: containerRef.current });
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.innerHTML = "";
+    const viewer = new Viewer({ el: container });
     viewerRef.current = viewer;
     return () => {
       viewer.destroy();
       viewerRef.current = null;
+      container.innerHTML = "";
     };
   }, []);
 

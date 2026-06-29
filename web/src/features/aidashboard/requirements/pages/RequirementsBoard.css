@@ -430,7 +430,7 @@
 }
 
 .requirements-tree {
-  min-width: 1080px;
+  min-width: 1120px;
 }
 .requirements-tree .ant-table {
   overflow: hidden;
@@ -441,17 +441,17 @@
 .requirements-tree .ant-table-thead > tr > th {
   height: 40px;
   padding: 0 12px;
-  color: #6f7d90;
-  font-size: 11px;
-  font-weight: 600;
-  background: #fbfcfe;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f8fafc;
   border-bottom: 1px solid #e3eaf3;
 }
 .requirements-tree .ant-table-tbody > tr > td {
-  height: 66px;
-  padding: 10px 12px;
-  color: #526173;
-  font-size: 12px;
+  height: 58px;
+  padding: 9px 12px;
+  color: #334155;
+  font-size: 13px;
   border-bottom: 1px solid #edf2f7;
 }
 .requirements-tree .ant-table-tbody > tr.requirements-tree__table-row {
@@ -476,34 +476,104 @@
   padding: 0;
   background: #fbfcfe;
 }
-.requirements-tree__title-main {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-.requirements-tree__title-main strong,
-.requirements-tree__title-main small {
+.requirements-tree__title,
+.requirements-tree__text {
   display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.requirements-tree__title-main strong {
-  color: #172033;
+
+.requirements-tree__title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.requirements-tree__text {
+  color: #64748b;
   font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
 }
-.requirements-tree__title-main small {
-  color: #7a879a;
-  font-size: 11px;
+
+.requirements-tree__team {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 13px;
+  white-space: nowrap;
 }
-.requirements-tree__update {
-  display: grid;
-  gap: 3px;
+
+.requirements-tree__team span {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 58px;
+  text-overflow: ellipsis;
 }
-.requirements-tree__update small {
-  color: #8a95a6;
+
+.requirements-tree__team em {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-style: normal;
+}
+
+.requirements-tree .requirements-status-pill,
+.requirements-tree .requirements-priority-pill {
+  height: 24px;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.requirements-tree .requirements-status-pill.is-neutral {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.requirements-tree .requirements-status-pill.is-warning,
+.requirements-tree .requirements-priority-pill.is-medium {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.requirements-tree .requirements-status-pill.is-info {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.requirements-tree .requirements-status-pill.is-success {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.requirements-tree .requirements-status-pill.is-danger,
+.requirements-tree .requirements-priority-pill.is-urgent {
+  color: #b42318;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.requirements-tree .requirements-priority-pill.is-low {
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.requirements-tree .requirements-priority-pill.is-high {
+  color: #c2410c;
+  background: #fff7ed;
+  border-color: #fed7aa;
 }
 .requirements-tree__dependencies {
   display: flex;
@@ -518,67 +588,89 @@
   text-overflow: ellipsis;
 }
 .requirements-tree__progress-summary {
-  display: grid;
-  gap: 3px;
+  min-width: 0;
 }
 .requirements-tree__progress-summary strong {
+  display: block;
+  overflow: hidden;
   color: #354258;
-  font-size: 12px;
-  font-weight: 700;
-}
-.requirements-tree__progress-summary small {
-  color: #ef4444;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .requirements-tree__risk {
-  overflow: hidden;
-  max-width: 100%;
-  color: #8a95a6;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #94a3b8;
+  font-size: 13px;
 }
 .requirements-tree__risk.is-danger {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
   color: #b42318;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 999px;
 }
 .requirements-tree__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 6px;
 }
 .requirements-tree__actions .ant-btn {
   height: 24px;
-  padding: 0 4px;
+  padding: 0 2px;
   font-size: 12px;
+  font-weight: 500;
+}
+
+.requirements-tree__action-primary.ant-btn {
+  color: #1677ff;
+}
+
+.requirements-tree__action-follow.ant-btn,
+.requirements-tree__action-secondary.ant-btn {
+  color: #64748b;
+}
+
+.requirements-tree__action-follow.is-active.ant-btn {
+  color: #64748b;
+  font-weight: 400;
 }
 .requirements-tree__task-panel {
   display: grid;
-  gap: 8px;
-  padding: 10px 16px 14px 50px;
-  background: #fbfcfe;
-  border-top: 1px solid #edf1f6;
+  gap: 0;
+  padding: 4px 12px 8px 54px;
+  background: #f8fbff;
+  border-top: 1px solid #edf2f7;
 }
 .requirements-tree__task-item {
   display: grid;
-  grid-template-columns: minmax(280px, 1.7fr) 116px minmax(132px, 0.8fr) minmax(190px, 1fr) 96px;
+  grid-template-columns: minmax(280px, 1.7fr) 132px minmax(132px, 0.8fr) minmax(190px, 1fr) 108px;
   align-items: center;
-  gap: 14px;
-  min-height: 60px;
-  padding: 10px 12px;
+  gap: 12px;
+  min-height: 54px;
+  padding: 8px 10px;
   color: #526173;
-  background: #fff;
-  border: 1px solid #e7edf5;
-  border-radius: 8px;
+  background: transparent;
+  border-bottom: 1px solid #e8eff7;
+  border-radius: 0;
   cursor: pointer;
 }
+
+.requirements-tree__task-item:last-child {
+  border-bottom: 0;
+}
+
 .requirements-tree__task-item:hover {
-  background: #fcfdff;
-  border-color: #dbe6f3;
+  background: #f1f7ff;
 }
 .requirements-tree__task-item.has-blocked {
-  border-color: #ffd8d8;
+  background: #fff7f7;
 }
 .requirements-tree__task-main,
 .requirements-tree__task-detail {
@@ -597,23 +689,19 @@
   white-space: nowrap;
 }
 .requirements-tree__task-main strong {
-  color: #253047;
-  font-size: 12px;
-  font-weight: 700;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
 }
 .requirements-tree__task-main small,
 .requirements-tree__task-detail span {
   color: #7a879a;
-  font-size: 11px;
-}
-.requirements-tree__task-main small {
-  display: block;
-  margin-top: 3px;
+  font-size: 12px;
 }
 .requirements-tree__task-meta {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 .requirements-tree__task-progress {
@@ -624,8 +712,9 @@
 }
 .requirements-tree__task-actions .ant-btn {
   height: 24px;
-  padding: 0 4px;
+  padding: 0 2px;
   font-size: 12px;
+  font-weight: 500;
 }
 .requirements-tree__empty {
   display: flex;

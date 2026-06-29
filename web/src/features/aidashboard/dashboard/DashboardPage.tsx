@@ -421,7 +421,7 @@ function applyDepartmentDailyReportState(
       departmentReport.status === "saved" ||
       departmentReport.status === "archived" ||
       departmentReport.archived_at
-        ? "已归档"
+        ? "已保存"
         : "待生成",
     sessionCount: departmentReport.source_team_report_ids.length,
     generateMode: "系统自动生成",
@@ -454,7 +454,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可查看来源后生成草稿。",
+        description: "本周周报尚未生成，可直接手写，或查看来源后生成周报。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
@@ -573,7 +573,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "草稿待确认",
-        description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
+        description: "系统已根据本周日报和任务记录生成周报，请确认后发送。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:40"
       })
@@ -585,7 +585,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "team",
         name: "今日组日报",
         status: "待生成",
-        description: "先查看成员原始日报发送情况，再生成小组日报。",
+        description: "可直接手写小组日报，也可先查看成员原始日报后生成。",
         sourceSummary: "成员当天原始日报",
         updatedAt: "-"
       }),
@@ -595,7 +595,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "team",
         name: "本周组周报",
         status: "待生成",
-        description: "可基于组内成员本周报告和需求看板数据生成组周报草稿。",
+        description: "可直接手写组周报，也可基于组内成员本周报告和需求看板数据生成。",
         sourceSummary:
           "组内成员本周个人日报、个人周报、需求看板数据、本周风险与阻塞、完成/延期/下周计划",
         updatedAt: "-"
@@ -640,7 +640,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
       {
         key: "tl-task-2",
         type: "任务",
-        title: "日报草稿编辑态",
+        title: "日报编辑态",
         requirement: "AI 日报生成",
         requirementId: "req-ai-daily",
         taskId: "task-daily-editor",
@@ -649,7 +649,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         deadline: "2026-06-27",
         dependency: "依赖：默认 Skill 输出",
         risk: "已超期",
-        activity: "草稿保存待确认"
+        activity: "日报内容待确认"
       }
     ],
     risks: [
@@ -701,8 +701,8 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         kind: "personal_daily",
         scope: "personal",
         name: "今日日报",
-        status: "已归档",
-        description: "今日日报已归档。",
+        status: "已保存",
+        description: "今日日报已保存，可随时打开查看。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 1,
         updatedAt: "17:55"
@@ -713,7 +713,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周个人周报",
         status: "草稿待确认",
-        description: "系统已根据本周日报和任务记录生成周报草稿，请确认后发送。",
+        description: "系统已根据本周日报和任务记录生成周报，请确认后发送。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:20"
       })
@@ -725,7 +725,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "department",
         name: "今日部门日报",
         status: "待生成",
-        description: "先查看各组小组日报发送情况，再生成部门日报。",
+        description: "可直接手写部门日报，也可先查看各组小组日报后生成。",
         sourceSummary: "各组日报、各组发送情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
@@ -735,7 +735,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "department",
         name: "本周部门周报",
         status: "待生成",
-        description: "可基于各组周报和部门重点需求风险生成部门周报草稿。",
+        description: "可直接手写部门周报，也可基于各组周报和部门重点需求风险生成。",
         sourceSummary: "各组周报、各组日报摘要、部门重点需求状态、高风险事项、资源/依赖/交付风险",
         updatedAt: "-"
       })
@@ -834,7 +834,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "待生成",
-        description: "今日尚未生成日报，可选择 session 生成日报。",
+        description: "今日尚未生成日报，可直接手写，或选择 session 生成日报。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         updatedAt: "-"
       }),
@@ -844,7 +844,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可查看来源后生成草稿。",
+        description: "本周周报尚未生成，可直接手写，或查看来源后生成周报。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
@@ -1257,7 +1257,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
     onError: (error: unknown) => {
-      const text = error instanceof Error ? error.message : "日报草稿生成失败";
+      const text = error instanceof Error ? error.message : "日报生成失败";
       setDraftError(text);
       message.error(text);
     }
@@ -1356,22 +1356,22 @@ export function DashboardPage() {
       if (!current) {
         throw new Error("请先生成部门日报");
       }
-      return updateDepartmentReport(current.id, { content: draftMarkdown, archive });
+      return { report: await updateDepartmentReport(current.id, { content: draftMarkdown }), archive };
     },
-    onSuccess: (report, variables) => {
+    onSuccess: ({ report, archive }) => {
       setDepartmentDraft(report);
       setDraftMarkdown(report.content);
       setDraftMarkdownTouched(false);
       updateReport(activeReport.id, {
-        status: "已归档",
+        status: "已保存",
         sessionCount: report.source_team_report_ids.length,
         generateMode: "系统自动生成",
         skill: "部门日报 Agent",
         updatedAt: "刚刚"
       });
       void queryClient.invalidateQueries({ queryKey: ["department-report-today"] });
-      message.success(variables.archive ? "部门日报已归档" : "部门日报已保存");
-      if (variables.archive) {
+      message.success("部门日报已保存");
+      if (archive) {
         setIsReportModalOpen(false);
       }
     },
@@ -1612,7 +1612,7 @@ export function DashboardPage() {
       saveTeamMutation.mutate({ submit: true });
       return;
     }
-    updateReport(activeReport.id, { status: "已归档", updatedAt: "刚刚" });
+    updateReport(activeReport.id, { status: "已保存", updatedAt: "刚刚" });
     setIsReportModalOpen(false);
   };
 
@@ -2530,9 +2530,9 @@ function getReportButtonText(report: ReportItem) {
 }
 
 function getCompactReportButtonText(report: ReportItem) {
-  if (report.status === "待生成") return "生成草稿";
+  if (report.status === "待生成") return "生成内容";
   if (report.status === "生成失败") return "重新生成";
-  if (report.status === "草稿待确认") return "确认草稿";
+  if (report.status === "草稿待确认") return "确认内容";
   if (report.status === "已保存，未发送最新修改") return "继续编辑";
   if (report.status === "已保存") return "继续编辑";
   if (report.status === "已发送" || report.status === "已归档") return "查看内容";
@@ -2567,14 +2567,14 @@ function getDailyReportCopy(report: ReportItem) {
   }
 
   if (report.status === "已归档") {
-    return "今日日报已归档，可回看内容和关联的工作记录。";
+    return "今日日报已保存，可回看内容和关联的工作记录。";
   }
 
   if (report.status === "生成中") {
     return "正在根据今日 AI 工作记录生成日报。";
   }
 
-  return "选择今日 AI 工作记录，生成可确认的日报。";
+  return "可直接手写日报，也可选择今日 AI 工作记录生成。";
 }
 
 function getSummaryReportLabel(report: ReportItem) {
@@ -2584,7 +2584,7 @@ function getSummaryReportLabel(report: ReportItem) {
 function getPersonalWeeklyInlineCopy(report: ReportItem) {
   if (report.status === "已发送") return "已提交给上级";
   if (report.status === "已保存") return "可继续编辑或发送";
-  if (report.status === "生成中") return "正在生成草稿";
+  if (report.status === "生成中") return "正在生成周报";
   if (report.status === "生成失败") return "可重新生成";
   return `已收集 ${report.sessionCount} 篇日报`;
 }
@@ -2594,12 +2594,12 @@ function getManagementWeeklyLabel(report: ReportItem) {
 }
 
 function getManagementWeeklyInlineCopy(report: ReportItem, coverage?: ReportCoverage) {
-  if (report.status === "已归档") return "已完成归档";
+  if (report.status === "已归档") return "已保存";
   if (report.status === "已发送") return "已提交给上级";
-  if (report.status === "已保存") return "可继续编辑或归档";
-  if (report.status === "生成中") return "正在生成草稿";
+  if (report.status === "已保存") return "可继续编辑";
+  if (report.status === "生成中") return "正在生成周报";
   if (report.status === "生成失败") return "可重新生成";
-  if (!coverage) return report.kind === "department_weekly" ? "等待小组周报" : "等待个人周报";
+  if (!coverage) return report.kind === "department_weekly" ? "可直接手写或等待小组周报" : "可直接手写或等待个人周报";
 
   if (report.kind === "department_weekly") {
     return `已收集 ${coverage.submitted}/${coverage.expected} 组周报`;
@@ -2713,21 +2713,17 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
   if (role === "director" && report.groups && report.groups.length > 0) {
     return (
       <div className="console-token-scope">
-        <TokenPersonalSummary range={range} report={report} />
-        <div className="console-token-scope-main">
-          <div className="console-token-scope-head">
-            <span>各组 Token</span>
-            <strong>{report.total}</strong>
-            <em>
-              {report.sessions} 个 session · {report.groups.length} 个组已上报
-            </em>
-          </div>
-          <TokenVerticalBars
-            ariaLabel="各组 Token 分布"
-            caption="各组 Token"
-            items={report.groups}
-          />
-        </div>
+        <TokenSummaryRow
+          range={range}
+          report={report}
+          scopeLabel="各组 Token"
+          scopeMeta={`${report.sessions} 个 session · ${report.groups.length} 个组已上报`}
+        />
+        <TokenVerticalBars
+          ariaLabel="各组 Token 分布"
+          caption="各组 Token"
+          items={report.groups}
+        />
       </div>
     );
   }
@@ -2735,21 +2731,17 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
   if (role === "team_leader" && typeof report.uploaders === "number") {
     return (
       <div className="console-token-scope">
-        <TokenPersonalSummary range={range} report={report} />
-        <div className="console-token-scope-main">
-          <div className="console-token-scope-head">
-            <span>本组 Token</span>
-            <strong>{report.total}</strong>
-            <em>
-              {report.sessions} 个 session · {report.uploaders} 人已上报
-            </em>
-          </div>
-          <TokenVerticalBars
-            ariaLabel="组内成员 Token 分布"
-            caption="组内成员 Token"
-            items={report.memberGroups ?? []}
-          />
-        </div>
+        <TokenSummaryRow
+          range={range}
+          report={report}
+          scopeLabel="本组 Token"
+          scopeMeta={`${report.sessions} 个 session · ${report.uploaders} 人已上报`}
+        />
+        <TokenVerticalBars
+          ariaLabel="组内成员 Token 分布"
+          caption="组内成员 Token"
+          items={report.memberGroups ?? []}
+        />
       </div>
     );
   }
@@ -2757,17 +2749,13 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
   if (typeof report.uploaders === "number") {
     return (
       <div className="console-token-scope">
-        <TokenPersonalSummary range={range} report={report} />
-        <div className="console-token-scope-main">
-          <div className="console-token-scope-head">
-            <span>本组 Token</span>
-            <strong>{report.total}</strong>
-            <em>
-              {report.sessions} 个 session · {report.uploaders} 人已上报
-            </em>
-          </div>
-          <TokenMetricBars bars={report.bars} />
-        </div>
+        <TokenSummaryRow
+          range={range}
+          report={report}
+          scopeLabel="本组 Token"
+          scopeMeta={`${report.sessions} 个 session · ${report.uploaders} 人已上报`}
+        />
+        <TokenMetricBars bars={report.bars} />
       </div>
     );
   }
@@ -2784,142 +2772,85 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
   );
 }
 
-function TokenPersonalSummary({ range, report }: { range: TokenRange; report: TokenReport }) {
+function TokenSummaryRow({
+  range,
+  report,
+  scopeLabel,
+  scopeMeta
+}: {
+  range: TokenRange;
+  report: TokenReport;
+  scopeLabel: string;
+  scopeMeta: string;
+}) {
   const sessions = report.mine?.sessions ?? report.sessions;
   const total = report.mine?.total ?? report.total;
 
   return (
-    <div className="console-token-personal">
-      <span>
-        <strong>我的 Token</strong>
-        <em>
-          {getTokenRangeLabel(range)} · {sessions} 个 session
-        </em>
-      </span>
-      <b>{total}</b>
+    <div className="console-token-summary-row">
+      <TokenSummaryMetric
+        label="我的 Token"
+        value={total}
+        meta={`${getTokenRangeLabel(range)} · ${sessions} 个 session`}
+      />
+      <TokenSummaryMetric label={scopeLabel} value={report.total} meta={scopeMeta} primary />
+    </div>
+  );
+}
+
+function TokenSummaryMetric({
+  label,
+  value,
+  meta,
+  primary = false
+}: {
+  label: string;
+  value: string;
+  meta: string;
+  primary?: boolean;
+}) {
+  return (
+    <div
+      className={`console-token-summary-metric${
+        primary ? " console-token-summary-metric--primary" : ""
+      }`}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <em>{meta}</em>
     </div>
   );
 }
 
 function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
-  const chartRef = useRef<HTMLDivElement | null>(null);
-  const chartInstanceRef = useRef<ECharts | null>(null);
-  const option = useMemo<EChartsOption>(() => {
-    const middleIndex = Math.floor((bars.length - 1) / 2);
-
-    return {
-      animation: false,
-      grid: {
-        top: 6,
-        right: 60,
-        bottom: 4,
-        left: 46,
-        containLabel: false
-      },
-      tooltip: {
-        trigger: "axis",
-        axisPointer: {
-          type: "none"
-        },
-        borderWidth: 0,
-        padding: [6, 8],
-        textStyle: {
-          color: "#172033",
-          fontSize: 12
-        },
-        formatter: (params: unknown) => {
-          const item = Array.isArray(params) ? params[0] : params;
-          const index =
-            item && typeof item === "object" && "dataIndex" in item
-              ? Number((item as { dataIndex: number }).dataIndex)
-              : 0;
-          const bar = bars[index] ?? bars[0];
-          return `${bar.label}<br />${bar.text}`;
-        }
-      },
-      xAxis: {
-        type: "value",
-        show: false,
-        min: 0
-      },
-      yAxis: {
-        type: "category",
-        inverse: true,
-        data: bars.map((bar) => bar.label),
-        axisTick: { show: false },
-        axisLine: { show: false },
-        axisLabel: {
-          color: "#64748b",
-          fontSize: 11,
-          interval: 0,
-          formatter: (value: string, index: number) =>
-            bars.length <= 3 || index === 0 || index === middleIndex || index === bars.length - 1
-              ? value
-              : ""
-        }
-      },
-      series: [
-        {
-          type: "bar",
-          data: bars.map((bar) => bar.value),
-          barWidth: bars.length === 1 ? 14 : bars.length <= 3 ? 12 : 6,
-          barMaxWidth: 14,
-          itemStyle: {
-            borderRadius: [999, 999, 999, 999],
-            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-              { offset: 0, color: "#69a6ff" },
-              { offset: 1, color: "#1677ff" }
-            ])
-          },
-          label: {
-            show: true,
-            position: "right",
-            color: "#526173",
-            fontSize: 11,
-            formatter: (params: unknown) => {
-              const index =
-                params && typeof params === "object" && "dataIndex" in params
-                  ? Number((params as { dataIndex: number }).dataIndex)
-                  : 0;
-              return bars[index]?.text ?? "";
-            }
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#0958d9"
-            }
-          }
-        }
-      ]
-    };
-  }, [bars]);
-
-  useEffect(() => {
-    if (!chartRef.current) return undefined;
-
-    const chart = echarts.init(chartRef.current, undefined, { renderer: "svg" });
-    chartInstanceRef.current = chart;
-
-    const resize = () => chart.resize();
-    window.addEventListener("resize", resize);
-
-    return () => {
-      window.removeEventListener("resize", resize);
-      chart.dispose();
-      chartInstanceRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!chartInstanceRef.current) return;
-    chartInstanceRef.current.setOption(option, true);
-    chartInstanceRef.current.resize();
-  }, [option]);
+  const activeBars = bars.filter((bar) => bar.value > 0);
+  const maxValue = Math.max(...activeBars.map((bar) => bar.value), 1);
+  const hiddenEmptyDays = Math.max(0, bars.length - activeBars.length);
 
   return (
     <div className="console-token-chart" aria-label="每日解析 Token 趋势">
       <span className="console-token-chart__caption">每日解析 Token</span>
-      <div ref={chartRef} className="console-token-echart" />
+      {activeBars.length ? (
+        <div className="console-token-day-bars">
+          {activeBars.slice(-4).map((bar) => (
+            <div key={bar.label} className="console-token-day-bars__item">
+              <span>{bar.label}</span>
+              <i>
+                <b style={{ width: `${Math.max(12, Math.round((bar.value / maxValue) * 100))}%` }} />
+              </i>
+              <em>{bar.text}</em>
+            </div>
+          ))}
+          {hiddenEmptyDays ? (
+            <small>其余 {hiddenEmptyDays} 天暂无上传</small>
+          ) : null}
+        </div>
+      ) : (
+        <div className="console-token-empty-chart">
+          <strong>当前范围暂无 Token 数据</strong>
+          <span>上传 session 后将展示每日解析趋势</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -2961,9 +2892,9 @@ function TokenVerticalBars({
     return {
       animation: false,
       grid: {
-        top: 18,
+        top: 24,
         right: 12,
-        bottom: hasOverflow ? 38 : 32,
+        bottom: hasOverflow ? 42 : 34,
         left: 42,
         containLabel: false
       },
@@ -3041,7 +2972,7 @@ function TokenVerticalBars({
         {
           type: "bar",
           data: items.map((item) => item.value),
-          barMaxWidth: 24,
+          barMaxWidth: 28,
           itemStyle: {
             borderRadius: [5, 5, 0, 0],
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -3181,7 +3112,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 各组日报已完成汇总。
 
 ## 重点风险
-* 部门日报需要基于已发送小组日报确认后归档。
+* 部门日报需要基于已发送小组日报确认后保存。
 
 ## 明日重点
 * 跟进高优先级风险和跨组依赖。`;
@@ -3213,7 +3144,7 @@ function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
     return `各组发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
   }
 
-  return "系统将读取本周个人日报、任务、风险与阻塞生成草稿。";
+  return "系统将读取本周个人日报、任务、风险与阻塞生成周报。";
 }
 
 function getEditorMeta(report: ReportItem) {
@@ -3234,9 +3165,9 @@ function getEditorMeta(report: ReportItem) {
 
 function getSendButtonText(report: ReportItem) {
   if (report.scope === "team")
-    return report.kind.includes("weekly") ? "归档组周报" : "保存并发送给总监";
-  if (report.scope === "department") return "保存归档";
-  return report.kind.includes("weekly") ? "归档周报" : "保存日报";
+    return report.kind.includes("weekly") ? "提交给总监" : "保存并发送给总监";
+  if (report.scope === "department") return report.kind.includes("weekly") ? "保存周报" : "保存部门日报";
+  return report.kind.includes("weekly") ? "保存周报" : "保存日报";
 }
 
 function renderReportModalFooter({
@@ -3631,7 +3562,7 @@ function ReportModalContent({
         </div>
         {sessionError ? <Alert type="error" showIcon message={sessionError} /> : null}
         {draftError ? (
-          <Alert type="error" showIcon message="日报草稿生成失败" description={draftError} />
+          <Alert type="error" showIcon message="日报生成失败" description={draftError} />
         ) : null}
         <Checkbox.Group
           value={selectedSessionIds}
@@ -4070,7 +4001,7 @@ function ReportStatusTag({ status }: { status: ReportStatus }) {
         : status === "草稿待确认" || status === "生成中" || status === "已保存"
           ? "blue"
           : "gold";
-  const label = status === "草稿待确认" ? "待确认" : status;
+  const label = status === "草稿待确认" ? "待确认" : status === "已归档" ? "已保存" : status;
   return <Tag color={color}>{label}</Tag>;
 }
 

@@ -312,6 +312,10 @@ export async function fetchTeamReportTodayOrNull(reportDate?: string) {
     throw error;
   }
 }
+export const saveTeamReportCurrent = (data: {
+  report_date: string;
+  content?: string;
+}) => unwrap(api.put<TeamReport>("/reports/team/today", data));
 export const generateTeamReport = (reportDate?: string) =>
   unwrap(
     api.post<TeamReport>(
@@ -360,6 +364,11 @@ export const generateDepartmentReport = (reportDate?: string) =>
       reportDate ? { params: { report_date: reportDate } } : undefined
     )
   );
+export const saveDepartmentReportCurrent = (data: {
+  report_date: string;
+  content?: string;
+  archive?: boolean;
+}) => unwrap(api.put<DepartmentReport>("/reports/department/today", data));
 export const fetchDepartmentReports = (params?: Record<string, string>) =>
   unwrap(api.get<PaginatedDepartmentReports>("/reports/department", params));
 export const fetchDepartmentReport = (id: string) =>
