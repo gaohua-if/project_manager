@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,6 +18,8 @@ type ManagedAgentHandler struct {
 	db     *sql.DB
 	client *service.ManagedAgentClient
 }
+
+const defaultDailyReportModelID = "Kimi-K2.6"
 
 func NewManagedAgentHandler(db *sql.DB, client *service.ManagedAgentClient) *ManagedAgentHandler {
 	return &ManagedAgentHandler{db: db, client: client}
@@ -110,15 +113,22 @@ func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id is required"})
 		return
 	}
-	if req.Message == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message is required"})
-		return
-	}
 	req.ModelID = strings.TrimSpace(req.ModelID)
 
-	params := map[string]string{"message": req.Message}
+	params := map[string]string{}
 	for key, value := range req.Params {
-		params[key] = value
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		params[key] = strings.TrimSpace(value)
+	}
+	if req.Message != "" {
+		params["message"] = req.Message
+	}
+	if len(params) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message or params is required"})
+		return
 	}
 	submitResp, err := h.client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
 		AgentID: agentID,
@@ -456,17 +466,20 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "one or more sessions are not accessible"})
 		return
 	}
-	sessionIDsJSON, _ := json.Marshal(req.SessionIDs)
+	sessionURLs := dailyReportSessionLogURLs(r, orderDraftSessions(sessions, req.SessionIDs))
+	urlsJSON, _ := json.Marshal(sessionURLs)
+	req.ModelID = strings.TrimSpace(req.ModelID)
+	if req.ModelID == "" {
+		req.ModelID = defaultDailyReportModelID
+	}
 
 	submitResp, err := h.client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
 		AgentID: req.AgentID,
 		ModelID: req.ModelID,
 		Params: map[string]string{
-			"message":                   "Generate an Aida daily report. Use the bound Aida Daily Report MCP tool aida_daily_report_get_context to read context, then return strict JSON.",
-			"aida_daily_report_mcp_url": absoluteRequestURL(r, "/api/v1/mcp/daily-report"),
-			"output_contract":           service.DailyReportOutputContract(),
-			"report_date":               reportDate,
-			"session_ids_json":          string(sessionIDsJSON),
+			"urls":            string(urlsJSON),
+			"output_contract": service.DailyReportOutputContract(),
+			"report_date":     reportDate,
 		},
 	})
 	if err != nil {
@@ -477,6 +490,7 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 	inputRef := map[string]any{
 		"report_date": reportDate,
 		"session_ids": req.SessionIDs,
+		"urls":        sessionURLs,
 	}
 	runID, err := h.insertAIRun(u.ID, "daily_report", req.AgentID, submitResp, req.ModelID, inputRef)
 	if err != nil {
@@ -842,4 +856,12 @@ func absoluteRequestURL(r *http.Request, path string) string {
 		host = r.Host
 	}
 	return proto + "://" + host + path
+}
+
+func dailyReportSessionLogURLs(r *http.Request, sessions []model.ReportDraftSession) []string {
+	urls := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		urls = append(urls, absoluteRequestURL(r, "/api/v1/sessions/"+url.PathEscape(session.ID)+"/log"))
+	}
+	return urls
 }

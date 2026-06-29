@@ -352,6 +352,7 @@ type ReportDraftSession struct {
 	Model            string         `json:"model"`
 	Summary          string         `json:"summary,omitempty"`
 	ToolCallsJSON    map[string]int `json:"tool_calls_json,omitempty"`
+	RawLogURL        *string        `json:"raw_log_url,omitempty"`
 	TaskID           *string        `json:"task_id,omitempty"`
 	TaskTitle        string         `json:"task_title,omitempty"`
 	RequirementID    *string        `json:"requirement_id,omitempty"`

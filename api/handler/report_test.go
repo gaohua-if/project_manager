@@ -87,8 +87,8 @@ func TestGenerateTodayDraftSuccessDoesNotWriteDailyReports(t *testing.T) {
 	mock.ExpectQuery("SELECT s.id::text").
 		WithArgs("user-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
-			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成 Dashboard 接入", "{}", nil, "", nil, "", 100, 200, 300).
-			AddRow("session-2", "ref-2", "codex", now.Add(2*time.Hour), nil, nil, "gpt", "补充测试", "{}", nil, "", nil, "", 20, 30, 50))
+			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成 Dashboard 接入", "{}", "logs/session-1.jsonl", nil, "", nil, "", 100, 200, 300).
+			AddRow("session-2", "ref-2", "codex", now.Add(2*time.Hour), nil, nil, "gpt", "补充测试", "{}", "logs/session-2.jsonl", nil, "", nil, "", 20, 30, 50))
 	mock.ExpectQuery("SELECT t.id::text").
 		WithArgs("user-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "requirement_id", "requirement_title", "status", "progress", "owner"}).
@@ -225,7 +225,7 @@ func draftSessionColumns() []string {
 	return []string{
 		"id", "session_ref", "agent_type", "started_at", "ended_at", "duration_secs",
 		"model", "summary", "tool_calls_json",
-		"task_id", "task_title", "requirement_id", "requirement_title",
+		"raw_log_url", "task_id", "task_title", "requirement_id", "requirement_title",
 		"input_tokens", "output_tokens", "total_tokens",
 	}
 }

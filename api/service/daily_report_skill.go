@@ -17,6 +17,10 @@ func DailyReportSkillMarkdown(mcpURL string) string {
 
 Use this skill when generating a personal daily report for Aida.
 
+## Start Prompt Values
+
+- urls: required. JSON array string of session or log URLs, for example ["https://aida.example.com/api/v1/sessions/<id>/log"].
+
 ## Required MCP
 
 Bind the Aida Daily Report MCP server:

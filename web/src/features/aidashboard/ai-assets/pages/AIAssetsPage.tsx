@@ -1069,7 +1069,10 @@ export function AIAssetsPage() {
               type="primary"
               icon={<PlayCircleOutlined />}
               loading={runAgentMutation.isPending}
-              disabled={!runMessage.trim() || activeRunQuery.data?.status === "running"}
+              disabled={
+                (!runMessage.trim() && !runParamsText.trim()) ||
+                activeRunQuery.data?.status === "running"
+              }
               onClick={() => runAgentMutation.mutate()}
             >
               提交运行
@@ -1091,13 +1094,13 @@ export function AIAssetsPage() {
             rows={4}
             value={runParamsText}
             onChange={(event) => setRunParamsText(event.target.value)}
-            placeholder={"模板参数，每行一个 key=value，例如：\nreport_date=2026-06-25\nuser_name=普通用户"}
+            placeholder={"启动参数，每行一个 key=value，例如：\nurls=[\"https://example.com/session\"]\nreport_date=2026-06-25"}
           />
           <Input.TextArea
             rows={5}
             value={runMessage}
             onChange={(event) => setRunMessage(event.target.value)}
-            placeholder="输入要交给 Agent 执行的任务，例如：基于今天的 Aida session 生成日报草稿。"
+            placeholder="可选补充指令；如果 Agent 的启动模板只需要 urls，可留空。"
           />
           <div className="ai-assets-runner__status">
             <strong>运行状态</strong>

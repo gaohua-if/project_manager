@@ -255,7 +255,7 @@ func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.
 	rows, err := db.Query(`
 		SELECT s.id::text, s.session_ref, s.agent_type, s.started_at, s.ended_at, s.duration_secs,
 			COALESCE(s.model, ''), COALESCE(s.summary, ''), COALESCE(s.tool_calls_json::text, '{}'),
-			s.task_id::text, COALESCE(t.title, ''), s.requirement_id::text, COALESCE(r.title, ''),
+			s.raw_log_url, s.task_id::text, COALESCE(t.title, ''), s.requirement_id::text, COALESCE(r.title, ''),
 			COALESCE(tu.input_tokens, 0), COALESCE(tu.output_tokens, 0), COALESCE(tu.total_tokens, 0)
 		FROM sessions s
 		LEFT JOIN tasks t ON t.id = s.task_id
@@ -278,10 +278,10 @@ func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.
 		var endedAt sql.NullTime
 		var durationSecs sql.NullInt64
 		var toolCallsRaw string
-		var taskID, requirementID sql.NullString
+		var rawLogURL, taskID, requirementID sql.NullString
 		if err := rows.Scan(&s.ID, &s.SessionRef, &s.AgentType, &s.StartedAt, &endedAt, &durationSecs,
 			&s.Model, &s.Summary, &toolCallsRaw,
-			&taskID, &s.TaskTitle, &requirementID, &s.RequirementTitle,
+			&rawLogURL, &taskID, &s.TaskTitle, &requirementID, &s.RequirementTitle,
 			&s.InputTokens, &s.OutputTokens, &s.TotalTokens); err != nil {
 			return nil, err
 		}
@@ -295,6 +295,7 @@ func loadDraftSessions(db *sql.DB, userID string, sessionIDs []string) ([]model.
 		if toolCallsRaw != "" {
 			_ = json.Unmarshal([]byte(toolCallsRaw), &s.ToolCallsJSON)
 		}
+		s.RawLogURL = nullStringPtr(rawLogURL)
 		s.TaskID = nullStringPtr(taskID)
 		s.RequirementID = nullStringPtr(requirementID)
 		sessions = append(sessions, s)

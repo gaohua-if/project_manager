@@ -121,6 +121,70 @@ func TestDailyReportIntegrationReturnsMCPAndSkill(t *testing.T) {
 	}
 }
 
+func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var submitted service.SubmitManagedTaskRequest
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/task/submit" {
+			t.Fatalf("platform path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
+			t.Fatal(err)
+		}
+		writeJSON(w, http.StatusOK, service.SubmitManagedTaskResponse{
+			TaskID: "task-urls",
+			Status: "queued",
+		})
+	}))
+	defer platform.Close()
+
+	now := time.Date(2026, 6, 29, 10, 30, 0, 0, time.UTC)
+	mock.ExpectQuery("SELECT s.id::text").
+		WithArgs("user-1", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
+			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成日报", "{}", "logs/session-1.jsonl", nil, "", nil, "", 100, 200, 300))
+	mock.ExpectQuery("INSERT INTO ai_runs").
+		WithArgs("user-1", "daily_report", "aida-daily-report-agent", "task-urls", "Kimi-K2.6", "pending", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-1"))
+	mock.ExpectQuery("SELECT id::text").
+		WithArgs("run-1", "user-1").
+		WillReturnRows(sqlmock.NewRows(aiRunColumns()).
+			AddRow("run-1", "user-1", "daily_report", nil, "managed_task", "aida-daily-report-agent", nil, "task-urls", nil, "Kimi-K2.6", "pending", []byte(`{"report_date":"2026-06-29","session_ids":["session-1"],"urls":["https://aida.example.com/api/v1/sessions/session-1/log"]}`), []byte(`{}`), nil, now, nil, now))
+
+	h := NewManagedAgentHandler(db, service.NewManagedAgentClient(platform.URL, "platform-token"))
+	req := httptest.NewRequest(http.MethodPost, "/reports/today/managed-agent-runs", bytes.NewBufferString(`{"report_date":"2026-06-29","session_ids":["session-1"],"agent_id":"aida-daily-report-agent"}`))
+	req.Host = "aida.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
+	rec := httptest.NewRecorder()
+
+	h.StartDailyReportRun(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if submitted.AgentID != "aida-daily-report-agent" {
+		t.Fatalf("agent_id = %q", submitted.AgentID)
+	}
+	if submitted.ModelID != "Kimi-K2.6" {
+		t.Fatalf("model_id = %q", submitted.ModelID)
+	}
+	if submitted.Params["urls"] != `["https://aida.example.com/api/v1/sessions/session-1/log"]` {
+		t.Fatalf("urls = %q", submitted.Params["urls"])
+	}
+	if _, ok := submitted.Params["message"]; ok {
+		t.Fatalf("message param should not be submitted: %#v", submitted.Params)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
 func TestCreateAgentScheduleValidatesAndReturnsSchedule(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
