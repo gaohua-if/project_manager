@@ -4,9 +4,7 @@ import {
   App,
   Button,
   Card,
-  Checkbox,
   DatePicker,
-  Drawer,
   Empty,
   Input,
   Modal,
@@ -19,10 +17,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import {
   CalendarOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  FileTextOutlined,
-  TeamOutlined
+  FileTextOutlined
 } from "@ant-design/icons";
 import { useState, type ReactNode } from "react";
 import dayjs from "dayjs";
@@ -30,27 +25,20 @@ import dayjs from "dayjs";
 import {
   fetchDepartmentWeeklyReportCurrentOrNull,
   fetchDepartmentWeeklyReports,
-  fetchDepartmentWeeklyReportSources,
   fetchPersonalWeeklyReportCurrentOrNull,
   fetchPersonalWeeklyReports,
-  fetchPersonalWeeklyReportSources,
   fetchTeamWeeklyReportCurrentOrNull,
   fetchTeamWeeklyReports,
-  fetchTeamWeeklyReportSources,
   saveDepartmentWeeklyReportCurrent,
   savePersonalWeeklyReport,
   saveTeamWeeklyReport
 } from "../../api/client";
 import type {
-  DepartmentTeamWeeklyReportSource,
   DepartmentWeeklyReport,
-  DepartmentWeeklyReportSources,
   PaginatedPersonalWeeklyReports,
   PersonalWeeklyReport,
   PersonalWeeklyReportListItem,
-  PersonalWeeklyReportSources,
-  TeamWeeklyReport,
-  TeamWeeklyReportSources
+  TeamWeeklyReport
 } from "../../api/types";
 import {
   RequirementMetricCard,
@@ -76,20 +64,6 @@ function weekStartOf(value: dayjs.Dayjs) {
 
 function weekEndOf(weekStart: string) {
   return dayjs(weekStart).add(6, "day").format("YYYY-MM-DD");
-}
-
-function formatDailySourceTitle(reportDate: string) {
-  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-  const value = dayjs(reportDate);
-  return `${value.format("MM-DD")} ${weekdays[value.day()]}日报`;
-}
-
-function summarizeSourceContent(content: string) {
-  const text = content
-    .replace(/[#>*_`-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text || "暂无摘要";
 }
 
 function ReportsSkeleton({ rows = 6 }: { rows?: number }) {
@@ -158,11 +132,6 @@ export function PersonalWeeklyReportsView({
   const [contentTouched, setContentTouched] = useState(false);
   const showHistory = !modalMode;
 
-  const sourcesQuery = useQuery<PersonalWeeklyReportSources>({
-    queryKey: ["reports", "weekly", "mine", "sources", weekStart],
-    queryFn: () => fetchPersonalWeeklyReportSources(weekStart),
-    staleTime: 30_000
-  });
   const reportQuery = useQuery<PersonalWeeklyReport | null>({
     queryKey: ["reports", "weekly", "mine", "current", weekStart],
     queryFn: () => fetchPersonalWeeklyReportCurrentOrNull(weekStart),
@@ -176,9 +145,6 @@ export function PersonalWeeklyReportsView({
   });
 
   const report = reportQuery.data ?? null;
-  const defaultDailyReportIds =
-    sourcesQuery.data?.daily_reports.map((item) => item.report_id) ?? [];
-  const effectiveDailyReportIds = defaultDailyReportIds;
 
   const effectiveTab = modalMode
     ? step
@@ -188,16 +154,8 @@ export function PersonalWeeklyReportsView({
   const editorContent = contentTouched
     ? content
     : (report?.content ?? "");
-  const collectedDailyCount = sourcesQuery.data?.daily_count ?? 0;
   const displayWeekStart = formatWeekDate(weekStart);
   const displayWeekEnd = formatWeekDate(weekEnd);
-  const sourceIDs = !report
-      ? {
-          source_daily_report_ids: effectiveDailyReportIds
-        }
-      : {
-          source_daily_report_ids: report.source_daily_report_ids
-        };
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["reports", "weekly", "mine"] });
@@ -205,7 +163,7 @@ export function PersonalWeeklyReportsView({
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      savePersonalWeeklyReport({ week_start: weekStart, content: editorContent, ...sourceIDs }),
+      savePersonalWeeklyReport({ week_start: weekStart, content: editorContent }),
     onSuccess: (saved) => {
       setContent(saved.content);
       setContentTouched(true);
@@ -244,20 +202,10 @@ export function PersonalWeeklyReportsView({
                 <span>周期：{weeklyRange(report.week_start, report.week_end)}</span>
                 <span>状态：{report.status === "submitted" ? "已发送" : "已保存"}</span>
                 <span>更新时间：{formatDateTime(report.updated_at)}</span>
-                <span>来源日报数：{report.source_daily_report_ids.length}</span>
-                <span>来源 session 数：{report.source_session_ids.length}</span>
               </Space>
             </Card>
             <Card title="周报正文">
               {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
-            </Card>
-            <Card title="来源日报 / 工作记录">
-              <PersonalWeeklySources
-                query={sourcesQuery}
-                selectedDailyReportIds={report.source_daily_report_ids}
-                onSelectedDailyReportIdsChange={() => undefined}
-                readonly
-              />
             </Card>
           </Space>
         )}
@@ -278,7 +226,7 @@ export function PersonalWeeklyReportsView({
           <RequirementMetricCard
             tone="primary"
             icon={<CalendarOutlined />}
-            loading={sourcesQuery.isLoading}
+            loading={reportQuery.isLoading}
             metric={{
               key: "week",
               title: "周报周期",
@@ -289,23 +237,12 @@ export function PersonalWeeklyReportsView({
           <RequirementMetricCard
             tone="success"
             icon={<FileTextOutlined />}
-            loading={sourcesQuery.isLoading}
+            loading={reportQuery.isLoading}
             metric={{
-              key: "daily",
-              title: "个人日报",
-              value: collectedDailyCount,
-              description: "本周已保存/发送日报"
-            }}
-          />
-          <RequirementMetricCard
-            tone="info"
-            icon={<CheckCircleOutlined />}
-            loading={sourcesQuery.isLoading}
-            metric={{
-              key: "available-daily",
-              title: "来源摘要",
-              value: effectiveDailyReportIds.length,
-              description: "现有接口可得日报数"
+              key: "content",
+              title: "正文状态",
+              value: report?.content?.trim() ? 1 : 0,
+              description: report?.content?.trim() ? "已保存" : "未生成"
             }}
           />
         </RequirementMetricGrid>
@@ -374,9 +311,6 @@ export function PersonalWeeklyReportsView({
               <span>{displayWeekStart}</span>
             </span>
           </header>
-          <p className="reports-team-card__body reports-team-card__body--compact">
-            来源摘要：{collectedDailyCount > 0 ? `现有接口可得 ${collectedDailyCount} 篇个人日报` : "来源摘要暂不可用"}。
-          </p>
           <div className="reports-edit-shell">
             <TextArea
               rows={14}
@@ -434,120 +368,6 @@ export function PersonalWeeklyReportModal({
         onDone={onDone}
       />
     </Modal>
-  );
-}
-
-function PersonalWeeklySources({
-  query,
-  selectedDailyReportIds,
-  onSelectedDailyReportIdsChange,
-  readonly = false
-}: {
-  query: UseQueryResult<PersonalWeeklyReportSources>;
-  selectedDailyReportIds: string[];
-  onSelectedDailyReportIdsChange: (ids: string[]) => void;
-  readonly?: boolean;
-}) {
-  const sources = query.data;
-  const [activeSource, setActiveSource] = useState<PersonalWeeklyReportSources["daily_reports"][number] | null>(
-    null
-  );
-  if (query.isError)
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message="周报来源加载失败"
-        description={errorMessage(query.error)}
-      />
-    );
-  if (query.isLoading) return <ReportsSkeleton />;
-  if (!sources) return <ReportsEmpty description="暂无来源" />;
-  if (sources.daily_reports.length === 0)
-    return <ReportsEmpty description="本周暂无可用于生成周报的日报" />;
-  if (readonly)
-    return (
-      <>
-        <div className="reports-source-list">
-          {sources.daily_reports
-            .filter((item) => selectedDailyReportIds.includes(item.report_id))
-            .map((item) => (
-              <div key={item.report_id} className="reports-source-list__item">
-                <div className="reports-source-list__main reports-source-list__main--readonly">
-                  <div className="reports-source-list__content">
-                    <div className="reports-source-list__head">
-                      <strong>{formatDailySourceTitle(item.report_date)}</strong>
-                      <span className="reports-tag is-submitted">已发送</span>
-                      <span className="reports-tag is-team">个人日报</span>
-                      <Button
-                        type="link"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setActiveSource(item);
-                        }}
-                      >
-                        查看全文
-                      </Button>
-                    </div>
-                    <p>{summarizeSourceContent(item.content)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-        </div>
-        <Drawer
-          title={activeSource ? `${formatDailySourceTitle(activeSource.report_date)}原文` : "日报原文"}
-          open={Boolean(activeSource)}
-          size={560}
-          onClose={() => setActiveSource(null)}
-        >
-          <pre className="reports-source-content">{activeSource?.content}</pre>
-        </Drawer>
-      </>
-    );
-  return (
-    <>
-      <Checkbox.Group
-        className="reports-source-list"
-        value={selectedDailyReportIds}
-        onChange={(values) => onSelectedDailyReportIdsChange(values.map(String))}
-      >
-        {sources.daily_reports.map((item) => (
-          <div key={item.report_id} className="reports-source-list__item">
-            <div className="reports-source-list__main">
-              <Checkbox value={item.report_id} />
-              <div className="reports-source-list__content">
-                <div className="reports-source-list__head">
-                  <strong>{formatDailySourceTitle(item.report_date)}</strong>
-                  <span className="reports-tag is-submitted">已发送</span>
-                  <span className="reports-tag is-team">个人日报</span>
-                  <Button
-                    type="link"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setActiveSource(item);
-                    }}
-                  >
-                    查看全文
-                  </Button>
-                </div>
-                <p>{summarizeSourceContent(item.content)}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </Checkbox.Group>
-      <Drawer
-        title={activeSource ? `${formatDailySourceTitle(activeSource.report_date)}原文` : "日报原文"}
-        open={Boolean(activeSource)}
-        size={560}
-        onClose={() => setActiveSource(null)}
-      >
-        <pre className="reports-source-content">{activeSource?.content}</pre>
-      </Drawer>
-    </>
   );
 }
 
@@ -722,8 +542,6 @@ function PersonalWeeklyRecordsTable({
       render: (_, record) => weeklyRange(record.week_start, record.week_end)
     },
     { title: "状态", dataIndex: "status", width: 120, render: personalWeeklyStatus },
-    { title: "来源日报", dataIndex: "source_daily_count", width: 120 },
-    { title: "来源 session", dataIndex: "source_session_count", width: 130 },
     { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
@@ -783,12 +601,6 @@ function TeamWeeklyRecordsTable({
       render: (_, record) => weeklyRange(record.week_start)
     },
     { title: "状态", key: "status", width: 120, render: (_, record) => teamWeeklyStatus(record) },
-    {
-      title: "来源个人周报",
-      key: "source_personal_weekly_report_ids",
-      width: 150,
-      render: (_, record) => record.source_personal_weekly_report_ids.length
-    },
     { title: "提交时间", dataIndex: "submitted_at", render: formatDateTime },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
@@ -837,12 +649,6 @@ function DepartmentWeeklyRecordsTable({
       render: (_, record) => weeklyRange(record.week_start)
     },
     { title: "状态", key: "status", width: 120, render: (_, record) => departmentWeeklyStatus(record) },
-    {
-      title: "来源小组周报",
-      key: "source_team_weekly_report_ids",
-      width: 150,
-      render: (_, record) => record.source_team_weekly_report_ids.length
-    },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
       title: "操作",
@@ -898,11 +704,6 @@ function TeamWeeklyReportsView({
   const [contentTouched, setContentTouched] = useState(false);
   const showHistory = !modalMode;
 
-  const sourcesQuery = useQuery<TeamWeeklyReportSources>({
-    queryKey: ["reports", "weekly", "team", "sources", weekStart],
-    queryFn: () => fetchTeamWeeklyReportSources(weekStart),
-    staleTime: 30_000
-  });
   const reportQuery = useQuery<TeamWeeklyReport | null>({
     queryKey: ["reports", "weekly", "team", "current", weekStart],
     queryFn: () => fetchTeamWeeklyReportCurrentOrNull(weekStart),
@@ -915,22 +716,11 @@ function TeamWeeklyReportsView({
     enabled: showHistory
   });
 
-  const sources = sourcesQuery.data;
   const report = reportQuery.data ?? null;
   const history = historyQuery.data ?? [];
-  const defaultPersonalWeeklyReportIds =
-    sources?.submitted_personal_weekly_reports.map((item) => item.report_id) ?? [];
-  const effectivePersonalWeeklyReportIds = defaultPersonalWeeklyReportIds;
   const editorContent = contentTouched
     ? content
     : (report?.content ?? "");
-  const sourceIDs = !report
-      ? {
-          source_personal_weekly_report_ids: effectivePersonalWeeklyReportIds
-        }
-      : {
-          source_personal_weekly_report_ids: report.source_personal_weekly_report_ids
-        };
   const submittedLocked = Boolean(report?.submitted_at);
   const effectiveTab = !showHistory && tab === "history" ? "draft" : tab;
   const displayWeekStart = formatWeekDate(weekStart);
@@ -948,7 +738,7 @@ function TeamWeeklyReportsView({
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      saveTeamWeeklyReport({ week_start: weekStart, content: editorContent, ...sourceIDs }),
+      saveTeamWeeklyReport({ week_start: weekStart, content: editorContent }),
     onSuccess: (saved) => {
       setContent(saved.content);
       setContentTouched(true);
@@ -983,19 +773,10 @@ function TeamWeeklyReportsView({
                 <span>状态：{report.submitted_at ? "已提交" : "已保存"}</span>
                 <span>提交时间：{formatDateTime(report.submitted_at)}</span>
                 <span>更新时间：{formatDateTime(report.updated_at)}</span>
-                <span>来源个人周报数：{report.source_personal_weekly_report_ids.length}</span>
               </Space>
             </Card>
             <Card title="周报正文">
               {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
-            </Card>
-            <Card title="来源个人周报">
-              <TeamWeeklySources
-                query={sourcesQuery}
-                selectedPersonalWeeklyReportIds={report.source_personal_weekly_report_ids}
-                onSelectedPersonalWeeklyReportIdsChange={() => undefined}
-                readonly
-              />
             </Card>
           </Space>
         )}
@@ -1016,7 +797,7 @@ function TeamWeeklyReportsView({
         <RequirementMetricCard
           tone="primary"
           icon={<CalendarOutlined />}
-          loading={sourcesQuery.isLoading}
+          loading={reportQuery.isLoading}
           metric={{
             key: "week",
             title: "周报周期",
@@ -1027,34 +808,12 @@ function TeamWeeklyReportsView({
         <RequirementMetricCard
           tone="success"
           icon={<FileTextOutlined />}
-          loading={sourcesQuery.isLoading}
+          loading={reportQuery.isLoading}
           metric={{
-            key: "personal-weekly",
-            title: "已发送个人周报",
-            value: sources?.submitted_personal_weekly_count ?? 0,
-            description: "TL 本人和成员"
-          }}
-        />
-        <RequirementMetricCard
-          tone="info"
-          icon={<TeamOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "available-personal-weekly",
-            title: "来源摘要",
-            value: effectivePersonalWeeklyReportIds.length,
-            description: "现有接口可得个人周报数"
-          }}
-        />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<CloseCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "missing",
-            title: "未发送人员",
-            value: sources?.missing_people_count ?? 0,
-            description: submittedLocked ? "已提交" : "待提交"
+            key: "content",
+            title: "正文状态",
+            value: report?.content?.trim() ? 1 : 0,
+            description: report?.content?.trim() ? "已保存" : "未生成"
           }}
         />
       </RequirementMetricGrid>
@@ -1106,7 +865,7 @@ function TeamWeeklyReportsView({
         <section className="reports-team-card">
           <header className="reports-team-card__head">
             <span className="reports-team-card__title">
-              {report?.team_name ?? sources?.team_name ?? "小组周报"}
+              {report?.team_name ?? "小组周报"}
             </span>
             <span className="reports-team-card__meta">
               <span className={`reports-tag ${submittedLocked ? "is-submitted" : "is-team"}`}>
@@ -1137,108 +896,6 @@ function TeamWeeklyReportsView({
         </section>
       )}
     </PagePanel>
-  );
-}
-
-function TeamWeeklySources({
-  query,
-  selectedPersonalWeeklyReportIds,
-  onSelectedPersonalWeeklyReportIdsChange,
-  readonly = false
-}: {
-  query: UseQueryResult<TeamWeeklyReportSources>;
-  selectedPersonalWeeklyReportIds: string[];
-  onSelectedPersonalWeeklyReportIdsChange: (ids: string[]) => void;
-  readonly?: boolean;
-}) {
-  const sources = query.data;
-  if (query.isError)
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message="周报来源加载失败"
-        description={errorMessage(query.error)}
-      />
-    );
-  if (query.isLoading) return <ReportsSkeleton />;
-  if (!sources) return <ReportsEmpty description="暂无来源" />;
-  if (sources.submitted_personal_weekly_reports.length === 0 && sources.missing_people.length === 0)
-    return <ReportsEmpty description="暂无小组人员" />;
-  if (readonly)
-    return (
-      <>
-        <div className="reports-member-grid">
-          {sources.submitted_personal_weekly_reports
-            .filter((item) => selectedPersonalWeeklyReportIds.includes(item.report_id))
-            .map((item) => (
-              <article key={item.report_id} className="reports-report-card is-auto">
-                <header className="reports-report-card__head">
-                  <span className="reports-report-card__head-left">
-                    <span className="reports-report-card__author">{item.user_name}</span>
-                    <span className="reports-tag is-team">
-                      {item.source_role === "leader" ? "TL 本人" : "成员"}
-                    </span>
-                  </span>
-                  <span className="reports-report-card__date">{formatWeekDate(item.week_start)}</span>
-                </header>
-                <p className="reports-report-card__content">{item.submitted_content}</p>
-              </article>
-            ))}
-        </div>
-      </>
-    );
-  return (
-    <>
-      {sources.submitted_personal_weekly_reports.length === 0 ? (
-        <ReportsEmpty description="暂无可用个人周报" />
-      ) : (
-        <Checkbox.Group
-          className="reports-member-grid"
-          value={selectedPersonalWeeklyReportIds}
-          onChange={(values) => onSelectedPersonalWeeklyReportIdsChange(values.map(String))}
-        >
-          {sources.submitted_personal_weekly_reports.map((item) => (
-            <label key={item.report_id} className="reports-report-card is-auto">
-              <header className="reports-report-card__head">
-                <span className="reports-report-card__head-left">
-                  <Checkbox value={item.report_id} />
-                  <span className="reports-report-card__author">{item.user_name}</span>
-                  <span className="reports-tag is-team">
-                    {item.source_role === "leader" ? "TL 本人" : "成员"}
-                  </span>
-                </span>
-                <span className="reports-report-card__date">{formatWeekDate(item.week_start)}</span>
-              </header>
-              <p className="reports-report-card__content">{item.submitted_content}</p>
-            </label>
-          ))}
-        </Checkbox.Group>
-      )}
-      {sources.missing_people.length > 0 ? (
-        <section className="reports-team-card">
-          <header className="reports-team-card__head">
-            <span className="reports-team-card__title">未发送人员</span>
-            <span className="reports-team-card__meta">不参与生成</span>
-          </header>
-          <div className="reports-member-grid">
-            {sources.missing_people.map((item) => (
-              <article key={item.user_id} className="reports-report-card is-missing">
-                <header className="reports-report-card__head">
-                  <span className="reports-report-card__head-left">
-                    <span className="reports-report-card__author">{item.user_name}</span>
-                    <span className="reports-tag is-missing">
-                      {item.source_role === "leader" ? "TL 本人" : "成员"}
-                    </span>
-                  </span>
-                </header>
-                <span className="reports-report-card__empty">本周尚未发送个人周报。</span>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-    </>
   );
 }
 
@@ -1337,11 +994,6 @@ function DirectorWeeklyReportsView({
   const [content, setContent] = useState("");
   const [contentTouched, setContentTouched] = useState(false);
 
-  const sourcesQuery = useQuery<DepartmentWeeklyReportSources>({
-    queryKey: ["reports", "weekly", "department", "sources", weekStart],
-    queryFn: () => fetchDepartmentWeeklyReportSources(weekStart),
-    staleTime: 30_000
-  });
   const reportQuery = useQuery<DepartmentWeeklyReport | null>({
     queryKey: ["reports", "weekly", "department", "current", weekStart],
     queryFn: () => fetchDepartmentWeeklyReportCurrentOrNull(weekStart),
@@ -1360,18 +1012,14 @@ function DirectorWeeklyReportsView({
     enabled: !modalMode
   });
 
-  const sources = sourcesQuery.data;
   const report = reportQuery.data ?? null;
   const history = historyQuery.data ?? [];
   const teamHistory = teamHistoryQuery.data ?? [];
   const showHistory = !modalMode;
   const effectiveTab = modalMode
     ? step
-    : !showHistory && (tab === "history" || tab === "teams") ? "sources" : tab;
+    : !showHistory && (tab === "history" || tab === "teams") ? "draft" : tab;
   const editorContent = contentTouched ? content : (report?.content ?? "");
-  const submitted = sources?.submitted_team_count ?? 0;
-  const total = sources?.total_team_count ?? 0;
-  const missing = sources?.missing_teams.length ?? 0;
   const displayWeekStart = formatWeekDate(weekStart);
   const displayWeekEnd = formatWeekDate(weekEnd);
   const openManualEditor = () => {
@@ -1416,14 +1064,10 @@ function DirectorWeeklyReportsView({
                 <span>周期：{weeklyRange(report.week_start)}</span>
                 <span>状态：已保存</span>
                 <span>更新时间：{formatDateTime(report.updated_at)}</span>
-                <span>来源小组周报数：{report.source_team_weekly_report_ids.length}</span>
               </Space>
             </Card>
             <Card title="周报正文">
               {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无周报内容" />}
-            </Card>
-            <Card title="来源小组周报">
-              <DepartmentWeeklySources query={sourcesQuery} />
             </Card>
           </Space>
         )}
@@ -1444,34 +1088,12 @@ function DirectorWeeklyReportsView({
         <RequirementMetricCard
           tone="primary"
           icon={<CalendarOutlined />}
-          loading={sourcesQuery.isLoading}
+          loading={reportQuery.isLoading}
           metric={{
             key: "week",
             title: "周报周期",
             value: dayjs(weekStart).format("MM-DD"),
               description: `${displayWeekStart} 至 ${displayWeekEnd}`
-          }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<CheckCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "submitted",
-            title: "已提交小组",
-            value: submitted,
-            description: total > 0 ? `提交率 ${Math.round((submitted * 100) / total)}%` : "暂无小组"
-          }}
-        />
-        <RequirementMetricCard
-          tone="warning"
-          icon={<CloseCircleOutlined />}
-          loading={sourcesQuery.isLoading}
-          metric={{
-            key: "missing",
-            title: "未提交小组",
-            value: missing,
-            description: missing > 0 ? "等待 TL 提交" : "小组周报到齐"
           }}
         />
         <RequirementMetricCard
@@ -1618,81 +1240,6 @@ function DirectorWeeklyReportsView({
         </section>
       )}
     </PagePanel>
-  );
-}
-
-function DepartmentWeeklySources({
-  query
-}: {
-  query: UseQueryResult<DepartmentWeeklyReportSources>;
-}) {
-  const sources = query.data;
-  const [activeSource, setActiveSource] = useState<DepartmentTeamWeeklyReportSource | null>(null);
-  if (query.isError)
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message="部门周报来源加载失败"
-        description={errorMessage(query.error)}
-      />
-    );
-  if (query.isLoading) return <ReportsSkeleton />;
-  if (!sources) return <ReportsEmpty description="暂无来源" />;
-  return (
-    <>
-      <div className="reports-source-list">
-        {sources.submitted_team_reports.map((item) => (
-          <div key={item.team_id} className="reports-source-list__item">
-            <div className="reports-source-list__main reports-source-list__main--readonly">
-              <div className="reports-source-list__content">
-                <div className="reports-source-list__head">
-                  <strong>{item.team_name}</strong>
-                  <span className="reports-tag is-submitted">已提交</span>
-                  <span className="reports-tag is-team">小组周报</span>
-                  <span className="reports-source-list__meta">
-                    {item.leader_name ? `负责人 ${item.leader_name}` : "小组来源"}
-                  </span>
-                  <Button
-                    type="link"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setActiveSource(item);
-                    }}
-                  >
-                    查看全文
-                  </Button>
-                </div>
-                <p>{summarizeSourceContent(item.content)}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-        {sources.missing_teams.map((item) => (
-          <div key={item.team_id} className="reports-source-list__item is-muted">
-            <div className="reports-source-list__main reports-source-list__main--readonly">
-              <div className="reports-source-list__content">
-                <div className="reports-source-list__head">
-                  <strong>{item.team_name}</strong>
-                  <span className="reports-tag is-missing">未提交</span>
-                  <span className="reports-tag is-team">小组周报</span>
-                </div>
-                <p>该小组尚未提交本周周报，不参与本次部门周报生成。</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <Drawer
-        title={activeSource ? `${activeSource.team_name} 小组周报原文` : "小组周报原文"}
-        open={Boolean(activeSource)}
-        size={560}
-        onClose={() => setActiveSource(null)}
-      >
-        <pre className="reports-source-content">{activeSource?.content}</pre>
-      </Drawer>
-    </>
   );
 }
 

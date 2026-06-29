@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   DatePicker,
-  Drawer,
   Empty,
   Modal,
   Segmented,
@@ -27,23 +26,16 @@ import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import {
   fetchDepartmentReport,
   fetchDepartmentReports,
-  fetchDepartmentReportSources,
   fetchMyReports,
   fetchReport,
   fetchTeamReport,
-  fetchTeamReports,
-  fetchTeamReportSources
+  fetchTeamReports
 } from "../../api/client";
 import { DailyReportGenerateModal, type DailyGenerateScope } from "../components/DailyReportGenerateModal";
 import type {
   DailyReportListItem,
-  DepartmentMissingTeam,
   DepartmentReportListItem,
-  DepartmentReportSources,
-  DepartmentTeamReportSource,
-  TeamReportListItem,
-  TeamMemberReport,
-  TeamReportSources
+  TeamReportListItem
 } from "../../api/types";
 
 import "./ReportsPage.css";
@@ -300,7 +292,6 @@ function PersonalDailyTable({
   const columns: ColumnsType<DailyReportListItem> = [
     { title: "日期", dataIndex: "report_date", width: 140, render: formatDate },
     { title: "状态", key: "status", width: 180, render: (_, record) => personalStatus(record, user?.role) },
-    { title: "来源 session 数", dataIndex: "source_session_count", width: 150 },
     { title: "更新时间", dataIndex: "updated_at", render: formatDateTime },
     {
       title: "操作",
@@ -502,22 +493,10 @@ function PersonalDailyReportDetailContent({
               <Text>日期：{formatDate(report.report_date)}</Text>
               <Text>状态：{report.edited ? "已编辑" : "自动生成"}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
-              <Text>来源 session 数：{report.session_ids.length}</Text>
             </Space>
           </Card>
           <Card title="日报正文">
             {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无日报内容" />}
-          </Card>
-          <Card title="来源 session / 工作记录">
-            {report.session_ids.length === 0 ? (
-              <Empty description="暂无来源 session" />
-            ) : (
-              <Space wrap>
-                {report.session_ids.map((sessionId) => (
-                  <Tag key={sessionId}>{sessionId}</Tag>
-                ))}
-              </Space>
-            )}
           </Card>
         </Space>
       )}
@@ -548,8 +527,6 @@ function TeamDailyReportContent({
   id?: string;
   embedded?: boolean;
 }) {
-  const [sourcePreview, setSourcePreview] = useState<TeamMemberReport | null>(null);
-
   const reportQuery = useQuery({
     queryKey: ["reports", "daily", "team-detail", id],
     queryFn: () => fetchTeamReport(id ?? ""),
@@ -557,13 +534,6 @@ function TeamDailyReportContent({
     staleTime: 30_000
   });
   const report = reportQuery.data;
-
-  const sourcesQuery = useQuery<TeamReportSources>({
-    queryKey: ["reports", "daily", "team-sources", report?.report_date, report?.team_id],
-    queryFn: () => fetchTeamReportSources(report?.report_date ?? "", report?.team_id),
-    enabled: Boolean(report?.report_date),
-    staleTime: 30_000
-  });
 
   const content = (
     <>
@@ -577,7 +547,6 @@ function TeamDailyReportContent({
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
               <Text>小组：{report.team_name}</Text>
-              <Text>成员发送：{sourcesQuery.data ? `${sourcesQuery.data.submitted}/${sourcesQuery.data.members.length}` : "-"}</Text>
               <Text>状态：{report.status === "submitted" ? "已发送" : report.status === "saved" && report.submitted_at ? "已保存，未发送最新修改" : "已保存"}</Text>
               <Text>发送时间：{formatDateTime(report.submitted_at)}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
@@ -586,23 +555,6 @@ function TeamDailyReportContent({
           <Card title="小组日报正文">
             {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无小组日报内容" />}
           </Card>
-          <Card title="来源成员日报">
-            {sourcesQuery.isError ? (
-              <Alert type="error" showIcon message="成员日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
-            ) : sourcesQuery.isLoading ? (
-              <Card loading />
-            ) : (
-              <TeamSources sources={sourcesQuery.data} onPreview={setSourcePreview} />
-            )}
-          </Card>
-          <Drawer
-            title={sourcePreview ? `${sourcePreview.user_name} 日报原文` : "成员日报原文"}
-            open={Boolean(sourcePreview)}
-            size={560}
-            onClose={() => setSourcePreview(null)}
-          >
-            <pre className="reports-source-content">{sourcePreview?.content || "暂无日报原文"}</pre>
-          </Drawer>
         </Space>
       )}
     </>
@@ -616,56 +568,6 @@ function TeamDailyReportContent({
     <PagePanel title="小组日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报", path: dailyReportsPath("team") }, { title: "小组日报详情" }]} showNav={false}>
       {content}
     </PagePanel>
-  );
-}
-
-function TeamSources({
-  sources,
-  onPreview
-}: {
-  sources?: TeamReportSources;
-  onPreview: (record: TeamMemberReport) => void;
-}) {
-  if (!sources) return <Empty description="暂无来源" />;
-  const columns: ColumnsType<TeamMemberReport> = [
-    { title: "成员", dataIndex: "user_name", width: 180 },
-    {
-      title: "发送状态",
-      dataIndex: "has_report",
-      width: 140,
-      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已发送</Tag> : <Tag>未发送</Tag>)
-    },
-    { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
-    {
-      title: "操作",
-      key: "actions",
-      width: 140,
-      render: (_, record) =>
-        record.has_report ? (
-          <Button size="small" type="link" onClick={() => onPreview(record)}>
-            查看原文
-          </Button>
-        ) : (
-          "-"
-        )
-    }
-  ];
-  return (
-    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Card>
-        <Space size="large" wrap>
-          <Text>成员数：{sources.members.length}</Text>
-          <Text>已发送：{sources.submitted}</Text>
-          <Text>未发送：{sources.missing}</Text>
-        </Space>
-      </Card>
-      <Table<TeamMemberReport>
-        rowKey="user_id"
-        columns={columns}
-        dataSource={sources.members}
-        pagination={false}
-      />
-    </Space>
   );
 }
 
@@ -691,13 +593,6 @@ function DepartmentDailyReportContent({
   });
   const report = reportQuery.data;
 
-  const sourcesQuery = useQuery<DepartmentReportSources>({
-    queryKey: ["reports", "daily", "department-sources", report?.report_date],
-    queryFn: () => fetchDepartmentReportSources(report?.report_date ?? ""),
-    enabled: Boolean(report?.report_date),
-    staleTime: 30_000
-  });
-
   const content = (
     <>
       {reportQuery.isError ? (
@@ -709,28 +604,12 @@ function DepartmentDailyReportContent({
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
-              <Text>
-                小组发送：
-                {sourcesQuery.data
-                  ? `${sourcesQuery.data.submitted_team_count}/${sourcesQuery.data.total_team_count}`
-                  : "-"}
-              </Text>
               <Text>状态：{report.status === "saved" || report.archived_at ? "已保存" : "待生成"}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
-              <Text>来源小组日报数：{report.source_team_report_ids.length}</Text>
             </Space>
           </Card>
           <Card title="部门日报正文">
             {report.content.trim() ? <MarkdownViewer value={report.content} /> : <Empty description="暂无部门日报内容" />}
-          </Card>
-          <Card title="来源小组日报">
-            {sourcesQuery.isError ? (
-              <Alert type="error" showIcon message="小组日报来源加载失败" description={errorMessage(sourcesQuery.error)} />
-            ) : sourcesQuery.isLoading ? (
-              <Card loading />
-            ) : (
-              <DepartmentSources sources={sourcesQuery.data} />
-            )}
           </Card>
         </Space>
       )}
@@ -745,70 +624,5 @@ function DepartmentDailyReportContent({
     <PagePanel title="部门日报详情" breadcrumbs={[{ title: "报告" }, { title: "日报", path: dailyReportsPath("department") }, { title: "部门日报详情" }]} showNav={false}>
       {content}
     </PagePanel>
-  );
-}
-
-function DepartmentSources({ sources }: { sources?: DepartmentReportSources }) {
-  const [sourcePreview, setSourcePreview] = useState<DepartmentTeamReportSource | null>(null);
-
-  if (!sources) return <Empty description="暂无来源" />;
-  type DepartmentSourceRow = DepartmentTeamReportSource | (DepartmentMissingTeam & { has_report: false });
-  const rows: DepartmentSourceRow[] = [
-    ...sources.submitted_team_reports,
-    ...sources.missing_teams.map((team) => ({ ...team, has_report: false as const }))
-  ];
-  const columns: ColumnsType<DepartmentSourceRow> = [
-    { title: "小组", dataIndex: "team_name", width: 180 },
-    {
-      title: "TL",
-      key: "leader",
-      width: 160,
-      render: (_, record) => ("team_leader_name" in record ? record.team_leader_name || record.leader_name : "-")
-    },
-    {
-      title: "发送状态",
-      dataIndex: "has_report",
-      width: 140,
-      render: (hasReport: boolean) => (hasReport ? <Tag color="green">已发送</Tag> : <Tag>未发送</Tag>)
-    },
-    { title: "发送时间", dataIndex: "submitted_at", render: formatDateTime },
-    {
-      title: "操作",
-      key: "actions",
-      width: 140,
-      render: (_, record) =>
-        record.has_report && "content" in record ? (
-          <Button size="small" type="link" onClick={() => setSourcePreview(record)}>
-            查看原文
-          </Button>
-        ) : (
-          "-"
-        )
-    }
-  ];
-  return (
-    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Card>
-        <Space size="large" wrap>
-          <Text>小组总数：{sources.total_team_count}</Text>
-          <Text>已发送：{sources.submitted_team_count}</Text>
-          <Text>未发送：{sources.missing_teams.length}</Text>
-        </Space>
-      </Card>
-      <Table<DepartmentSourceRow>
-        rowKey="team_id"
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-      />
-      <Drawer
-        title={sourcePreview ? `${sourcePreview.team_name} 小组日报原文` : "小组日报原文"}
-        open={Boolean(sourcePreview)}
-        size={560}
-        onClose={() => setSourcePreview(null)}
-      >
-        <pre className="reports-source-content">{sourcePreview?.content || "暂无小组日报原文"}</pre>
-      </Drawer>
-    </Space>
   );
 }

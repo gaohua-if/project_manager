@@ -6,12 +6,10 @@ import dayjs from "dayjs";
 
 import {
   fetchDepartmentReport,
-  fetchDepartmentReportSources,
   fetchDepartmentReportTodayOrNull,
   fetchMyReports,
   fetchReport,
   fetchTeamReport,
-  fetchTeamReportSources,
   fetchTeamReportTodayOrNull,
   fetchTodayReport,
   saveDepartmentReportCurrent,
@@ -23,9 +21,7 @@ import {
 import type {
   DailyReport,
   DepartmentReport,
-  DepartmentReportSources,
-  TeamReport,
-  TeamReportSources
+  TeamReport
 } from "../../api/types";
 
 import "./DailyReportGenerateModal.css";
@@ -63,19 +59,6 @@ function reportStatus(report: DailyReport | TeamReport | DepartmentReport | null
   if ("submitted_at" in report && report.submitted_at) return <Tag color="green">已保存</Tag>;
   if ("status" in report && report.status === "saved") return <Tag color="blue">已保存</Tag>;
   return <Tag color="blue">已保存</Tag>;
-}
-
-function teamSourceSummary(sources?: TeamReportSources | null) {
-  if (!sources) return "来源摘要暂不可用";
-  const total = sources.total_member_count ?? sources.members.length;
-  const submitted = sources.submitted_count ?? sources.submitted ?? sources.submitted_reports?.length ?? 0;
-  const missing = sources.missing_count ?? sources.missing ?? Math.max(total - submitted, 0);
-  return `${sources.team_name} · 已收集 ${submitted}/${total} 份成员日报，缺失 ${missing} 份`;
-}
-
-function departmentSourceSummary(sources?: DepartmentReportSources | null) {
-  if (!sources) return "来源摘要暂不可用";
-  return `已收集 ${sources.submitted_team_count}/${sources.total_team_count} 个小组日报，缺失 ${sources.missing_team_count ?? sources.missing_teams.length} 个`;
 }
 
 export function DailyReportGenerateModal({
@@ -129,20 +112,6 @@ export function DailyReportGenerateModal({
     staleTime: 0
   });
 
-  const teamSourcesQuery = useQuery({
-    queryKey: ["reports", "daily", "manage-modal", "team-sources", date],
-    queryFn: () => fetchTeamReportSources(date),
-    enabled: open && scope === "team",
-    staleTime: 30_000
-  });
-
-  const departmentSourcesQuery = useQuery({
-    queryKey: ["reports", "daily", "manage-modal", "department-sources", date],
-    queryFn: () => fetchDepartmentReportSources(date),
-    enabled: open && scope === "department",
-    staleTime: 30_000
-  });
-
   const currentReport = useMemo(() => {
     if (scope === "personal") return personalReportQuery.data ?? null;
     if (scope === "team") return teamReportQuery.data ?? null;
@@ -163,15 +132,6 @@ export function DailyReportGenerateModal({
   const showEditor = hasContent || manualMode;
   const editorContent = contentTouched ? content : currentReport?.content ?? "";
   const personalReport = scope === "personal" ? personalReportQuery.data ?? null : null;
-  const sourceSummary =
-    scope === "team"
-      ? teamSourceSummary(teamSourcesQuery.data)
-      : scope === "department"
-        ? departmentSourceSummary(departmentSourcesQuery.data)
-        : personalReport?.session_ids?.length
-          ? `已关联 ${personalReport.session_ids.length} 条工作记录`
-          : "来源摘要暂不可用";
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       const nextContent = editorContent.trim();
@@ -271,12 +231,6 @@ export function DailyReportGenerateModal({
           </span>
           {reportStatus(currentReport)}
         </div>
-        <Alert
-          type="info"
-          showIcon
-          message="来源摘要"
-          description={sourceSummary}
-        />
         {loading ? (
           <div className="console-session-empty">正在加载报告内容...</div>
         ) : showEditor ? (
