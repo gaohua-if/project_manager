@@ -252,6 +252,11 @@ type DailyReport struct {
 	Edited           bool       `json:"edited"`
 	FeishuDocURL     *string    `json:"feishu_doc_url,omitempty"`
 	SessionIDs       []string   `json:"session_ids"`
+	GenerationMode   string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID *string   `json:"managed_agent_run_id,omitempty"`
+	AgentID          *string    `json:"agent_id,omitempty"`
+	AgentVersionID   *int       `json:"agent_version_id,omitempty"`
+	ModelID          *string    `json:"model_id,omitempty"`
 	SavedAt          *time.Time `json:"saved_at,omitempty"`
 	SubmittedAt      *time.Time `json:"submitted_at,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -586,6 +591,197 @@ type GenerateReportDraftResponse struct {
 	SelectedSessionIDs      []string                 `json:"selected_session_ids"`
 	SkillName               string                   `json:"skill_name"`
 	TaskProgressSuggestions []TaskProgressSuggestion `json:"task_progress_suggestions"`
+	ManagedAgentRunID       string                   `json:"managed_agent_run_id,omitempty"`
+	AgentID                 string                   `json:"agent_id,omitempty"`
+	AgentVersionID          *int                     `json:"agent_version_id,omitempty"`
+	ModelID                 string                   `json:"model_id,omitempty"`
+	Status                  string                   `json:"status,omitempty"`
+}
+
+type ManagedScope string
+
+const (
+	ManagedScopeMine   ManagedScope = "mine"
+	ManagedScopePublic ManagedScope = "public"
+	ManagedScopeAll    ManagedScope = "all"
+)
+
+type ManagedSkill struct {
+	SkillID     string `json:"skill_id"`
+	Owner       string `json:"owner,omitempty"`
+	Slug        string `json:"slug"`
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	Archived    bool   `json:"archived"`
+	CreatedAt   int64  `json:"created_at,omitempty"`
+}
+
+type ManagedMCPEntry struct {
+	EntryID            string            `json:"entry_id,omitempty"`
+	Owner              string            `json:"owner,omitempty"`
+	Slug               string            `json:"slug"`
+	Version            string            `json:"version"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description,omitempty"`
+	Transport          string            `json:"transport"`
+	Command            string            `json:"command,omitempty"`
+	Args               []string          `json:"args,omitempty"`
+	URL                string            `json:"url,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	Env                map[string]string `json:"env,omitempty"`
+	RequiresCredential bool              `json:"requires_credential"`
+	CredentialEnv      string            `json:"credential_env,omitempty"`
+	AuthScheme         string            `json:"auth_scheme,omitempty"`
+	AuthHeader         string            `json:"auth_header,omitempty"`
+	Archived           bool              `json:"archived"`
+	CreatedAt          int64             `json:"created_at,omitempty"`
+}
+
+type ManagedSkillRef struct {
+	Owner   string `json:"owner,omitempty"`
+	Slug    string `json:"slug"`
+	Version string `json:"version"`
+}
+
+type ManagedMCPBinding struct {
+	Owner          string `json:"owner,omitempty"`
+	Slug           string `json:"slug"`
+	Version        string `json:"version"`
+	CredentialSlot string `json:"credential_slot,omitempty"`
+}
+
+type ManagedAgent struct {
+	AgentID             string              `json:"agent_id"`
+	Name                string              `json:"name"`
+	Description         string              `json:"description,omitempty"`
+	Engine              string              `json:"engine"`
+	Instructions        string              `json:"instructions,omitempty"`
+	DefaultModelID      string              `json:"default_model_id,omitempty"`
+	StartPromptTemplate string              `json:"start_prompt_template,omitempty"`
+	CurrentVersionID    int                 `json:"current_version_id,omitempty"`
+	ManagedVersion      int                 `json:"managed_version,omitempty"`
+	Archived            bool                `json:"archived"`
+	IsPublic            bool                `json:"is_public"`
+	Skills              []ManagedSkillRef   `json:"skills,omitempty"`
+	MCPBindings         []ManagedMCPBinding `json:"mcp_bindings,omitempty"`
+	CreatedAt           int64               `json:"created_at,omitempty"`
+}
+
+type ListManagedSkillsResponse struct {
+	Skills []ManagedSkill `json:"skills"`
+}
+
+type ListManagedMCPEntriesResponse struct {
+	Entries []ManagedMCPEntry `json:"entries"`
+}
+
+type ListManagedAgentsResponse struct {
+	Agents []ManagedAgent `json:"agents"`
+}
+
+type UpsertManagedAgentRequest struct {
+	AgentID             string              `json:"agent_id,omitempty"`
+	Name                string              `json:"name"`
+	Description         string              `json:"description,omitempty"`
+	Engine              string              `json:"engine"`
+	Instructions        string              `json:"instructions,omitempty"`
+	DefaultModelID      string              `json:"default_model_id,omitempty"`
+	StartPromptTemplate string              `json:"start_prompt_template,omitempty"`
+	Skills              []ManagedSkillRef   `json:"skills,omitempty"`
+	MCPBindings         []ManagedMCPBinding `json:"mcp_bindings,omitempty"`
+}
+
+type UpsertManagedAgentResponse struct {
+	AgentID        string `json:"agent_id"`
+	ManagedVersion int    `json:"managed_version,omitempty"`
+}
+
+type CreateManagedMCPEntryRequest = ManagedMCPEntry
+
+type ManagedReportRunRequest struct {
+	ReportDate string   `json:"report_date"`
+	SessionIDs []string `json:"session_ids"`
+	AgentID    string   `json:"agent_id"`
+	ModelID    string   `json:"model_id,omitempty"`
+}
+
+type ManagedAgentManualRunRequest struct {
+	Message string            `json:"message"`
+	ModelID string            `json:"model_id,omitempty"`
+	Params  map[string]string `json:"params,omitempty"`
+}
+
+type ManagedAgentSchedule struct {
+	ID           string            `json:"id"`
+	UserID       string            `json:"user_id"`
+	Name         string            `json:"name"`
+	AgentID      string            `json:"agent_id"`
+	ModelID      *string           `json:"model_id,omitempty"`
+	Message      string            `json:"message"`
+	Params       map[string]string `json:"params,omitempty"`
+	ScheduleType string            `json:"schedule_type"`
+	Weekdays     []int             `json:"weekdays"`
+	TimeOfDay    string            `json:"time_of_day"`
+	Timezone     string            `json:"timezone"`
+	Enabled      bool              `json:"enabled"`
+	LastRunAt    *time.Time        `json:"last_run_at,omitempty"`
+	LastAIRunID  *string           `json:"last_ai_run_id,omitempty"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+}
+
+type UpsertManagedAgentScheduleRequest struct {
+	Name         string            `json:"name"`
+	AgentID      string            `json:"agent_id"`
+	ModelID      string            `json:"model_id,omitempty"`
+	Message      string            `json:"message"`
+	Params       map[string]string `json:"params,omitempty"`
+	ScheduleType string            `json:"schedule_type"`
+	Weekdays     []int             `json:"weekdays,omitempty"`
+	TimeOfDay    string            `json:"time_of_day"`
+	Timezone     string            `json:"timezone,omitempty"`
+	Enabled      *bool             `json:"enabled,omitempty"`
+}
+
+type AIRun struct {
+	ID                string                       `json:"id"`
+	UserID            string                       `json:"user_id"`
+	BusinessType      string                       `json:"business_type"`
+	BusinessID        *string                      `json:"business_id,omitempty"`
+	RuntimeType       string                       `json:"runtime_type"`
+	AgentID           string                       `json:"agent_id"`
+	AgentVersionID    *int                         `json:"agent_version_id,omitempty"`
+	ExternalTaskID    *string                      `json:"external_task_id,omitempty"`
+	ExternalSessionID *string                      `json:"external_session_id,omitempty"`
+	ModelID           *string                      `json:"model_id,omitempty"`
+	Status            string                       `json:"status"`
+	InputRef          map[string]any               `json:"input_ref_json,omitempty"`
+	OutputRef         map[string]any               `json:"output_ref_json,omitempty"`
+	Result            string                       `json:"result,omitempty"`
+	ErrorMessage      *string                      `json:"error_message,omitempty"`
+	Draft             *GenerateReportDraftResponse `json:"draft,omitempty"`
+	StartedAt         *time.Time                   `json:"started_at,omitempty"`
+	FinishedAt        *time.Time                   `json:"finished_at,omitempty"`
+	CreatedAt         time.Time                    `json:"created_at"`
+}
+
+type DailyReportAgentIntegration struct {
+	MCP struct {
+		Name        string   `json:"name"`
+		URL         string   `json:"url"`
+		Transport   string   `json:"transport"`
+		Description string   `json:"description"`
+		Tools       []string `json:"tools"`
+	} `json:"mcp"`
+	Skill struct {
+		Slug    string `json:"slug"`
+		Version string `json:"version"`
+		Name    string `json:"name"`
+		SkillMD string `json:"skill_md"`
+	} `json:"skill"`
 }
 
 type TeamReport struct {

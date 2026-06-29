@@ -1,0 +1,127 @@
+.ai-assets-page {
+  width: 100%;
+}
+
+.ai-assets-page .page-panel__body {
+  gap: 16px;
+}
+
+.ai-assets-scope {
+  width: 112px;
+}
+
+.ai-assets-name {
+  display: grid;
+  gap: 2px;
+}
+
+.ai-assets-name strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-assets-name span {
+  color: #7a879a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ai-assets-page .ant-tabs-nav {
+  margin-bottom: 8px;
+}
+
+.ai-assets-page .ant-table-wrapper {
+  background: #fff;
+  border: 1px solid #e6ebf3;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ai-assets-agent-pane,
+.ai-assets-history {
+  display: grid;
+  gap: 14px;
+}
+
+.ai-assets-history header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-assets-history header strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.ai-assets-run-agent {
+  color: #334155;
+  font-size: 12px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
+
+.ai-assets-run-summary {
+  display: block;
+  max-width: 360px;
+  color: #64748b;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-assets-runner {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-assets-runner__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.ai-assets-runner__status strong {
+  color: #172033;
+}
+
+.ai-assets-runner__template {
+  max-height: 160px;
+  margin: 0;
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.ai-assets-runner__result {
+  min-height: 180px;
+  max-height: 360px;
+  margin: 0;
+  padding: 12px;
+  color: #263244;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.ai-assets-runner__result.is-error {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}

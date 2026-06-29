@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -42,10 +43,17 @@ func main() {
 
 	authH := handler.NewAuthHandler(database, cfg.JWTSecret, cfg.EnablePublicRegister)
 	aiClient := service.NewAIClient()
+	managedAgentClient := service.NewManagedAgentClient(cfg.ManagedAgentURL, cfg.ManagedAgentToken)
 	reqH := handler.NewRequirementHandler(database, aiClient)
 	taskH := handler.NewTaskHandler(database)
 	sessionH := handler.NewSessionHandler(database, minioStore, aiClient)
 	reportH := handler.NewReportHandler(database, cfg.ReportGeneratorURL)
+	managedAgentH := handler.NewManagedAgentHandler(database, managedAgentClient)
+	dailyReportMCPH := handler.NewDailyReportMCPHandler(database)
+	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
+	defer stopScheduler()
+	service.NewManagedAgentScheduleRunner(database, managedAgentClient).Start(schedulerCtx)
+	service.NewManagedAgentRunStatusSyncer(database, managedAgentClient).Start(schedulerCtx)
 	docH := handler.NewDocumentHandler(database)
 	tokenH := handler.NewTokenHandler(database)
 	teamH := handler.NewTeamHandler(database)
@@ -125,6 +133,8 @@ func main() {
 		r.Get("/reports/mine", reportH.ListMine)
 		r.Get("/reports/today", reportH.GetOrCreateToday)
 		r.Post("/reports/today/draft", reportH.GenerateTodayDraft)
+		r.Post("/reports/today/managed-agent-runs", managedAgentH.StartDailyReportRun)
+		r.Get("/reports/managed-agent-runs/{runId}", managedAgentH.GetDailyReportRun)
 		r.Post("/reports/today/generate", reportH.GenerateToday)
 		r.Get("/reports/weekly/mine", reportH.ListPersonalWeeklyReports)
 		r.Get("/reports/weekly/mine/current", reportH.GetPersonalWeeklyReportCurrent)
@@ -170,6 +180,24 @@ func main() {
 		r.Get("/tokens", tokenH.Aggregate)
 		r.Get("/tokens/sessions", tokenH.ListSessionTokens)
 		r.Get("/teams/activity", teamH.Activity)
+
+		r.Post("/mcp/daily-report", dailyReportMCPH.Serve)
+
+		r.Get("/ai-assets/skills", managedAgentH.ListSkills)
+		r.Get("/ai-assets/mcp", managedAgentH.ListMCPEntries)
+		r.Post("/ai-assets/mcp", managedAgentH.CreateMCPEntry)
+		r.Get("/ai-assets/daily-report-integration", managedAgentH.DailyReportIntegration)
+		r.Get("/ai-assets/agents", managedAgentH.ListMyAgents)
+		r.Post("/ai-assets/agents", managedAgentH.CreateMyAgent)
+		r.Put("/ai-assets/agents/{agentId}", managedAgentH.UpdateMyAgent)
+		r.Post("/ai-assets/agents/{agentId}/runs", managedAgentH.StartAgentRun)
+		r.Get("/ai-assets/agent-runs", managedAgentH.ListAgentRuns)
+		r.Get("/ai-assets/agent-runs/{runId}", managedAgentH.GetAgentRun)
+		r.Get("/ai-assets/agent-schedules", managedAgentH.ListAgentSchedules)
+		r.Post("/ai-assets/agent-schedules", managedAgentH.CreateAgentSchedule)
+		r.Put("/ai-assets/agent-schedules/{scheduleId}", managedAgentH.UpdateAgentSchedule)
+		r.Delete("/ai-assets/agent-schedules/{scheduleId}", managedAgentH.DeleteAgentSchedule)
+		r.Post("/ai-assets/agent-schedules/{scheduleId}/runs", managedAgentH.RunAgentScheduleNow)
 	})
 
 	log.Printf("Starting API server on :%s", cfg.Port)

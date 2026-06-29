@@ -220,6 +220,11 @@ export interface DailyReport {
   edited: boolean;
   feishu_doc_url?: string;
   session_ids: string[];
+  generation_mode?: "default" | "managed_agent";
+  managed_agent_run_id?: string;
+  agent_id?: string;
+  agent_version_id?: number;
+  model_id?: string;
   saved_at?: string;
   submitted_at?: string;
   created_at: string;
@@ -274,6 +279,171 @@ export interface GenerateReportDraftResponse {
   selected_session_ids: string[];
   skill_name: string;
   task_progress_suggestions: TaskProgressSuggestion[];
+  managed_agent_run_id?: string;
+  agent_id?: string;
+  agent_version_id?: number;
+  model_id?: string;
+  status?: string;
+}
+
+export type ManagedScope = "mine" | "public" | "all";
+
+export interface ManagedSkillRef {
+  owner?: string;
+  slug: string;
+  version: string;
+}
+
+export interface ManagedMCPBinding {
+  owner?: string;
+  slug: string;
+  version: string;
+  credential_slot?: string;
+}
+
+export interface ManagedSkill {
+  skill_id: string;
+  owner?: string;
+  slug: string;
+  version: string;
+  name: string;
+  description?: string;
+  sha256?: string;
+  size_bytes?: number;
+  archived: boolean;
+  created_at?: number;
+}
+
+export interface ManagedMCPEntry {
+  entry_id?: string;
+  owner?: string;
+  slug: string;
+  version: string;
+  name: string;
+  description?: string;
+  transport: string;
+  command?: string;
+  args?: string[];
+  url?: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+  requires_credential: boolean;
+  credential_env?: string;
+  auth_scheme?: string;
+  auth_header?: string;
+  archived: boolean;
+  created_at?: number;
+}
+
+export interface ManagedAgent {
+  agent_id: string;
+  name: string;
+  description?: string;
+  engine: string;
+  instructions?: string;
+  default_model_id?: string;
+  start_prompt_template?: string;
+  current_version_id?: number;
+  managed_version?: number;
+  archived: boolean;
+  is_public: boolean;
+  skills?: ManagedSkillRef[];
+  mcp_bindings?: ManagedMCPBinding[];
+}
+
+export interface UpsertManagedAgentPayload {
+  agent_id?: string;
+  name: string;
+  description?: string;
+  engine: string;
+  instructions?: string;
+  default_model_id?: string;
+  start_prompt_template?: string;
+  skills?: ManagedSkillRef[];
+  mcp_bindings?: ManagedMCPBinding[];
+}
+
+export interface ManagedReportRunPayload {
+  report_date: string;
+  session_ids: string[];
+  agent_id: string;
+  model_id?: string;
+}
+
+export interface ManagedAgentManualRunPayload {
+  message: string;
+  model_id?: string;
+  params?: Record<string, string>;
+}
+
+export interface ManagedAgentSchedule {
+  id: string;
+  user_id: string;
+  name: string;
+  agent_id: string;
+  model_id?: string;
+  message: string;
+  params?: Record<string, string>;
+  schedule_type: "daily" | "weekly";
+  weekdays: number[];
+  time_of_day: string;
+  timezone: string;
+  enabled: boolean;
+  last_run_at?: string;
+  last_ai_run_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertManagedAgentSchedulePayload {
+  name: string;
+  agent_id: string;
+  model_id?: string;
+  message: string;
+  params?: Record<string, string>;
+  schedule_type: "daily" | "weekly";
+  weekdays?: number[];
+  time_of_day: string;
+  timezone?: string;
+  enabled?: boolean;
+}
+
+export interface DailyReportAgentIntegration {
+  mcp: {
+    name: string;
+    url: string;
+    transport: "http";
+    description: string;
+    tools: string[];
+  };
+  skill: {
+    slug: string;
+    version: string;
+    name: string;
+    skill_md: string;
+  };
+}
+
+export interface AIRun {
+  id: string;
+  user_id: string;
+  business_type: string;
+  business_id?: string;
+  runtime_type: string;
+  agent_id: string;
+  agent_version_id?: number;
+  external_task_id?: string;
+  external_session_id?: string;
+  model_id?: string;
+  status: "pending" | "running" | "succeeded" | "failed" | "timeout";
+  input_ref_json?: Record<string, unknown>;
+  output_ref_json?: Record<string, unknown>;
+  result?: string;
+  error_message?: string;
+  draft?: GenerateReportDraftResponse;
+  started_at?: string;
+  finished_at?: string;
+  created_at: string;
 }
 
 export interface TeamReport {

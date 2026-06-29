@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aida Agent Action 触发原型</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --surface-soft: #f0f4f8;
+        --line: #d9e1ea;
+        --line-strong: #b8c4d3;
+        --text: #172026;
+        --muted: #667789;
+        --teal: #0f766e;
+        --teal-soft: #d9f2ef;
+        --blue: #2563eb;
+        --blue-soft: #dbeafe;
+        --green: #047857;
+        --green-soft: #dff4e9;
+        --amber: #b45309;
+        --amber-soft: #fef0c7;
+        --red: #be123c;
+        --red-soft: #ffe4e6;
+        --shadow: 0 18px 38px rgba(23, 32, 38, 0.08);
+        --radius: 8px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+      }
+
+      .side {
+        background: #152027;
+        color: #f8fbfd;
+        padding: 20px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 8px;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        background: #ecfeff;
+        color: #164e63;
+        font-weight: 800;
+      }
+
+      .brand strong {
+        display: block;
+        line-height: 1.1;
+      }
+
+      .brand span {
+        color: #aac0d0;
+        font-size: 12px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nav button {
+        width: 100%;
+        min-height: 42px;
+        border: 0;
+        border-radius: 8px;
+        color: #d7e3eb;
+        background: transparent;
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        text-align: left;
+      }
+
+      .nav button.is-active,
+      .nav button:hover {
+        background: #24323d;
+        color: #ffffff;
+      }
+
+      .nav small {
+        color: #9db2c0;
+      }
+
+      .side-note {
+        margin-top: auto;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 14px 8px 0;
+        color: #b7c8d4;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .topbar {
+        min-height: 76px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        padding: 14px 28px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      .title span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn {
+        min-height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--line-strong);
+        background: #ffffff;
+        color: var(--text);
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+
+      .btn:hover {
+        border-color: #8597aa;
+      }
+
+      .btn.primary {
+        border-color: var(--teal);
+        background: var(--teal);
+        color: #ffffff;
+      }
+
+      .btn.icon {
+        width: 36px;
+        padding: 0;
+      }
+
+      .content {
+        padding: 22px 28px 32px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        min-height: 82px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .metric-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: var(--surface-soft);
+        color: var(--teal);
+        font-weight: 700;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .metric span:last-child {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.42fr) minmax(340px, 0.58fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .section {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      .section-head {
+        min-height: 56px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .section-body {
+        padding: 16px;
+      }
+
+      .surface-shell {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: #fbfcfd;
+      }
+
+      .surface-toolbar {
+        min-height: 48px;
+        background: #edf2f7;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .surface-tabs {
+        display: flex;
+        gap: 6px;
+      }
+
+      .surface-tabs button {
+        min-height: 30px;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 8px;
+        padding: 0 10px;
+        color: var(--muted);
+      }
+
+      .surface-tabs button.is-active {
+        background: #ffffff;
+        color: var(--text);
+        border-color: var(--line);
+      }
+
+      .report-page {
+        padding: 18px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 260px;
+        gap: 16px;
+      }
+
+      .work-summary {
+        display: grid;
+        gap: 10px;
+      }
+
+      .summary-row {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .summary-row strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .summary-row span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .action-panel {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .action-panel h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .route-box,
+      .code-box,
+      .result-box {
+        border: 1px solid var(--line);
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #22313c;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .status-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-item {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #ffffff;
+      }
+
+      .status-item time {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status-item strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .status-item span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .tag {
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 2px 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface-soft);
+        color: #465a6c;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .tag.teal {
+        background: var(--teal-soft);
+        color: var(--teal);
+      }
+
+      .tag.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+      }
+
+      .tag.green {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .tag.amber {
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .tag.red {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .registry {
+        display: grid;
+        gap: 10px;
+      }
+
+      .registry-row {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr) 210px auto;
+        gap: 12px;
+        align-items: center;
+        background: #ffffff;
+      }
+
+      .registry-row strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .registry-row span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .chip-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .resolver {
+        display: grid;
+        gap: 14px;
+      }
+
+      .resolver-step {
+        border-left: 3px solid var(--teal);
+        background: #f8fafc;
+        border-radius: 0 8px 8px 0;
+        padding: 12px;
+      }
+
+      .resolver-step strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .resolver-step span {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .schedule-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .schedule-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .schedule-item strong {
+        display: block;
+      }
+
+      .schedule-item span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .switch {
+        width: 44px;
+        height: 24px;
+        border: 0;
+        border-radius: 999px;
+        background: #cbd5e1;
+        padding: 3px;
+        display: flex;
+        justify-content: flex-start;
+      }
+
+      .switch::before {
+        content: "";
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+
+      .switch.is-on {
+        background: var(--teal);
+        justify-content: flex-end;
+      }
+
+      .drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: none;
+        justify-content: flex-end;
+        background: rgba(15, 23, 42, 0.26);
+      }
+
+      .drawer.is-open {
+        display: flex;
+      }
+
+      .drawer-panel {
+        width: min(680px, 100vw);
+        height: 100%;
+        background: #ffffff;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer-head {
+        min-height: 70px;
+        border-bottom: 1px solid var(--line);
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .drawer-head h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .drawer-body {
+        padding: 18px;
+        overflow: auto;
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        color: #405060;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--text);
+        padding: 9px 10px;
+      }
+
+      .field textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      @media (max-width: 1160px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .side {
+          display: none;
+        }
+
+        .layout,
+        .report-page,
+        .schedule-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .registry-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .top-actions {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .content {
+          padding: 14px;
+        }
+
+        .metrics,
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+
+        .status-item {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="side">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <strong>Aida</strong>
+            <span>Agent Action</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="is-active"><span>▶</span><span>业务入口</span><small>3</small></button>
+          <button><span>⌁</span><span>Action Registry</span><small>6</small></button>
+          <button><span>◷</span><span>自动任务</span><small>2</small></button>
+          <button><span>◇</span><span>运行历史</span><small>18</small></button>
+        </nav>
+        <div class="side-note">
+          页面只触发 action_key。Agent、Prompt、MCP、Skill、输出处理在后端统一解析。
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title">
+            <h1>Agent Action 触发原型</h1>
+            <span>按钮和定时任务复用同一套业务 Action，不为每个页面单独建设配置页</span>
+          </div>
+          <div class="top-actions">
+            <button class="btn icon" title="刷新" aria-label="刷新">↻</button>
+            <button class="btn" data-open-drawer>查看定义</button>
+            <button class="btn primary" data-open-drawer>提交运行</button>
+          </div>
+        </header>
+
+        <section class="content">
+          <div class="metrics">
+            <div class="metric">
+              <span class="metric-icon">A</span>
+              <div><strong>6</strong><span>已注册 Action</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">▶</span>
+              <div><strong>31</strong><span>本周手动触发</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">◷</span>
+              <div><strong>2</strong><span>系统定时任务</span></div>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">!</span>
+              <div><strong>1</strong><span>待处理失败</span></div>
+            </div>
+          </div>
+
+          <div class="layout">
+            <section class="section">
+              <div class="section-head">
+                <h2>业务页面内的 Agent 入口</h2>
+                <span class="tag teal">surface=reports</span>
+              </div>
+              <div class="section-body">
+                <div class="surface-shell">
+                  <div class="surface-toolbar">
+                    <div class="surface-tabs">
+                      <button class="is-active">个人日报</button>
+                      <button>团队日报</button>
+                      <button>需求风险</button>
+                    </div>
+                    <button class="btn primary" data-open-drawer>生成日报</button>
+                  </div>
+                  <div class="report-page">
+                    <div class="work-summary">
+                      <div class="summary-row">
+                        <div>
+                          <strong>日报日期</strong>
+                          <span>2026-06-26 · 当前登录用户</span>
+                        </div>
+                        <span class="tag blue">request params</span>
+                      </div>
+                      <div class="summary-row">
+                        <div>
+                          <strong>已采集上下文</strong>
+                          <span>Claude Code session 8 条，任务变更 5 条，PR 记录 2 条</span>
+                        </div>
+                        <span class="tag green">MCP context</span>
+                      </div>
+                      <div class="summary-row">
+                        <div>
+                          <strong>输出目标</strong>
+                          <span>保存为个人日报草稿，用户确认后发布</span>
+                        </div>
+                        <span class="tag amber">output handler</span>
+                      </div>
+                      <pre class="route-box">POST /api/v1/agent-actions/daily_report.generate/runs
+{
+  "surface": "reports",
+  "params": { "report_date": "2026-06-26" }
+}</pre>
+                    </div>
+
+                    <aside class="action-panel">
+                      <h3>页面绑定</h3>
+                      <div>
+                        <span class="tag teal">daily_report.generate</span>
+                      </div>
+                      <pre class="code-box">button.route =
+  "/agent-actions/{key}/runs"
+
+key =
+  "daily_report.generate"</pre>
+                      <button class="btn" data-open-drawer>查看最近运行</button>
+                    </aside>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="section">
+              <div class="section-head">
+                <h2>后端解析链路</h2>
+                <span class="tag blue">Action Resolver</span>
+              </div>
+              <div class="section-body resolver">
+                <div class="resolver-step">
+                  <strong>1. 识别 action_key</strong>
+                  <span>从按钮、路由、定时任务或事件中得到同一个业务动作标识。</span>
+                </div>
+                <div class="resolver-step">
+                  <strong>2. 装配上下文</strong>
+                  <span>读取当前用户、请求参数、日报上下文、任务和 session 数据。</span>
+                </div>
+                <div class="resolver-step">
+                  <strong>3. 渲染 Start Prompt</strong>
+                  <span>用 Action 定义中的模板和参数映射生成 managed agent 入参。</span>
+                </div>
+                <div class="resolver-step">
+                  <strong>4. 调用 Managed Agent</strong>
+                  <span>后端使用统一 token 调平台接口，保存运行记录和输出结果。</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>Action Registry</h2>
+              <button class="btn">同步 Managed Agent</button>
+            </div>
+            <div class="section-body registry">
+              <div class="registry-row">
+                <div>
+                  <strong>daily_report.generate</strong>
+                  <span>个人日报生成</span>
+                </div>
+                <div>
+                  <strong>aida-daily-report-agent</strong>
+                  <span>skill: daily-report-writing · mcp: aida-context</span>
+                </div>
+                <div class="chip-group">
+                  <span class="tag blue">manual</span>
+                  <span class="tag amber">schedule</span>
+                  <span class="tag green">self</span>
+                </div>
+                <button class="btn" data-open-drawer>运行</button>
+              </div>
+              <div class="registry-row">
+                <div>
+                  <strong>team_report.generate</strong>
+                  <span>Team Leader 团队日报</span>
+                </div>
+                <div>
+                  <strong>team-summary-agent</strong>
+                  <span>skill: team-summary · mcp: team-context</span>
+                </div>
+                <div class="chip-group">
+                  <span class="tag blue">manual</span>
+                  <span class="tag amber">schedule</span>
+                  <span class="tag teal">team</span>
+                </div>
+                <button class="btn" data-open-drawer>运行</button>
+              </div>
+              <div class="registry-row">
+                <div>
+                  <strong>requirement_risk.summarize</strong>
+                  <span>需求风险摘要</span>
+                </div>
+                <div>
+                  <strong>risk-review-agent</strong>
+                  <span>skill: risk-review · mcp: requirement-store</span>
+                </div>
+                <div class="chip-group">
+                  <span class="tag blue">manual</span>
+                  <span class="tag">event</span>
+                  <span class="tag teal">project</span>
+                </div>
+                <button class="btn" data-open-drawer>运行</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>定时任务复用 Action</h2>
+              <span class="tag amber">无需独立配置页面</span>
+            </div>
+            <div class="section-body schedule-grid">
+              <div class="schedule-item">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                  <strong>个人日报草稿</strong>
+                  <button class="switch is-on" aria-label="开启个人日报草稿"></button>
+                </div>
+                <span>工作日 19:00 执行 daily_report.generate，输出保存为草稿。</span>
+                <span class="tag green">system default</span>
+              </div>
+              <div class="schedule-item">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                  <strong>团队日报汇总</strong>
+                  <button class="switch" aria-label="开启团队日报汇总"></button>
+                </div>
+                <span>Team Leader 可开启，默认读取团队成员当日草稿。</span>
+                <span class="tag amber">user opt-in</span>
+              </div>
+              <div class="schedule-item">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                  <strong>失败重试</strong>
+                  <button class="switch is-on" aria-label="开启失败重试"></button>
+                </div>
+                <span>失败后 10 分钟重试一次，仍失败则进入运行历史告警。</span>
+                <span class="tag red">ops policy</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>最近运行</h2>
+              <button class="btn">查看全部</button>
+            </div>
+            <div class="section-body status-list">
+              <div class="status-item">
+                <time>09:24</time>
+                <div>
+                  <strong>daily_report.generate</strong>
+                  <span>普通用户 · Kimi-K2.6 · 输出草稿已保存</span>
+                </div>
+                <span class="tag green">succeeded</span>
+              </div>
+              <div class="status-item">
+                <time>09:16</time>
+                <div>
+                  <strong>daily_report.generate</strong>
+                  <span>普通用户 · managed task result not ready</span>
+                </div>
+                <span class="tag amber">pending</span>
+              </div>
+              <div class="status-item">
+                <time>昨天</time>
+                <div>
+                  <strong>team_report.generate</strong>
+                  <span>Team Leader · 模型权限不足</span>
+                </div>
+                <span class="tag red">failed</span>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+        <div class="drawer-head">
+          <div>
+            <h2 id="drawerTitle">daily_report.generate</h2>
+            <span class="tag teal">Agent Action</span>
+          </div>
+          <button class="btn icon" id="closeDrawer" aria-label="关闭">×</button>
+        </div>
+        <div class="drawer-body">
+          <div class="two-col">
+            <div class="field">
+              <label for="actionKey">Action Key</label>
+              <input id="actionKey" value="daily_report.generate" />
+            </div>
+            <div class="field">
+              <label for="agentId">Managed Agent</label>
+              <input id="agentId" value="aida-daily-report-agent" />
+            </div>
+            <div class="field">
+              <label for="modelId">模型</label>
+              <input id="modelId" value="Kimi-K2.6" />
+            </div>
+            <div class="field">
+              <label for="scope">权限范围</label>
+              <select id="scope">
+                <option>self</option>
+                <option>team</option>
+                <option>project</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="promptTemplate">Start Prompt 模板</label>
+            <textarea id="promptTemplate">基于 {{report_date}} 的工作上下文，为 {{user_name}} 生成个人日报草稿。输出必须包含：今日完成、阻塞风险、明日计划。</textarea>
+          </div>
+
+          <div class="field">
+            <label for="params">运行参数</label>
+            <textarea id="params">report_date=2026-06-26
+user_id=current_user
+sessions=from:aida_context.sessions
+tasks=from:aida_context.tasks</textarea>
+          </div>
+
+          <pre class="code-box">output_handler: save_daily_report_draft
+trigger_types: [manual, schedule]
+mcp_tools:
+  - aida_context.get_daily_sessions
+  - aida_context.get_task_changes
+skill: daily_report_writing</pre>
+
+          <button class="btn primary" id="runAction">提交 Action 运行</button>
+          <pre class="result-box" id="result">等待提交。</pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const drawer = document.getElementById("drawer");
+      const result = document.getElementById("result");
+
+      document.querySelectorAll("[data-open-drawer]").forEach((button) => {
+        button.addEventListener("click", () => {
+          drawer.classList.add("is-open");
+          drawer.setAttribute("aria-hidden", "false");
+        });
+      });
+
+      document.getElementById("closeDrawer").addEventListener("click", () => {
+        drawer.classList.remove("is-open");
+        drawer.setAttribute("aria-hidden", "true");
+      });
+
+      drawer.addEventListener("click", (event) => {
+        if (event.target === drawer) {
+          drawer.classList.remove("is-open");
+          drawer.setAttribute("aria-hidden", "true");
+        }
+      });
+
+      document.querySelectorAll(".switch").forEach((button) => {
+        button.addEventListener("click", () => {
+          button.classList.toggle("is-on");
+        });
+      });
+
+      document.getElementById("runAction").addEventListener("click", () => {
+        result.textContent =
+          "pending\\nPOST /api/v1/agent-actions/daily_report.generate/runs\\n\\n正在提交到 managed agent 平台...";
+        setTimeout(() => {
+          result.textContent =
+            "succeeded\\n\\n运行记录: run_20260626_0924\\n输出处理: save_daily_report_draft\\n\\n# 个人日报草稿\\n\\n## 今日完成\\n- 完成 Agent Action 触发方案设计\\n- 明确按钮、定时任务复用同一 action_key\\n\\n## 阻塞风险\\n- 需要补齐 action registry 的后端校验和运行历史查询";
+        }, 800);
+      });
+    </script>
+  </body>
+</html>

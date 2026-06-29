@@ -11,6 +11,8 @@ type Config struct {
 	CORSOrigin           string
 	Port                 string
 	ReportGeneratorURL   string
+	ManagedAgentURL      string
+	ManagedAgentToken    string
 	EnablePublicRegister bool
 
 	MinioEndpoint         string
@@ -31,6 +33,8 @@ func Load() *Config {
 		CORSOrigin:           getEnv("CORS_ORIGIN", "http://localhost:3000"),
 		Port:                 getEnv("PORT", "8080"),
 		ReportGeneratorURL:   getEnv("REPORT_GENERATOR_URL", ""),
+		ManagedAgentURL:      getEnv("MANAGED_AGENT_URL", ""),
+		ManagedAgentToken:    getEnv("MANAGED_AGENT_TOKEN", ""),
 		EnablePublicRegister: getEnv("ENABLE_PUBLIC_REGISTER", "false") == "true",
 
 		MinioEndpoint:         getEnv("MINIO_ENDPOINT", ""),

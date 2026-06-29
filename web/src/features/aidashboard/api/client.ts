@@ -5,10 +5,12 @@ import { HttpError } from "@/shared/request/types";
 import type { User } from "@/shared/auth/types";
 import type {
   ACStatus,
+  AIRun,
   DashboardFollowFollowerDTO,
   DashboardFollowItemDTO,
   DashboardRiskGroupDTO,
   DailyReport,
+  DailyReportAgentIntegration,
   DepartmentReport,
   DepartmentReportSources,
   DepartmentWeeklyReport,
@@ -16,6 +18,13 @@ import type {
   Document,
   GenerateReportDraftPayload,
   GenerateReportDraftResponse,
+  ManagedAgent,
+  ManagedAgentManualRunPayload,
+  ManagedAgentSchedule,
+  ManagedMCPEntry,
+  ManagedReportRunPayload,
+  ManagedScope,
+  ManagedSkill,
   PaginatedDailyReports,
   PaginatedDepartmentReports,
   PaginatedPersonalWeeklyReports,
@@ -39,7 +48,9 @@ import type {
   TokenAggregation,
   TokenGroupBy,
   TokenPeriod,
-  Team
+  Team,
+  UpsertManagedAgentPayload,
+  UpsertManagedAgentSchedulePayload
 } from "./types";
 
 async function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
@@ -283,6 +294,11 @@ export const saveReport = updateReport;
 export const submitReport = (id: string, data: { content?: string; session_ids?: string[] }) =>
   unwrap(api.post<DailyReport>(`/reports/${id}/submit`, data));
 
+export const startManagedReportRun = (payload: ManagedReportRunPayload) =>
+  unwrap(api.post<AIRun>("/reports/today/managed-agent-runs", payload));
+export const fetchManagedReportRun = (runId: string) =>
+  unwrap(api.get<AIRun>(`/reports/managed-agent-runs/${runId}`));
+
 export const fetchTeamMemberReports = (date: string) =>
   unwrap(api.get<TeamMemberReport[]>(`/reports/team/members`, { date }));
 export const fetchTeamReportSources = (date: string, teamId?: string) =>
@@ -511,6 +527,46 @@ export const updateDepartmentWeeklyReport = (
 ) => unwrap(api.put<DepartmentWeeklyReport>(`/reports/department/weekly/${id}`, data));
 export const fetchDepartmentWeeklyReports = (params?: Record<string, string>) =>
   unwrap(api.get<DepartmentWeeklyReport[]>("/reports/department/weekly", params));
+
+// ───────────────────────── Managed AI assets ─────────────────────────
+
+export const fetchManagedSkills = (scope: ManagedScope = "mine") =>
+  unwrap(api.get<{ skills: ManagedSkill[] }>("/ai-assets/skills", { scope }));
+export const fetchManagedMCPEntries = (scope: ManagedScope = "mine") =>
+  unwrap(api.get<{ entries: ManagedMCPEntry[] }>("/ai-assets/mcp", { scope }));
+export const createManagedMCPEntry = (payload: ManagedMCPEntry) =>
+  unwrap(api.post<ManagedMCPEntry>("/ai-assets/mcp", payload));
+export const fetchDailyReportAgentIntegration = () =>
+  unwrap(api.get<DailyReportAgentIntegration>("/ai-assets/daily-report-integration"));
+export const fetchManagedAgents = () =>
+  unwrap(api.get<{ agents: ManagedAgent[] }>("/ai-assets/agents"));
+export const createManagedAgent = (payload: UpsertManagedAgentPayload) =>
+  unwrap(api.post<{ agent_id: string; managed_version?: number }>("/ai-assets/agents", payload));
+export const updateManagedAgent = (agentId: string, payload: UpsertManagedAgentPayload) =>
+  unwrap(
+    api.put<{ agent_id: string; managed_version?: number }>(`/ai-assets/agents/${agentId}`, payload)
+  );
+export const startManagedAgentRun = (agentId: string, payload: ManagedAgentManualRunPayload) =>
+  unwrap(api.post<AIRun>(`/ai-assets/agents/${agentId}/runs`, payload));
+export const fetchManagedAgentRuns = (params?: {
+  agent_id?: string;
+  business_type?: string;
+  page_size?: string;
+}) => unwrap(api.get<{ runs: AIRun[] }>("/ai-assets/agent-runs", params));
+export const fetchManagedAgentRun = (runId: string) =>
+  unwrap(api.get<AIRun>(`/ai-assets/agent-runs/${runId}`));
+export const fetchManagedAgentSchedules = () =>
+  unwrap(api.get<{ schedules: ManagedAgentSchedule[] }>("/ai-assets/agent-schedules"));
+export const createManagedAgentSchedule = (payload: UpsertManagedAgentSchedulePayload) =>
+  unwrap(api.post<ManagedAgentSchedule>("/ai-assets/agent-schedules", payload));
+export const updateManagedAgentSchedule = (
+  scheduleId: string,
+  payload: UpsertManagedAgentSchedulePayload
+) => unwrap(api.put<ManagedAgentSchedule>(`/ai-assets/agent-schedules/${scheduleId}`, payload));
+export const deleteManagedAgentSchedule = (scheduleId: string) =>
+  unwrap(api.delete<{ status: string }>(`/ai-assets/agent-schedules/${scheduleId}`));
+export const runManagedAgentScheduleNow = (scheduleId: string) =>
+  unwrap(api.post<AIRun>(`/ai-assets/agent-schedules/${scheduleId}/runs`));
 
 // ───────────────────────── Tokens ─────────────────────────
 
