@@ -56,7 +56,7 @@ func main() {
 		ReportMCPVersion:  cfg.ManagedAgentReportMCPVersion,
 		AIDAPublicBaseURL: cfg.AIDAPublicBaseURL,
 	})
-	dailyReportMCPH := handler.NewDailyReportMCPHandler(database)
+	dailyReportMCPH := handler.NewReportMCPHandler(database)
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
 	service.NewManagedAgentScheduleRunner(database, managedAgentClient).Start(schedulerCtx)
@@ -142,7 +142,7 @@ func main() {
 		r.Get("/reports/mine", reportH.ListMine)
 		r.Get("/reports/today", reportH.GetOrCreateToday)
 		r.Post("/reports/today/draft", reportH.GenerateTodayDraft)
-		r.Post("/reports/today/managed-agent-runs", managedAgentH.StartDailyReportRun)
+		r.Post("/reports/today/managed-agent-runs", managedAgentH.StartReportRun)
 		r.Get("/reports/managed-agent-runs/{runId}", managedAgentH.GetDailyReportRun)
 		r.Post("/reports/today/generate", reportH.GenerateToday)
 		r.Get("/reports/weekly/mine", reportH.ListPersonalWeeklyReports)
@@ -190,8 +190,7 @@ func main() {
 		r.Get("/tokens/sessions", tokenH.ListSessionTokens)
 		r.Get("/teams/activity", teamH.Activity)
 
-		r.Post("/mcp/daily-report", dailyReportMCPH.Serve)
-		r.Post("/mcp/reports", dailyReportMCPH.ServeReports)
+		r.Post("/mcp/reports", dailyReportMCPH.Serve)
 
 		r.Get("/ai-assets/skills", managedAgentH.ListSkills)
 		r.Get("/ai-assets/mcp", managedAgentH.ListMCPEntries)

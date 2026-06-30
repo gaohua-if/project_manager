@@ -322,7 +322,7 @@ func defaultPersonalDailyInstructions() string {
 		"运行参数会包含 run_id、report_type、period.date、mcp_url、mcp_authorization。",
 		"Aida Report MCP 已通过当前用户凭据槽配置 Authorization；调用 MCP 时不要再手工拼接管理员 token。",
 		"必须使用当前用户身份调用 Aida Report MCP，不要要求用户提供 session_ids 或来源列表。",
-		"先调用 get_report_context 获取上下文，再基于上下文生成中文个人日报。",
+		"按以下顺序调用 Aida Report MCP 原子工具：先 get_existing_report 获取已有内容，再 get_sessions + get_tasks + get_requirements 拉取当日上下文，基于上下文生成中文个人日报。",
 		"生成成功后调用 write_report_result，传入相同 run_id、report_type、period.date 和 content。",
 		"生成失败时调用 write_report_failure。不要处理 weekly、team、department。",
 		"不要编造 Aida 上下文之外的事实；如果上下文为空，应明确说明暂无记录。",
@@ -721,16 +721,23 @@ func (h *ManagedAgentHandler) ListAgentRuns(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ManagedAgentHandler) DailyReportIntegration(w http.ResponseWriter, r *http.Request) {
-	mcpURL := absoluteRequestURL(r, "/api/v1/mcp/daily-report")
+	mcpURL := absoluteRequestURL(r, "/api/v1/mcp/reports")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mcp": map[string]any{
-			"name":        "Aida Daily Report MCP",
+			"name":        "Aida Report MCP",
 			"url":         mcpURL,
 			"transport":   "http",
-			"description": "Provides daily report context and draft saving tools for Managed Agents.",
+			"description": "Provides 9 atomic tools for reading sessions/tasks/requirements and writing 6-class reports.",
 			"tools": []string{
-				"aida_daily_report_get_context",
-				"aida_daily_report_save_draft",
+				"get_sessions",
+				"get_daily_reports",
+				"get_weekly_reports",
+				"get_tasks",
+				"get_requirements",
+				"get_existing_report",
+				"get_report_inventory",
+				"write_report_result",
+				"write_report_failure",
 			},
 		},
 		"skill": map[string]string{
@@ -922,7 +929,7 @@ func (h *ManagedAgentHandler) RunAgentScheduleNow(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, run)
 }
 
-func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http.Request) {
+func (h *ManagedAgentHandler) StartReportRun(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureConfigured(w) {
 		return
 	}
@@ -939,6 +946,16 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 	}
 	if len(req.SessionIDs) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_ids is required"})
+		return
+	}
+	reportType := strings.TrimSpace(req.ReportType)
+	if reportType == "" {
+		reportType = "personal_daily"
+	}
+	if reportType != "personal_daily" && reportType != "personal_weekly" &&
+		reportType != "team_daily" && reportType != "team_weekly" &&
+		reportType != "department_daily" && reportType != "department_weekly" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported report_type"})
 		return
 	}
 	reportDate := req.ReportDate
@@ -970,6 +987,7 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 			"urls":            string(urlsJSON),
 			"output_contract": service.DailyReportOutputContract(),
 			"report_date":     reportDate,
+			"report_type":     reportType,
 		},
 	})
 	if err != nil {
@@ -977,12 +995,18 @@ func (h *ManagedAgentHandler) StartDailyReportRun(w http.ResponseWriter, r *http
 		return
 	}
 
+	period := map[string]any{"date": reportDate}
+	if reportType == "personal_weekly" || reportType == "team_weekly" || reportType == "department_weekly" {
+		period = map[string]any{"week_start": req.WeekStart, "week_end": req.WeekEnd}
+	}
 	inputRef := map[string]any{
+		"report_type": reportType,
+		"period":      period,
 		"report_date": reportDate,
 		"session_ids": req.SessionIDs,
 		"urls":        sessionURLs,
 	}
-	runID, err := h.insertAIRun(u.ID, "daily_report", req.AgentID, submitResp, req.ModelID, inputRef)
+	runID, err := h.insertAIRun(u.ID, reportType, req.AgentID, submitResp, req.ModelID, inputRef)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1011,7 +1035,7 @@ func (h *ManagedAgentHandler) GetDailyReportRun(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if run.ExternalTaskID != nil && (!isTerminalManagedStatus(run.Status) || (run.Status == "succeeded" && run.Draft == nil)) {
+	if run.ExternalTaskID != nil && !isTerminalManagedStatus(run.Status) {
 		refreshed, err := h.refreshAIRun(r, run)
 		if err != nil {
 			writeJSON(w, http.StatusOK, run)
@@ -1045,41 +1069,8 @@ func (h *ManagedAgentHandler) refreshAIRun(r *http.Request, run *model.AIRun) (*
 		}
 	}
 
-	var draft *model.GenerateReportDraftResponse
 	var errMsg *string
-	if status == "succeeded" && run.BusinessType == "daily_report" {
-		parsed, err := service.ParseManagedReportDraft(task.Result)
-		if err != nil {
-			status = "failed"
-			msg := "managed agent result parse failed: " + err.Error()
-			errMsg = &msg
-		} else {
-			selected := []string{}
-			if run.InputRef != nil {
-				if rawIDs, ok := run.InputRef["session_ids"].([]any); ok {
-					for _, rawID := range rawIDs {
-						if id, ok := rawID.(string); ok {
-							selected = append(selected, id)
-						}
-					}
-				}
-			}
-			tasks, _ := loadDraftTaskCandidates(h.db, run.UserID)
-			sessions, _ := loadDraftSessions(h.db, run.UserID, selected)
-			normalized := service.NormalizeDraftResponse(parsed, orderDraftSessions(sessions, selected), tasks, true)
-			normalized.ManagedAgentRunID = run.ID
-			normalized.AgentID = run.AgentID
-			normalized.AgentVersionID = run.AgentVersionID
-			if run.ModelID != nil {
-				normalized.ModelID = *run.ModelID
-			} else {
-				normalized.ModelID = task.ModelID
-			}
-			normalized.Status = status
-			draft = &normalized
-			output["draft"] = normalized
-		}
-	} else if status == "failed" && task.Error != "" {
+	if status == "failed" && task.Error != "" {
 		errMsg = &task.Error
 	}
 
@@ -1109,7 +1100,6 @@ func (h *ManagedAgentHandler) refreshAIRun(r *http.Request, run *model.AIRun) (*
 	if err != nil {
 		return nil, err
 	}
-	refreshed.Draft = draft
 	return refreshed, nil
 }
 

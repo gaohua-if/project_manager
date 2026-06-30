@@ -1,0 +1,70 @@
+.ai-assets-resource-empty {
+  padding: 18px 0;
+  background: #f8fafc;
+  border: 1px dashed #d7deea;
+  border-radius: 8px;
+}
+
+.ai-assets-resource-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.ai-assets-resource-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 92px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #dfe7f2;
+  border-radius: 8px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.ai-assets-resource-card:hover {
+  border-color: #91b4ff;
+  box-shadow: 0 8px 20px rgba(30, 64, 175, 0.08);
+}
+
+.ai-assets-resource-card.is-selected {
+  background: #f5f8ff;
+  border-color: #4f7cff;
+}
+
+.ai-assets-resource-card__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ai-assets-resource-card__body strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-assets-resource-card__body span {
+  display: -webkit-box;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ai-assets-resource-card__body em {
+  color: #48627f;
+  font-size: 12px;
+  font-style: normal;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}

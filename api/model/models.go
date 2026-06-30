@@ -262,11 +262,11 @@ type DailyReport struct {
 	FeishuDocURL      *string    `json:"feishu_doc_url,omitempty"`
 	SessionIDs        []string   `json:"session_ids"`
 	GenerationMode    string     `json:"generation_mode,omitempty"`
-	ManagedAgentRunID *string    `json:"managed_agent_run_id,omitempty"`
+	ManagedAgentRunID *string    `json:"managed_agent_run_id"`
 	AgentRunID        *string    `json:"agent_run_id,omitempty"`
-	AgentID           *string    `json:"agent_id,omitempty"`
-	AgentVersionID    *int       `json:"agent_version_id,omitempty"`
-	ModelID           *string    `json:"model_id,omitempty"`
+	AgentID           *string    `json:"agent_id"`
+	AgentVersionID    *int       `json:"agent_version_id"`
+	ModelID           *string    `json:"model_id"`
 	GeneratedAt       *time.Time `json:"generated_at,omitempty"`
 	ProductStatus     string     `json:"product_status,omitempty"`
 	Origin            string     `json:"origin,omitempty"`
@@ -511,6 +511,17 @@ type PersonalWeeklyReport struct {
 	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
 	SourceSessionIDs     []string   `json:"source_session_ids"`
 	SourceTaskIDs        []string   `json:"source_task_ids"`
+	GenerationMode       string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID    *string    `json:"managed_agent_run_id"`
+	AgentRunID           *string    `json:"agent_run_id,omitempty"`
+	AgentID              *string    `json:"agent_id"`
+	AgentVersionID       *int       `json:"agent_version_id"`
+	ModelID              *string    `json:"model_id"`
+	Edited               bool       `json:"edited"`
+	GeneratedAt          *time.Time `json:"generated_at,omitempty"`
+	ProductStatus        string     `json:"product_status,omitempty"`
+	Origin               string     `json:"origin,omitempty"`
+	UpdatedByUser        bool       `json:"updated_by_user"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
@@ -622,10 +633,10 @@ type GenerateReportDraftResponse struct {
 	SelectedSessionIDs      []string                 `json:"selected_session_ids"`
 	SkillName               string                   `json:"skill_name"`
 	TaskProgressSuggestions []TaskProgressSuggestion `json:"task_progress_suggestions"`
-	ManagedAgentRunID       string                   `json:"managed_agent_run_id,omitempty"`
-	AgentID                 string                   `json:"agent_id,omitempty"`
-	AgentVersionID          *int                     `json:"agent_version_id,omitempty"`
-	ModelID                 string                   `json:"model_id,omitempty"`
+	ManagedAgentRunID       string                   `json:"managed_agent_run_id"`
+	AgentID                 string                   `json:"agent_id"`
+	AgentVersionID          *int                     `json:"agent_version_id"`
+	ModelID                 string                   `json:"model_id"`
 	Status                  string                   `json:"status,omitempty"`
 }
 
@@ -721,7 +732,7 @@ type ListManagedAgentsResponse struct {
 }
 
 type UpsertManagedAgentRequest struct {
-	AgentID             string                  `json:"agent_id,omitempty"`
+	AgentID             string                  `json:"agent_id"`
 	Name                string                  `json:"name"`
 	Description         string                  `json:"description,omitempty"`
 	Engine              string                  `json:"engine"`
@@ -742,15 +753,18 @@ type UpsertManagedAgentResponse struct {
 type CreateManagedMCPEntryRequest = ManagedMCPEntry
 
 type ManagedReportRunRequest struct {
+	ReportType string   `json:"report_type,omitempty"`
 	ReportDate string   `json:"report_date"`
+	WeekStart  string   `json:"week_start,omitempty"`
+	WeekEnd    string   `json:"week_end,omitempty"`
 	SessionIDs []string `json:"session_ids"`
 	AgentID    string   `json:"agent_id"`
-	ModelID    string   `json:"model_id,omitempty"`
+	ModelID    string   `json:"model_id"`
 }
 
 type ManagedAgentManualRunRequest struct {
 	Message string            `json:"message"`
-	ModelID string            `json:"model_id,omitempty"`
+	ModelID string            `json:"model_id"`
 	Params  map[string]string `json:"params,omitempty"`
 }
 
@@ -759,7 +773,7 @@ type ManagedAgentSchedule struct {
 	UserID       string            `json:"user_id"`
 	Name         string            `json:"name"`
 	AgentID      string            `json:"agent_id"`
-	ModelID      *string           `json:"model_id,omitempty"`
+	ModelID      *string           `json:"model_id"`
 	Message      string            `json:"message"`
 	Params       map[string]string `json:"params,omitempty"`
 	ScheduleType string            `json:"schedule_type"`
@@ -776,7 +790,7 @@ type ManagedAgentSchedule struct {
 type UpsertManagedAgentScheduleRequest struct {
 	Name         string            `json:"name"`
 	AgentID      string            `json:"agent_id"`
-	ModelID      string            `json:"model_id,omitempty"`
+	ModelID      string            `json:"model_id"`
 	Message      string            `json:"message"`
 	Params       map[string]string `json:"params,omitempty"`
 	ScheduleType string            `json:"schedule_type"`
@@ -793,10 +807,10 @@ type AIRun struct {
 	BusinessID        *string                      `json:"business_id,omitempty"`
 	RuntimeType       string                       `json:"runtime_type"`
 	AgentID           string                       `json:"agent_id"`
-	AgentVersionID    *int                         `json:"agent_version_id,omitempty"`
+	AgentVersionID    *int                         `json:"agent_version_id"`
 	ExternalTaskID    *string                      `json:"external_task_id,omitempty"`
 	ExternalSessionID *string                      `json:"external_session_id,omitempty"`
-	ModelID           *string                      `json:"model_id,omitempty"`
+	ModelID           *string                      `json:"model_id"`
 	Status            string                       `json:"status"`
 	InputRef          map[string]any               `json:"input_ref_json,omitempty"`
 	OutputRef         map[string]any               `json:"output_ref_json,omitempty"`
@@ -838,6 +852,17 @@ type TeamReport struct {
 	MemberReportIDs      []string   `json:"member_report_ids"`
 	SourceDailyReportIDs []string   `json:"source_daily_report_ids"`
 	SessionIDs           []string   `json:"session_ids"`
+	GenerationMode       string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID    *string    `json:"managed_agent_run_id"`
+	AgentRunID           *string    `json:"agent_run_id,omitempty"`
+	AgentID              *string    `json:"agent_id"`
+	AgentVersionID       *int       `json:"agent_version_id"`
+	ModelID              *string    `json:"model_id"`
+	Edited               bool       `json:"edited"`
+	GeneratedAt          *time.Time `json:"generated_at,omitempty"`
+	ProductStatus        string     `json:"product_status,omitempty"`
+	Origin               string     `json:"origin,omitempty"`
+	UpdatedByUser        bool       `json:"updated_by_user"`
 	SavedAt              *time.Time `json:"saved_at,omitempty"`
 	SubmittedAt          *time.Time `json:"submitted_at,omitempty"`
 	SubmittedTo          *string    `json:"submitted_to,omitempty"`
@@ -935,6 +960,17 @@ type DepartmentReport struct {
 	Content             string     `json:"content"`
 	Status              *string    `json:"status,omitempty"`
 	SourceTeamReportIDs []string   `json:"source_team_report_ids"`
+	GenerationMode      string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID   *string    `json:"managed_agent_run_id"`
+	AgentRunID          *string    `json:"agent_run_id,omitempty"`
+	AgentID             *string    `json:"agent_id"`
+	AgentVersionID      *int       `json:"agent_version_id"`
+	ModelID             *string    `json:"model_id"`
+	Edited              bool       `json:"edited"`
+	GeneratedAt         *time.Time `json:"generated_at,omitempty"`
+	ProductStatus       string     `json:"product_status,omitempty"`
+	Origin              string     `json:"origin,omitempty"`
+	UpdatedByUser       bool       `json:"updated_by_user"`
 	SavedAt             *time.Time `json:"saved_at,omitempty"`
 	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -1043,6 +1079,17 @@ type TeamWeeklyReport struct {
 	SourceTeamReportIDs           []string   `json:"source_team_report_ids"`
 	SourceTaskIDs                 []string   `json:"source_task_ids"`
 	SourcePersonalWeeklyReportIDs []string   `json:"source_personal_weekly_report_ids"`
+	GenerationMode                string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID             *string    `json:"managed_agent_run_id"`
+	AgentRunID                    *string    `json:"agent_run_id,omitempty"`
+	AgentID                       *string    `json:"agent_id"`
+	AgentVersionID                *int       `json:"agent_version_id"`
+	ModelID                       *string    `json:"model_id"`
+	Edited                        bool       `json:"edited"`
+	GeneratedAt                   *time.Time `json:"generated_at,omitempty"`
+	ProductStatus                 string     `json:"product_status,omitempty"`
+	Origin                        string     `json:"origin,omitempty"`
+	UpdatedByUser                 bool       `json:"updated_by_user"`
 	SubmittedAt                   *time.Time `json:"submitted_at,omitempty"`
 	CreatedAt                     time.Time  `json:"created_at"`
 	UpdatedAt                     time.Time  `json:"updated_at"`
@@ -1091,6 +1138,17 @@ type DepartmentWeeklyReport struct {
 	WeekStart                 string     `json:"week_start"`
 	Content                   string     `json:"content"`
 	SourceTeamWeeklyReportIDs []string   `json:"source_team_weekly_report_ids"`
+	GenerationMode            string     `json:"generation_mode,omitempty"`
+	ManagedAgentRunID         *string    `json:"managed_agent_run_id"`
+	AgentRunID                *string    `json:"agent_run_id,omitempty"`
+	AgentID                   *string    `json:"agent_id"`
+	AgentVersionID            *int       `json:"agent_version_id"`
+	ModelID                   *string    `json:"model_id"`
+	Edited                    bool       `json:"edited"`
+	GeneratedAt               *time.Time `json:"generated_at,omitempty"`
+	ProductStatus             string     `json:"product_status,omitempty"`
+	Origin                    string     `json:"origin,omitempty"`
+	UpdatedByUser             bool       `json:"updated_by_user"`
 	ArchivedAt                *time.Time `json:"archived_at,omitempty"`
 	CreatedAt                 time.Time  `json:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at"`

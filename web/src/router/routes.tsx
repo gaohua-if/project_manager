@@ -10,6 +10,10 @@ import {
 } from "@ant-design/icons";
 
 import { AIAssetsPage } from "@/features/aidashboard/ai-assets/pages/AIAssetsPage";
+import { AgentCreatePage } from "@/features/aidashboard/ai-assets/pages/AgentCreatePage";
+import { AgentEditPage } from "@/features/aidashboard/ai-assets/pages/AgentEditPage";
+import { AgentRunPage } from "@/features/aidashboard/ai-assets/pages/AgentRunPage";
+import { MCPCreatePage } from "@/features/aidashboard/ai-assets/pages/MCPCreatePage";
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
 import { OrganizationPage } from "@/features/aidashboard/organization/pages/OrganizationPage";
 import { OrganizationUserEditPage } from "@/features/aidashboard/organization/pages/OrganizationUserEditPage";
@@ -184,6 +188,34 @@ export const appRoutes: AppRoute[] = [
     menuOrder: 90,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <AIAssetsPage />
+  },
+  {
+    path: "/ai-assets/agents/new",
+    title: "新建 Managed Agent",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AgentCreatePage />
+  },
+  {
+    path: "/ai-assets/agents/:agentId/edit",
+    title: "编辑 Managed Agent",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AgentEditPage />
+  },
+  {
+    path: "/ai-assets/agents/:agentId/run",
+    title: "运行 Managed Agent",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AgentRunPage />
+  },
+  {
+    path: "/ai-assets/mcp/new",
+    title: "新建 MCP Server",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <MCPCreatePage />
   },
   {
     path: "/notifications",

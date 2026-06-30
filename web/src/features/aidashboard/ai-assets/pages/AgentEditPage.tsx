@@ -1,0 +1,146 @@
+import { Alert, App, Form, Spin } from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+
+import {
+  fetchManagedAgents,
+  fetchManagedMCPEntries,
+  fetchManagedSkills,
+  updateManagedAgent
+} from "../../api/client";
+import type { UpsertManagedAgentPayload } from "../../api/types";
+import { AgentEditor, type AgentEditorValues } from "../components/AgentEditor";
+import {
+  currentMCPKeys,
+  currentSkillKeys,
+  errorMessage
+} from "../utils/agentAssets";
+import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+
+const AI_ASSETS_HOME = "/ai-assets";
+
+export function AgentEditPage() {
+  const navigate = useNavigate();
+  const { agentId } = useParams<{ agentId: string }>();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const [form] = Form.useForm<AgentEditorValues>();
+
+  const agentsQuery = useQuery({
+    queryKey: ["managed-agents"],
+    queryFn: () => fetchManagedAgents(),
+    staleTime: 30_000
+  });
+  const skillsQuery = useQuery({
+    queryKey: ["managed-skills", "mine"],
+    queryFn: () => fetchManagedSkills("mine"),
+    staleTime: 60_000
+  });
+  const mcpQuery = useQuery({
+    queryKey: ["managed-mcp", "mine"],
+    queryFn: () => fetchManagedMCPEntries("mine"),
+    staleTime: 60_000
+  });
+
+  const skills = useMemo(() => skillsQuery.data?.skills ?? [], [skillsQuery.data]);
+  const mcpEntries = useMemo(() => mcpQuery.data?.entries ?? [], [mcpQuery.data]);
+
+  const agent = useMemo(
+    () => agentsQuery.data?.agents.find((item) => item.agent_id === agentId) ?? null,
+    [agentsQuery.data, agentId]
+  );
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: UpsertManagedAgentPayload) =>
+      updateManagedAgent(agent?.agent_id || "", payload),
+    onSuccess: () => {
+      message.success("Agent 已更新");
+      void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
+      navigate(AI_ASSETS_HOME);
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  useEffect(() => {
+    if (!agent) return;
+    form.setFieldsValue({
+      name: agent.name,
+      description: agent.description,
+      engine: agent.engine,
+      instructions: agent.instructions,
+      default_model_id: agent.default_model_id,
+      start_prompt_template: agent.start_prompt_template,
+      skills: currentSkillKeys(agent),
+      mcp_bindings: currentMCPKeys(agent)
+    });
+  }, [agent, form]);
+
+  if (agentsQuery.isLoading) {
+    return (
+      <PagePanel
+        title="编辑 Managed Agent"
+        description="加载 Agent 中…"
+        backTo={AI_ASSETS_HOME}
+        onBack={() => navigate(AI_ASSETS_HOME)}
+        onNavigate={(path) => navigate(path)}
+        breadcrumbs={[
+          { title: "系统" },
+          { title: "我的 AI 资产", path: AI_ASSETS_HOME },
+          { title: "编辑 Agent" }
+        ]}
+      >
+        <Spin />
+      </PagePanel>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <PagePanel
+        title="编辑 Managed Agent"
+        description="未找到该 Agent"
+        backTo={AI_ASSETS_HOME}
+        onBack={() => navigate(AI_ASSETS_HOME)}
+        onNavigate={(path) => navigate(path)}
+        breadcrumbs={[
+          { title: "系统" },
+          { title: "我的 AI 资产", path: AI_ASSETS_HOME },
+          { title: "编辑 Agent" }
+        ]}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="未找到该 Agent"
+          description="该 Agent 可能已被删除，请返回列表查看。"
+        />
+      </PagePanel>
+    );
+  }
+
+  return (
+    <PagePanel
+      title="编辑 Managed Agent"
+      description={`配置 Agent ${agent.name} 的基础信息、运行参数、Prompt 和资源绑定`}
+      backTo={AI_ASSETS_HOME}
+      onBack={() => navigate(AI_ASSETS_HOME)}
+      onNavigate={(path) => navigate(path)}
+      breadcrumbs={[
+        { title: "系统" },
+        { title: "我的 AI 资产", path: AI_ASSETS_HOME },
+        { title: agent.name || "编辑 Agent" }
+      ]}
+    >
+      <AgentEditor
+        form={form}
+        agent={agent}
+        skills={skills}
+        mcpEntries={mcpEntries}
+        submitting={updateMutation.isPending}
+        onCancel={() => navigate(AI_ASSETS_HOME)}
+        onSubmit={(payload: UpsertManagedAgentPayload) => updateMutation.mutate(payload)}
+      />
+    </PagePanel>
+  );
+}

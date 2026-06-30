@@ -47,7 +47,7 @@ CREATE TABLE requirements (
     title               TEXT NOT NULL,
     description         TEXT NOT NULL,
     feishu_doc_url      TEXT,
-    acceptance_criteria TEXT[],
+    acceptance_criteria TEXT[] NOT NULL DEFAULT '{}',
     creator_id          BIGINT NOT NULL REFERENCES users(id),
     creator_role        TEXT NOT NULL,
     status              TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'review', 'active', 'completed', 'cancelled')),
@@ -204,6 +204,12 @@ CREATE TABLE team_reports (
     member_report_ids       UUID[] NOT NULL DEFAULT '{}',
     source_daily_report_ids UUID[] NOT NULL DEFAULT '{}',
     session_ids             UUID[] NOT NULL DEFAULT '{}',
+    generation_mode         TEXT NOT NULL DEFAULT 'default',
+    managed_agent_run_id    UUID,
+    agent_id                TEXT,
+    agent_version_id        INTEGER,
+    model_id                TEXT,
+    edited                  BOOLEAN NOT NULL DEFAULT false,
     status                  TEXT CHECK (status IS NULL OR status IN ('saved', 'submitted')),
     submitted_content       TEXT,
     saved_at                TIMESTAMPTZ,
@@ -221,6 +227,12 @@ CREATE TABLE department_reports (
     report_date            DATE NOT NULL,
     content                TEXT NOT NULL,
     source_team_report_ids UUID[] NOT NULL DEFAULT '{}',
+    generation_mode        TEXT NOT NULL DEFAULT 'default',
+    managed_agent_run_id   UUID,
+    agent_id               TEXT,
+    agent_version_id       INTEGER,
+    model_id               TEXT,
+    edited                 BOOLEAN NOT NULL DEFAULT false,
     status                 TEXT CHECK (status IS NULL OR status IN ('saved', 'archived')),
     saved_at               TIMESTAMPTZ,
     archived_at            TIMESTAMPTZ,
@@ -245,6 +257,12 @@ CREATE TABLE personal_weekly_reports (
     source_daily_report_ids UUID[] NOT NULL DEFAULT '{}',
     source_session_ids      UUID[] NOT NULL DEFAULT '{}',
     source_task_ids         UUID[] NOT NULL DEFAULT '{}',
+    generation_mode         TEXT NOT NULL DEFAULT 'default',
+    managed_agent_run_id    UUID,
+    agent_id                TEXT,
+    agent_version_id        INTEGER,
+    model_id                TEXT,
+    edited                  BOOLEAN NOT NULL DEFAULT false,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, week_start)
@@ -257,29 +275,45 @@ CREATE TABLE team_weekly_reports (
     team_id                           UUID NOT NULL REFERENCES teams(id),
     leader_id                         BIGINT NOT NULL REFERENCES users(id),
     week_start                        DATE NOT NULL,
+    week_end                          DATE NOT NULL,
     content                           TEXT NOT NULL,
     source_daily_report_ids           UUID[] NOT NULL DEFAULT '{}',
     source_team_report_ids            UUID[] NOT NULL DEFAULT '{}',
     source_task_ids                   UUID[] NOT NULL DEFAULT '{}',
     source_personal_weekly_report_ids UUID[] NOT NULL DEFAULT '{}',
+    generation_mode                   TEXT NOT NULL DEFAULT 'default',
+    managed_agent_run_id              UUID,
+    agent_id                          TEXT,
+    agent_version_id                  INTEGER,
+    model_id                          TEXT,
+    edited                            BOOLEAN NOT NULL DEFAULT false,
     submitted_at                      TIMESTAMPTZ,
     created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (team_id, week_start)
 );
 CREATE INDEX idx_team_weekly_reports_team_week ON team_weekly_reports(team_id, week_start DESC);
+CREATE INDEX idx_team_weekly_reports_week_end ON team_weekly_reports(week_end DESC);
 
 CREATE TABLE department_weekly_reports (
     id                            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     week_start                    DATE NOT NULL,
+    week_end                      DATE NOT NULL,
     content                       TEXT NOT NULL,
     source_team_weekly_report_ids UUID[] NOT NULL DEFAULT '{}',
+    generation_mode               TEXT NOT NULL DEFAULT 'default',
+    managed_agent_run_id          UUID,
+    agent_id                      TEXT,
+    agent_version_id              INTEGER,
+    model_id                      TEXT,
+    edited                        BOOLEAN NOT NULL DEFAULT false,
     archived_at                   TIMESTAMPTZ,
     created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (week_start)
 );
 CREATE INDEX idx_department_weekly_reports_week ON department_weekly_reports(week_start DESC);
+CREATE INDEX idx_department_weekly_reports_week_end ON department_weekly_reports(week_end DESC);
 
 CREATE TABLE ai_runs (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -306,6 +340,26 @@ CREATE INDEX idx_ai_runs_business ON ai_runs(business_type, business_id);
 
 ALTER TABLE daily_reports
     ADD CONSTRAINT daily_reports_managed_agent_run_fk
+    FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
+
+ALTER TABLE personal_weekly_reports
+    ADD CONSTRAINT personal_weekly_reports_run_fk
+    FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
+
+ALTER TABLE team_reports
+    ADD CONSTRAINT team_reports_run_fk
+    FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
+
+ALTER TABLE team_weekly_reports
+    ADD CONSTRAINT team_weekly_reports_run_fk
+    FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
+
+ALTER TABLE department_reports
+    ADD CONSTRAINT department_reports_run_fk
+    FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
+
+ALTER TABLE department_weekly_reports
+    ADD CONSTRAINT department_weekly_reports_run_fk
     FOREIGN KEY (managed_agent_run_id) REFERENCES ai_runs(id);
 
 CREATE TABLE managed_agent_schedules (

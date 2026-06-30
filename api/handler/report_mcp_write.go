@@ -1,0 +1,386 @@
+package handler
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/lib/pq"
+)
+
+// reportAIRun is the validated AI run after aiRunGuard.
+type reportAIRun struct {
+	ID        string
+	AgentID   string
+	ModelID   *string
+	CreatedAt time.Time
+}
+
+type writeReportResultArgs struct {
+	ReportType string       `json:"report_type"`
+	Period     periodArgs   `json:"period"`
+	Target     reportTarget `json:"target,omitempty"`
+	RunID      string       `json:"run_id"`
+	Content    string       `json:"content"`
+	Summary    string       `json:"summary,omitempty"`
+}
+
+type writeReportFailureArgs struct {
+	ReportType   string       `json:"report_type"`
+	Period       periodArgs   `json:"period"`
+	Target       reportTarget `json:"target,omitempty"`
+	RunID        string       `json:"run_id"`
+	ErrorCode    string       `json:"error_code,omitempty"`
+	ErrorMessage string       `json:"error_message"`
+}
+
+func (h *ReportMCPHandler) toolWriteReportResult(r *http.Request, rawArgs json.RawMessage) (any, error) {
+	u, err := requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	var args writeReportResultArgs
+	if err := decodeArguments(rawArgs, &args); err != nil {
+		return nil, err
+	}
+	if err := validateReportType(args.ReportType); err != nil {
+		return nil, err
+	}
+	date, ws, we, err := resolveReportPeriod(args.ReportType, args.Period)
+	if err != nil {
+		return nil, err
+	}
+	target, err := resolveTarget(u, args.Target, args.ReportType, true)
+	if err != nil {
+		return nil, err
+	}
+	run, err := h.aiRunGuard(r, args.RunID, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	content := strings.TrimSpace(args.Content)
+	if content == "" {
+		return nil, mcpErr("INVALID_ARGUMENT", "content is required")
+	}
+
+	ctx := r.Context()
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, errMCPInternal
+	}
+	defer tx.Rollback()
+
+	existing, err := selectReportForUpdate(ctx, tx, args.ReportType, date, ws, we, target)
+	if err != nil {
+		return nil, errMCPInternal
+	}
+	if existing != nil && existing.Edited && existing.UpdatedAt.After(run.CreatedAt) {
+		msg := "报告已被用户编辑，AI 回写已取消"
+		if err := markAIRunFailedTx(ctx, tx, run.ID, u.ID, reportEditConflictCode, msg); err != nil {
+			return nil, errMCPInternal
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, errMCPInternal
+		}
+		return nil, errReportEditConflict
+	}
+
+	reportID, err := upsertReportContent(ctx, tx, args.ReportType, date, ws, we, target, content, run, u.ID)
+	if err != nil {
+		return nil, errMCPInternal
+	}
+
+	outputRef, _ := json.Marshal(map[string]any{
+		"report_type": args.ReportType,
+		"date":        date,
+		"week_start":  ws,
+		"week_end":    we,
+		"summary":     args.Summary,
+	})
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE ai_runs
+		SET status = 'succeeded',
+		    business_id = $1,
+		    output_ref_json = $2,
+		    error_message = NULL,
+		    finished_at = now()
+		WHERE id = $3 AND user_id = $4`, reportID, outputRef, run.ID, u.ID); err != nil {
+		return nil, errMCPInternal
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, errMCPInternal
+	}
+
+	return mcpTextResult(map[string]any{
+		"status":               "saved",
+		"report_id":            reportID,
+		"report_type":          args.ReportType,
+		"agent_run_id":         run.ID,
+		"managed_agent_run_id": run.ID,
+		"product_status":       "ai_generated",
+		"origin":               "ai",
+		"updated_by_user":      false,
+	}), nil
+}
+
+func (h *ReportMCPHandler) toolWriteReportFailure(r *http.Request, rawArgs json.RawMessage) (any, error) {
+	u, err := requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	var args writeReportFailureArgs
+	if err := decodeArguments(rawArgs, &args); err != nil {
+		return nil, err
+	}
+	if err := validateReportType(args.ReportType); err != nil {
+		return nil, err
+	}
+	if _, _, _, err := resolveReportPeriod(args.ReportType, args.Period); err != nil {
+		return nil, err
+	}
+	if _, err := resolveTarget(u, args.Target, args.ReportType, true); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(args.RunID) == "" {
+		return nil, mcpErr("INVALID_ARGUMENT", "run_id is required")
+	}
+	if _, err := h.aiRunGuard(r, args.RunID, u.ID); err != nil {
+		return nil, err
+	}
+	errorMessage := strings.TrimSpace(args.ErrorMessage)
+	if errorMessage == "" {
+		errorMessage = "Agent 生成失败"
+	}
+	errorCode := strings.TrimSpace(args.ErrorCode)
+	formatted := errorMessage
+	if errorCode != "" {
+		formatted = errorCode + ": " + errorMessage
+	}
+	if _, err := h.db.ExecContext(r.Context(), `
+		UPDATE ai_runs
+		SET status = 'failed',
+		    error_message = $1,
+		    finished_at = now()
+		WHERE id::text = $2 AND user_id = $3`, formatted, strings.TrimSpace(args.RunID), u.ID); err != nil {
+		return nil, errMCPInternal
+	}
+	return mcpTextResult(map[string]any{
+		"run_id":    args.RunID,
+		"status":    "failed",
+		"retryable": true,
+	}), nil
+}
+
+// aiRunGuard validates that runID belongs to the current user.
+func (h *ReportMCPHandler) aiRunGuard(r *http.Request, runID, userID string) (*reportAIRun, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, mcpErr("INVALID_ARGUMENT", "run_id is required")
+	}
+	var run reportAIRun
+	var modelID sql.NullString
+	var createdAt sql.NullTime
+	err := h.db.QueryRowContext(r.Context(), `
+		SELECT id::text, COALESCE(agent_id, ''), model_id, created_at
+		FROM ai_runs
+		WHERE id::text = $1 AND user_id = $2`, runID, userID).
+		Scan(&run.ID, &run.AgentID, &modelID, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, errRunNotFound
+	}
+	if err != nil {
+		return nil, errMCPInternal
+	}
+	if modelID.Valid && modelID.String != "" {
+		s := modelID.String
+		run.ModelID = &s
+	}
+	if createdAt.Valid {
+		run.CreatedAt = createdAt.Time
+	}
+	return &run, nil
+}
+
+// existingReportRow is the SELECT FOR UPDATE result used for the防覆盖 check.
+type existingReportRow struct {
+	ID        string
+	Edited    bool
+	UpdatedAt time.Time
+}
+
+func selectReportForUpdate(ctx context.Context, tx *sql.Tx, reportType, date, ws, we string, target reportTarget) (*existingReportRow, error) {
+	q, args := selectForUpdateQuery(reportType, date, ws, we, target)
+	row := tx.QueryRowContext(ctx, q, args...)
+	var e existingReportRow
+	err := row.Scan(&e.ID, &e.Edited, &e.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func selectForUpdateQuery(reportType, date, ws, we string, target reportTarget) (string, []any) {
+	switch reportType {
+	case reportTypePersonalDaily:
+		return `SELECT id::text, edited, updated_at FROM daily_reports WHERE user_id = $1 AND report_date = $2 FOR UPDATE`, []any{target.UserID, date}
+	case reportTypePersonalWeekly:
+		return `SELECT id::text, edited, updated_at FROM personal_weekly_reports WHERE user_id = $1 AND week_start = $2 AND week_end = $3 FOR UPDATE`, []any{target.UserID, ws, we}
+	case reportTypeTeamDaily:
+		return `SELECT id::text, edited, updated_at FROM team_reports WHERE team_id = $1 AND report_date = $2 FOR UPDATE`, []any{target.TeamID, date}
+	case reportTypeTeamWeekly:
+		return `SELECT id::text, edited, updated_at FROM team_weekly_reports WHERE team_id = $1 AND week_start = $2 AND week_end = $3 FOR UPDATE`, []any{target.TeamID, ws, we}
+	case reportTypeDepartmentDaily:
+		return `SELECT id::text, edited, updated_at FROM department_reports WHERE report_date = $1 FOR UPDATE`, []any{date}
+	case reportTypeDepartmentWeekly:
+		return `SELECT id::text, edited, updated_at FROM department_weekly_reports WHERE week_start = $1 AND week_end = $2 FOR UPDATE`, []any{ws, we}
+	}
+	return "", nil
+}
+
+// upsertReportContent writes content + agent metadata into the target table and returns the report ID.
+// leaderID is the current user's ID, used for team_reports / team_weekly_reports leader_id column.
+func upsertReportContent(ctx context.Context, tx *sql.Tx, reportType, date, ws, we string, target reportTarget, content string, run *reportAIRun, leaderID string) (string, error) {
+	switch reportType {
+	case reportTypePersonalDaily:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO daily_reports (user_id, report_date, content, edited, generation_mode, managed_agent_run_id, agent_id, model_id, status, saved_at)
+			VALUES ($1, $2, $3, false, 'managed_agent', $4, $5, $6, 'saved', now())
+			ON CONFLICT (user_id, report_date) DO UPDATE
+			SET content = EXCLUDED.content,
+			    edited = false,
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    status = 'saved',
+			    saved_at = now(),
+			    updated_at = now()
+			RETURNING id::text`, target.UserID, date, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	case reportTypePersonalWeekly:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO personal_weekly_reports (user_id, week_start, week_end, content, status, generation_mode, managed_agent_run_id, agent_id, model_id, edited, saved_at)
+			VALUES ($1, $2, $3, $4, 'saved', 'managed_agent', $5, $6, $7, false, now())
+			ON CONFLICT (user_id, week_start) DO UPDATE
+			SET content = EXCLUDED.content,
+			    week_end = EXCLUDED.week_end,
+			    status = 'saved',
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    edited = false,
+			    saved_at = now(),
+			    updated_at = now()
+			RETURNING id::text`, target.UserID, ws, we, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	case reportTypeTeamDaily:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO team_reports (team_id, leader_id, report_date, content, generation_mode, managed_agent_run_id, agent_id, model_id, edited, status, saved_at)
+			VALUES ($1, $2, $3, $4, 'managed_agent', $5, $6, $7, false, 'saved', now())
+			ON CONFLICT (team_id, report_date) DO UPDATE
+			SET content = EXCLUDED.content,
+			    leader_id = EXCLUDED.leader_id,
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    edited = false,
+			    status = 'saved',
+			    saved_at = now(),
+			    updated_at = now()
+			RETURNING id::text`, target.TeamID, leaderID, date, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	case reportTypeTeamWeekly:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO team_weekly_reports (team_id, leader_id, week_start, week_end, content, generation_mode, managed_agent_run_id, agent_id, model_id, edited)
+			VALUES ($1, $2, $3, $4, $5, 'managed_agent', $6, $7, $8, false)
+			ON CONFLICT (team_id, week_start) DO UPDATE
+			SET content = EXCLUDED.content,
+			    leader_id = EXCLUDED.leader_id,
+			    week_end = EXCLUDED.week_end,
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    edited = false,
+			    updated_at = now()
+			RETURNING id::text`, target.TeamID, leaderID, ws, we, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	case reportTypeDepartmentDaily:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO department_reports (report_date, content, generation_mode, managed_agent_run_id, agent_id, model_id, edited, status, saved_at)
+			VALUES ($1, $2, 'managed_agent', $3, $4, $5, false, 'saved', now())
+			ON CONFLICT (report_date) DO UPDATE
+			SET content = EXCLUDED.content,
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    edited = false,
+			    status = 'saved',
+			    saved_at = now(),
+			    updated_at = now()
+			RETURNING id::text`, date, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	case reportTypeDepartmentWeekly:
+		var reportID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO department_weekly_reports (week_start, week_end, content, generation_mode, managed_agent_run_id, agent_id, model_id, edited)
+			VALUES ($1, $2, $3, 'managed_agent', $4, $5, $6, false)
+			ON CONFLICT (week_start) DO UPDATE
+			SET content = EXCLUDED.content,
+			    week_end = EXCLUDED.week_end,
+			    generation_mode = 'managed_agent',
+			    managed_agent_run_id = EXCLUDED.managed_agent_run_id,
+			    agent_id = EXCLUDED.agent_id,
+			    model_id = EXCLUDED.model_id,
+			    edited = false,
+			    updated_at = now()
+			RETURNING id::text`, ws, we, content, run.ID, nullableValue(run.AgentID), nullablePtrValue(run.ModelID)).Scan(&reportID)
+		return reportID, err
+	}
+	return "", fmt.Errorf("unsupported report_type: %s", reportType)
+}
+
+func markAIRunFailedTx(ctx context.Context, tx *sql.Tx, runID, userID, code, message string) error {
+	formatted := message
+	if code != "" {
+		formatted = code + ": " + message
+	}
+	_, err := tx.ExecContext(ctx, `
+		UPDATE ai_runs
+		SET status = 'failed',
+		    error_message = $1,
+		    finished_at = now()
+		WHERE id::text = $2 AND user_id = $3`, formatted, runID, userID)
+	return err
+}
+
+func nullableValue(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func nullablePtrValue(p *string) any {
+	if p == nil || *p == "" {
+		return nil
+	}
+	return *p
+}
+
+var _ = pq.Array

@@ -52,11 +52,11 @@ func (h *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch u.Role {
-	case "employee":
+	case "employee", "pm":
 		where += fmt.Sprintf(" AND s.user_id = $%d", argIdx)
 		args = append(args, u.ID)
 		argIdx++
-	case "team_leader", "pm":
+	case "team_leader":
 		if u.TeamID != nil {
 			where += fmt.Sprintf(" AND s.user_id IN (SELECT id FROM users WHERE team_id = $%d)", argIdx)
 			args = append(args, *u.TeamID)

@@ -55,12 +55,14 @@ function scopeName(scope: DailyGenerateScope) {
 }
 
 function reportStatus(report: DailyReport | TeamReport | DepartmentReport | null) {
-  if (!report || !report.content?.trim()) return <Tag>暂无报告</Tag>;
-  if ("product_status" in report) {
+  if (report && "product_status" in report && report.product_status) {
+    if (report.product_status === "generation_failed") return <Tag color="red">生成失败</Tag>;
+    if (report.product_status === "missing") return <Tag>暂无报告</Tag>;
     if (report.product_status === "ai_generated") return <Tag color="blue">AI 已生成</Tag>;
     if (report.product_status === "modified") return <Tag color="orange">本人已修改</Tag>;
     if (report.product_status === "manual") return <Tag color="green">手写报告</Tag>;
   }
+  if (!report || !report.content?.trim()) return <Tag>暂无报告</Tag>;
   if ("generation_mode" in report && report.generation_mode === "managed_agent") {
     return report.edited ? <Tag color="orange">本人已修改</Tag> : <Tag color="blue">AI 已生成</Tag>;
   }

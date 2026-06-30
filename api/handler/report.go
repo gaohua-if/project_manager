@@ -322,6 +322,117 @@ func fillDailyReportProductFields(dr *model.DailyReport, generationMode, managed
 	dr.ProductStatus = "manual"
 }
 
+type reportProductFields struct {
+	GenerationMode    string
+	ManagedAgentRunID *string
+	AgentRunID        *string
+	AgentID           *string
+	AgentVersionID    *int
+	ModelID           *string
+	GeneratedAt       *time.Time
+	ProductStatus     string
+	Origin            string
+	UpdatedByUser     bool
+}
+
+func buildReportProductFields(edited bool, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) reportProductFields {
+	fields := reportProductFields{
+		GenerationMode:    generationMode.String,
+		ManagedAgentRunID: nullStringPtr(managedAgentRunID),
+		AgentID:           nullStringPtr(agentID),
+		ModelID:           nullStringPtr(modelID),
+		GeneratedAt:       nullTimePtr(generatedAt),
+		UpdatedByUser:     edited,
+	}
+	fields.AgentRunID = fields.ManagedAgentRunID
+	if agentVersionID.Valid {
+		v := int(agentVersionID.Int64)
+		fields.AgentVersionID = &v
+	}
+	if fields.GenerationMode == "managed_agent" {
+		fields.Origin = "ai"
+		if edited {
+			fields.ProductStatus = "modified"
+		} else {
+			fields.ProductStatus = "ai_generated"
+		}
+	} else {
+		fields.Origin = "manual"
+		fields.ProductStatus = "manual"
+	}
+	return fields
+}
+
+func fillTeamReportProductFields(tr *model.TeamReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	fields := buildReportProductFields(tr.Edited, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
+	tr.GenerationMode = fields.GenerationMode
+	tr.ManagedAgentRunID = fields.ManagedAgentRunID
+	tr.AgentRunID = fields.AgentRunID
+	tr.AgentID = fields.AgentID
+	tr.AgentVersionID = fields.AgentVersionID
+	tr.ModelID = fields.ModelID
+	tr.GeneratedAt = fields.GeneratedAt
+	tr.ProductStatus = fields.ProductStatus
+	tr.Origin = fields.Origin
+	tr.UpdatedByUser = fields.UpdatedByUser
+}
+
+func fillDepartmentReportProductFields(dr *model.DepartmentReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	fields := buildReportProductFields(dr.Edited, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
+	dr.GenerationMode = fields.GenerationMode
+	dr.ManagedAgentRunID = fields.ManagedAgentRunID
+	dr.AgentRunID = fields.AgentRunID
+	dr.AgentID = fields.AgentID
+	dr.AgentVersionID = fields.AgentVersionID
+	dr.ModelID = fields.ModelID
+	dr.GeneratedAt = fields.GeneratedAt
+	dr.ProductStatus = fields.ProductStatus
+	dr.Origin = fields.Origin
+	dr.UpdatedByUser = fields.UpdatedByUser
+}
+
+func fillPersonalWeeklyReportProductFields(report *model.PersonalWeeklyReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	fields := buildReportProductFields(report.Edited, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
+	report.GenerationMode = fields.GenerationMode
+	report.ManagedAgentRunID = fields.ManagedAgentRunID
+	report.AgentRunID = fields.AgentRunID
+	report.AgentID = fields.AgentID
+	report.AgentVersionID = fields.AgentVersionID
+	report.ModelID = fields.ModelID
+	report.GeneratedAt = fields.GeneratedAt
+	report.ProductStatus = fields.ProductStatus
+	report.Origin = fields.Origin
+	report.UpdatedByUser = fields.UpdatedByUser
+}
+
+func fillTeamWeeklyReportProductFields(report *model.TeamWeeklyReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	fields := buildReportProductFields(report.Edited, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
+	report.GenerationMode = fields.GenerationMode
+	report.ManagedAgentRunID = fields.ManagedAgentRunID
+	report.AgentRunID = fields.AgentRunID
+	report.AgentID = fields.AgentID
+	report.AgentVersionID = fields.AgentVersionID
+	report.ModelID = fields.ModelID
+	report.GeneratedAt = fields.GeneratedAt
+	report.ProductStatus = fields.ProductStatus
+	report.Origin = fields.Origin
+	report.UpdatedByUser = fields.UpdatedByUser
+}
+
+func fillDepartmentWeeklyReportProductFields(report *model.DepartmentWeeklyReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	fields := buildReportProductFields(report.Edited, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
+	report.GenerationMode = fields.GenerationMode
+	report.ManagedAgentRunID = fields.ManagedAgentRunID
+	report.AgentRunID = fields.AgentRunID
+	report.AgentID = fields.AgentID
+	report.AgentVersionID = fields.AgentVersionID
+	report.ModelID = fields.ModelID
+	report.GeneratedAt = fields.GeneratedAt
+	report.ProductStatus = fields.ProductStatus
+	report.Origin = fields.Origin
+	report.UpdatedByUser = fields.UpdatedByUser
+}
+
 func (h *ReportHandler) GenerateToday(w http.ResponseWriter, r *http.Request) {
 	if h.reportGeneratorURL == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "report generator is not configured"})
@@ -1502,21 +1613,28 @@ func (h *ReportHandler) UpdateTeamReport(w http.ResponseWriter, r *http.Request)
 func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*model.TeamReport, error) {
 	var tr model.TeamReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
-	var savedAt, submittedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, submittedAt, generatedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, COALESCE(NULLIF(u.nickname,''), u.username),
 			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
-			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
+			tr.saved_at, tr.submitted_at, tr.submitted_to,
+			tr.edited, COALESCE(tr.generation_mode, ''), tr.managed_agent_run_id::text, tr.agent_id, tr.agent_version_id, tr.model_id, ar.finished_at,
+			tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
+		LEFT JOIN ai_runs ar ON ar.id = tr.managed_agent_run_id
 		WHERE tr.team_id = $1 AND tr.report_date = $2`, teamID, reportDate).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 		&tr.ReportDate, &tr.Content, &submittedContent, &status, &feishuURL,
 		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
-		&savedAt, &submittedAt, &submittedTo, &tr.CreatedAt, &tr.UpdatedAt,
+		&savedAt, &submittedAt, &submittedTo,
+		&tr.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
+		&tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1530,6 +1648,7 @@ func (h *ReportHandler) getTeamReportByTeamDate(teamID, reportDate string) (*mod
 	tr.SavedAt = nullTimePtr(savedAt)
 	tr.SubmittedAt = nullTimePtr(submittedAt)
 	tr.SubmittedTo = nullStringPtr(submittedTo)
+	fillTeamReportProductFields(&tr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return &tr, nil
 }
 
@@ -1563,21 +1682,28 @@ func (h *ReportHandler) loadSubmittedDailyReportIDsByTeam(teamID, reportDate str
 func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) {
 	var tr model.TeamReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
-	var savedAt, submittedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, submittedAt, generatedAt sql.NullTime
 	var memberIDsStr, sourceDailyIDsStr, sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT tr.id, tr.team_id, t.name, tr.leader_id, COALESCE(NULLIF(u.nickname,''), u.username),
 			tr.report_date, tr.content, tr.submitted_content, tr.status, tr.feishu_doc_url,
 			tr.member_report_ids, tr.source_daily_report_ids, tr.session_ids,
-			tr.saved_at, tr.submitted_at, tr.submitted_to, tr.created_at, tr.updated_at
+			tr.saved_at, tr.submitted_at, tr.submitted_to,
+			tr.edited, COALESCE(tr.generation_mode, ''), tr.managed_agent_run_id::text, tr.agent_id, tr.agent_version_id, tr.model_id, ar.finished_at,
+			tr.created_at, tr.updated_at
 		FROM team_reports tr
 		JOIN teams t ON t.id = tr.team_id
 		JOIN users u ON u.id = tr.leader_id
+		LEFT JOIN ai_runs ar ON ar.id = tr.managed_agent_run_id
 		WHERE tr.id = $1`, id).Scan(
 		&tr.ID, &tr.TeamID, &tr.TeamName, &tr.LeaderID, &tr.LeaderName,
 		&tr.ReportDate, &tr.Content, &submittedContent, &status, &feishuURL,
 		&memberIDsStr, &sourceDailyIDsStr, &sessionIDsStr,
-		&savedAt, &submittedAt, &submittedTo, &tr.CreatedAt, &tr.UpdatedAt,
+		&savedAt, &submittedAt, &submittedTo,
+		&tr.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
+		&tr.CreatedAt, &tr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1591,6 +1717,7 @@ func (h *ReportHandler) getTeamReportByID(id string) (*model.TeamReport, error) 
 	tr.SavedAt = nullTimePtr(savedAt)
 	tr.SubmittedAt = nullTimePtr(submittedAt)
 	tr.SubmittedTo = nullStringPtr(submittedTo)
+	fillTeamReportProductFields(&tr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return &tr, nil
 }
 
@@ -1850,13 +1977,20 @@ func (h *ReportHandler) UpdateDepartmentReport(w http.ResponseWriter, r *http.Re
 func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.DepartmentReport, error) {
 	var dr model.DepartmentReport
 	var status sql.NullString
-	var savedAt, archivedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, archivedAt, generatedAt sql.NullTime
 	var sourceIDsStr string
 	err := h.db.QueryRow(`
-		SELECT id::text, report_date, content, status, source_team_report_ids, saved_at, archived_at, created_at, updated_at
-		FROM department_reports
-		WHERE report_date = $1`, reportDate).Scan(
-		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+		SELECT dr.id::text, dr.report_date, dr.content, dr.status, dr.source_team_report_ids, dr.saved_at, dr.archived_at,
+			dr.edited, COALESCE(dr.generation_mode, ''), dr.managed_agent_run_id::text, dr.agent_id, dr.agent_version_id, dr.model_id, ar.finished_at,
+			dr.created_at, dr.updated_at
+		FROM department_reports dr
+		LEFT JOIN ai_runs ar ON ar.id = dr.managed_agent_run_id
+		WHERE dr.report_date = $1`, reportDate).Scan(
+		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt,
+		&dr.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
+		&dr.CreatedAt, &dr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1865,6 +1999,7 @@ func (h *ReportHandler) getDepartmentReportByDate(reportDate string) (*model.Dep
 	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
 	dr.SavedAt = nullTimePtr(savedAt)
 	dr.ArchivedAt = nullTimePtr(archivedAt)
+	fillDepartmentReportProductFields(&dr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return &dr, nil
 }
 
@@ -1926,13 +2061,20 @@ func (h *ReportHandler) buildDepartmentReportSources(reportDate string) (*model.
 func (h *ReportHandler) getDepartmentReportByID(id string) (*model.DepartmentReport, error) {
 	var dr model.DepartmentReport
 	var status sql.NullString
-	var savedAt, archivedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, archivedAt, generatedAt sql.NullTime
 	var sourceIDsStr string
 	err := h.db.QueryRow(`
-		SELECT id::text, report_date, content, status, source_team_report_ids, saved_at, archived_at, created_at, updated_at
-		FROM department_reports
-		WHERE id = $1`, id).Scan(
-		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt, &dr.CreatedAt, &dr.UpdatedAt,
+		SELECT dr.id::text, dr.report_date, dr.content, dr.status, dr.source_team_report_ids, dr.saved_at, dr.archived_at,
+			dr.edited, COALESCE(dr.generation_mode, ''), dr.managed_agent_run_id::text, dr.agent_id, dr.agent_version_id, dr.model_id, ar.finished_at,
+			dr.created_at, dr.updated_at
+		FROM department_reports dr
+		LEFT JOIN ai_runs ar ON ar.id = dr.managed_agent_run_id
+		WHERE dr.id = $1`, id).Scan(
+		&dr.ID, &dr.ReportDate, &dr.Content, &status, &sourceIDsStr, &savedAt, &archivedAt,
+		&dr.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
+		&dr.CreatedAt, &dr.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1941,6 +2083,7 @@ func (h *ReportHandler) getDepartmentReportByID(id string) (*model.DepartmentRep
 	dr.SourceTeamReportIDs = parseUUIDArray(sourceIDsStr)
 	dr.SavedAt = nullTimePtr(savedAt)
 	dr.ArchivedAt = nullTimePtr(archivedAt)
+	fillDepartmentReportProductFields(&dr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return &dr, nil
 }
 
@@ -2860,9 +3003,11 @@ func (h *ReportHandler) getPersonalWeeklyReportByUserWeek(userID, weekStart stri
 		SELECT pwr.id::text, pwr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), pwr.week_start, pwr.week_end, pwr.content,
 			pwr.submitted_content, pwr.status, pwr.saved_at, pwr.submitted_at, pwr.submitted_to,
 			pwr.source_daily_report_ids, pwr.source_session_ids, pwr.source_task_ids,
-			pwr.created_at, pwr.updated_at
+			pwr.created_at, pwr.updated_at,
+			pwr.edited, COALESCE(pwr.generation_mode, ''), pwr.managed_agent_run_id::text, pwr.agent_id, pwr.agent_version_id, pwr.model_id, ar.finished_at
 		FROM personal_weekly_reports pwr
 		JOIN users u ON u.id = pwr.user_id
+		LEFT JOIN ai_runs ar ON ar.id = pwr.managed_agent_run_id
 		WHERE pwr.user_id = $1 AND pwr.week_start = $2`, userID, weekStart)
 	report, err := scanPersonalWeeklyReport(row)
 	if err != nil {
@@ -2876,9 +3021,11 @@ func (h *ReportHandler) getPersonalWeeklyReportByID(id string) (*model.PersonalW
 		SELECT pwr.id::text, pwr.user_id::text, COALESCE(NULLIF(u.nickname,''), u.username), pwr.week_start, pwr.week_end, pwr.content,
 			pwr.submitted_content, pwr.status, pwr.saved_at, pwr.submitted_at, pwr.submitted_to,
 			pwr.source_daily_report_ids, pwr.source_session_ids, pwr.source_task_ids,
-			pwr.created_at, pwr.updated_at
+			pwr.created_at, pwr.updated_at,
+			pwr.edited, COALESCE(pwr.generation_mode, ''), pwr.managed_agent_run_id::text, pwr.agent_id, pwr.agent_version_id, pwr.model_id, ar.finished_at
 		FROM personal_weekly_reports pwr
 		JOIN users u ON u.id = pwr.user_id
+		LEFT JOIN ai_runs ar ON ar.id = pwr.managed_agent_run_id
 		WHERE pwr.id = $1`, id)
 	report, err := scanPersonalWeeklyReport(row)
 	if err != nil {
@@ -2892,10 +3039,12 @@ func (h *ReportHandler) getTeamWeeklyReportByTeamWeek(teamID, weekStart string) 
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
-			twr.submitted_at, twr.created_at, twr.updated_at
+			twr.submitted_at, twr.created_at, twr.updated_at,
+			twr.edited, COALESCE(twr.generation_mode, ''), twr.managed_agent_run_id::text, twr.agent_id, twr.agent_version_id, twr.model_id, ar.finished_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
+		LEFT JOIN ai_runs ar ON ar.id = twr.managed_agent_run_id
 		WHERE twr.team_id = $1 AND twr.week_start = $2`, teamID, weekStart)
 	report, err := scanTeamWeeklyReport(row)
 	return &report, err
@@ -2906,10 +3055,12 @@ func (h *ReportHandler) getTeamWeeklyReportByID(id string) (*model.TeamWeeklyRep
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
-			twr.submitted_at, twr.created_at, twr.updated_at
+			twr.submitted_at, twr.created_at, twr.updated_at,
+			twr.edited, COALESCE(twr.generation_mode, ''), twr.managed_agent_run_id::text, twr.agent_id, twr.agent_version_id, twr.model_id, ar.finished_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
+		LEFT JOIN ai_runs ar ON ar.id = twr.managed_agent_run_id
 		WHERE twr.id = $1`, id)
 	report, err := scanTeamWeeklyReport(row)
 	return &report, err
@@ -2917,18 +3068,22 @@ func (h *ReportHandler) getTeamWeeklyReportByID(id string) (*model.TeamWeeklyRep
 
 func (h *ReportHandler) getDepartmentWeeklyReportByWeek(weekStart string) (*model.DepartmentWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT id::text, week_start, content, source_team_weekly_report_ids, archived_at, created_at, updated_at
-		FROM department_weekly_reports
-		WHERE week_start = $1`, weekStart)
+		SELECT dwr.id::text, dwr.week_start, dwr.content, dwr.source_team_weekly_report_ids, dwr.archived_at, dwr.created_at, dwr.updated_at,
+			dwr.edited, COALESCE(dwr.generation_mode, ''), dwr.managed_agent_run_id::text, dwr.agent_id, dwr.agent_version_id, dwr.model_id, ar.finished_at
+		FROM department_weekly_reports dwr
+		LEFT JOIN ai_runs ar ON ar.id = dwr.managed_agent_run_id
+		WHERE dwr.week_start = $1`, weekStart)
 	report, err := scanDepartmentWeeklyReport(row)
 	return &report, err
 }
 
 func (h *ReportHandler) getDepartmentWeeklyReportByID(id string) (*model.DepartmentWeeklyReport, error) {
 	row := h.db.QueryRow(`
-		SELECT id::text, week_start, content, source_team_weekly_report_ids, archived_at, created_at, updated_at
-		FROM department_weekly_reports
-		WHERE id = $1`, id)
+		SELECT dwr.id::text, dwr.week_start, dwr.content, dwr.source_team_weekly_report_ids, dwr.archived_at, dwr.created_at, dwr.updated_at,
+			dwr.edited, COALESCE(dwr.generation_mode, ''), dwr.managed_agent_run_id::text, dwr.agent_id, dwr.agent_version_id, dwr.model_id, ar.finished_at
+		FROM department_weekly_reports dwr
+		LEFT JOIN ai_runs ar ON ar.id = dwr.managed_agent_run_id
+		WHERE dwr.id = $1`, id)
 	report, err := scanDepartmentWeeklyReport(row)
 	return &report, err
 }
@@ -2940,13 +3095,16 @@ type scanner interface {
 func scanPersonalWeeklyReport(row scanner) (model.PersonalWeeklyReport, error) {
 	var report model.PersonalWeeklyReport
 	var submittedContent, submittedTo sql.NullString
-	var savedAt, submittedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, submittedAt, generatedAt sql.NullTime
 	var dailyIDsStr, sessionIDsStr, taskIDsStr string
 	err := row.Scan(
 		&report.ID, &report.UserID, &report.UserName, &report.WeekStart, &report.WeekEnd, &report.Content,
 		&submittedContent, &report.Status, &savedAt, &submittedAt, &submittedTo,
 		&dailyIDsStr, &sessionIDsStr, &taskIDsStr,
 		&report.CreatedAt, &report.UpdatedAt,
+		&report.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
 	)
 	if err != nil {
 		return report, err
@@ -2958,16 +3116,21 @@ func scanPersonalWeeklyReport(row scanner) (model.PersonalWeeklyReport, error) {
 	report.SourceDailyReportIDs = parseUUIDArray(dailyIDsStr)
 	report.SourceSessionIDs = parseUUIDArray(sessionIDsStr)
 	report.SourceTaskIDs = parseUUIDArray(taskIDsStr)
+	fillPersonalWeeklyReportProductFields(&report, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return report, nil
 }
 
 func scanTeamWeeklyReport(row scanner) (model.TeamWeeklyReport, error) {
 	var report model.TeamWeeklyReport
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var generatedAt sql.NullTime
 	var dailyIDsStr, teamIDsStr, taskIDsStr, personalWeeklyIDsStr string
 	var submittedAt sql.NullTime
 	err := row.Scan(&report.ID, &report.TeamID, &report.TeamName, &report.LeaderID, &report.LeaderName,
 		&report.WeekStart, &report.Content, &dailyIDsStr, &teamIDsStr, &taskIDsStr, &personalWeeklyIDsStr,
-		&submittedAt, &report.CreatedAt, &report.UpdatedAt)
+		&submittedAt, &report.CreatedAt, &report.UpdatedAt,
+		&report.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt)
 	if err != nil {
 		return report, err
 	}
@@ -2976,19 +3139,25 @@ func scanTeamWeeklyReport(row scanner) (model.TeamWeeklyReport, error) {
 	report.SourceTaskIDs = parseUUIDArray(taskIDsStr)
 	report.SourcePersonalWeeklyReportIDs = parseUUIDArray(personalWeeklyIDsStr)
 	report.SubmittedAt = nullTimePtr(submittedAt)
+	fillTeamWeeklyReportProductFields(&report, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return report, nil
 }
 
 func scanDepartmentWeeklyReport(row scanner) (model.DepartmentWeeklyReport, error) {
 	var report model.DepartmentWeeklyReport
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var generatedAt sql.NullTime
 	var sourceIDsStr string
 	var archivedAt sql.NullTime
-	err := row.Scan(&report.ID, &report.WeekStart, &report.Content, &sourceIDsStr, &archivedAt, &report.CreatedAt, &report.UpdatedAt)
+	err := row.Scan(&report.ID, &report.WeekStart, &report.Content, &sourceIDsStr, &archivedAt, &report.CreatedAt, &report.UpdatedAt,
+		&report.Edited, &generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt)
 	if err != nil {
 		return report, err
 	}
 	report.SourceTeamWeeklyReportIDs = parseUUIDArray(sourceIDsStr)
 	report.ArchivedAt = nullTimePtr(archivedAt)
+	fillDepartmentWeeklyReportProductFields(&report, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	return report, nil
 }
 

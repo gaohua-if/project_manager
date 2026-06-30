@@ -433,7 +433,7 @@ func TestDailyReportIntegrationReturnsMCPAndSkill(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.MCP.URL != "https://aida.example.com/api/v1/mcp/daily-report" {
+	if got.MCP.URL != "https://aida.example.com/api/v1/mcp/reports" {
 		t.Fatalf("mcp url = %q", got.MCP.URL)
 	}
 	if got.Skill.Slug != service.DailyReportSkillSlug || got.Skill.Version != service.DailyReportSkillVersion {
@@ -442,12 +442,12 @@ func TestDailyReportIntegrationReturnsMCPAndSkill(t *testing.T) {
 	if !strings.Contains(got.Skill.SkillMD, got.MCP.URL) {
 		t.Fatalf("skill markdown should include mcp url")
 	}
-	if len(got.MCP.Tools) != 2 {
+	if len(got.MCP.Tools) != 9 {
 		t.Fatalf("tools = %#v", got.MCP.Tools)
 	}
 }
 
-func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
+func TestStartReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -475,12 +475,12 @@ func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(draftSessionColumns()).
 			AddRow("session-1", "ref-1", "claude_code", now, now.Add(20*time.Minute), 1200, "sonnet", "完成日报", "{}", nil, "", nil, "", 100, 200, 300))
 	mock.ExpectQuery("INSERT INTO ai_runs").
-		WithArgs("user-1", "daily_report", "aida-daily-report-agent", "task-urls", "MiniMax-M2.5", "pending", sqlmock.AnyArg()).
+		WithArgs("user-1", "personal_daily", "aida-daily-report-agent", "task-urls", "MiniMax-M2.5", "pending", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-1"))
 	mock.ExpectQuery("SELECT id::text").
 		WithArgs("run-1", "user-1").
 		WillReturnRows(sqlmock.NewRows(aiRunColumns()).
-			AddRow("run-1", "user-1", "daily_report", nil, "managed_task", "aida-daily-report-agent", nil, "task-urls", nil, "MiniMax-M2.5", "pending", []byte(`{"report_date":"2026-06-29","session_ids":["session-1"],"urls":["https://aida.example.com/api/v1/sessions/session-1/log"]}`), []byte(`{}`), nil, now, nil, now))
+			AddRow("run-1", "user-1", "personal_daily", nil, "managed_task", "aida-daily-report-agent", nil, "task-urls", nil, "MiniMax-M2.5", "pending", []byte(`{"report_date":"2026-06-29","session_ids":["session-1"],"urls":["https://aida.example.com/api/v1/sessions/session-1/log"]}`), []byte(`{}`), nil, now, nil, now))
 
 	h := NewManagedAgentHandlerWithDefaults(db, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
 	req := httptest.NewRequest(http.MethodPost, "/reports/today/managed-agent-runs", bytes.NewBufferString(`{"report_date":"2026-06-29","session_ids":["session-1"],"agent_id":"aida-daily-report-agent"}`))
@@ -489,7 +489,7 @@ func TestStartDailyReportRunSubmitsUrlsStartPromptValues(t *testing.T) {
 	req = requestWithUser(req, &model.User{ID: "user-1", Name: "张三", Role: "employee"})
 	rec := httptest.NewRecorder()
 
-	h.StartDailyReportRun(rec, req)
+	h.StartReportRun(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
