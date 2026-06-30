@@ -1,5 +1,6 @@
 import {
   ApiOutlined,
+  ArrowLeftOutlined,
   ClockCircleOutlined,
   CloudServerOutlined,
   CopyOutlined,
@@ -13,7 +14,10 @@ import {
 import {
   Alert,
   App,
+  Breadcrumb,
   Button,
+  Card,
+  Checkbox,
   Empty,
   Form,
   Input,
@@ -69,6 +73,7 @@ import { HttpError } from "@/shared/request/types";
 import "./AIAssetsPage.css";
 
 type AssetTab = "skills" | "mcp" | "agents" | "schedules";
+type AgentSubview = "list" | "editor" | "runner";
 
 interface ScheduleFormValues {
   name: string;
@@ -115,6 +120,29 @@ function parseRefKey(value: string): ManagedSkillRef {
 
 function parseMCPBindingKey(value: string): ManagedMCPBinding {
   return parseRefKey(value);
+}
+
+const START_PROMPT_PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+
+function extractPromptVariables(template?: string) {
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  if (!template) return keys;
+  for (const match of template.matchAll(START_PROMPT_PLACEHOLDER_RE)) {
+    const key = match[1];
+    if (!seen.has(key)) {
+      seen.add(key);
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+function renderPromptPreview(template: string, values: Record<string, string>) {
+  return template.replace(START_PROMPT_PLACEHOLDER_RE, (match, key: string) => {
+    const value = values[key];
+    return value && value.trim() ? value : match;
+  });
 }
 
 function errorMessage(error: unknown) {
@@ -195,6 +223,22 @@ function formatParamLines(params?: Record<string, string>): string {
     .join("\n");
 }
 
+function skillLabel(item: ManagedSkillRef) {
+  return `${item.slug}@${item.version}`;
+}
+
+function mcpLabel(item: ManagedMCPBinding) {
+  return `${item.slug}@${item.version}`;
+}
+
+function currentSkillKeys(agent?: ManagedAgent | null) {
+  return agent?.skills?.map((item) => refKey(item.owner, item.slug, item.version)) ?? [];
+}
+
+function currentMCPKeys(agent?: ManagedAgent | null) {
+  return agent?.mcp_bindings?.map((item) => refKey(item.owner, item.slug, item.version)) ?? [];
+}
+
 function schedulePayload(values: ScheduleFormValues): UpsertManagedAgentSchedulePayload {
   return {
     name: values.name,
@@ -210,17 +254,118 @@ function schedulePayload(values: ScheduleFormValues): UpsertManagedAgentSchedule
   };
 }
 
+function SkillResourcePicker({
+  value = [],
+  onChange,
+  skills
+}: {
+  value?: string[];
+  onChange?: (value: string[]) => void;
+  skills: ManagedSkill[];
+}) {
+  const selected = new Set(value);
+  if (!skills.length) {
+    return <Empty className="ai-assets-resource-empty" description="暂无可绑定 Skill" />;
+  }
+  return (
+    <div className="ai-assets-resource-picker">
+      {skills.map((skill) => {
+        const key = refKey(skill.owner, skill.slug, skill.version);
+        const checked = selected.has(key);
+        return (
+          <div
+            role="button"
+            tabIndex={0}
+            key={key}
+            className={`ai-assets-resource-card${checked ? " is-selected" : ""}`}
+            onClick={() => {
+              const next = checked ? value.filter((item) => item !== key) : [...value, key];
+              onChange?.(next);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const next = checked ? value.filter((item) => item !== key) : [...value, key];
+                onChange?.(next);
+              }
+            }}
+          >
+            <Checkbox checked={checked} />
+            <span className="ai-assets-resource-card__body">
+              <strong>{skill.name || skill.slug}</strong>
+              <span>{skill.description || skillLabel(skill)}</span>
+              <em>{skillLabel(skill)}</em>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MCPResourcePicker({
+  value = [],
+  onChange,
+  entries
+}: {
+  value?: string[];
+  onChange?: (value: string[]) => void;
+  entries: ManagedMCPEntry[];
+}) {
+  const selected = new Set(value);
+  if (!entries.length) {
+    return <Empty className="ai-assets-resource-empty" description="暂无可绑定 MCP Server" />;
+  }
+  return (
+    <div className="ai-assets-resource-picker">
+      {entries.map((entry) => {
+        const key = refKey(entry.owner, entry.slug, entry.version);
+        const checked = selected.has(key);
+        return (
+          <div
+            role="button"
+            tabIndex={0}
+            key={key}
+            className={`ai-assets-resource-card${checked ? " is-selected" : ""}`}
+            onClick={() => {
+              const next = checked ? value.filter((item) => item !== key) : [...value, key];
+              onChange?.(next);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const next = checked ? value.filter((item) => item !== key) : [...value, key];
+                onChange?.(next);
+              }
+            }}
+          >
+            <Checkbox checked={checked} />
+            <span className="ai-assets-resource-card__body">
+              <strong>{entry.name || entry.slug}</strong>
+              <span>{entry.description || entry.url || entry.command || "-"}</span>
+              <em>
+                {mcpLabel(entry)}
+                {entry.requires_credential ? " · 需要凭据" : ""}
+              </em>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AIAssetsPage() {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [tab, setTab] = useState<AssetTab>("skills");
   const [scope, setScope] = useState<ManagedScope>("mine");
-  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentSubview, setAgentSubview] = useState<AgentSubview>("list");
   const [editingAgent, setEditingAgent] = useState<ManagedAgent | null>(null);
   const [runningAgent, setRunningAgent] = useState<ManagedAgent | null>(null);
   const [runMessage, setRunMessage] = useState("");
   const [runModelId, setRunModelId] = useState("");
-  const [runParamsText, setRunParamsText] = useState("");
+  const [startPromptValues, setStartPromptValues] = useState<Record<string, string>>({});
   const [activeRunId, setActiveRunId] = useState<string>();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ManagedAgentSchedule | null>(null);
@@ -229,8 +374,9 @@ export function AIAssetsPage() {
     setRunningAgent(null);
     setRunMessage("");
     setRunModelId("");
-    setRunParamsText("");
+    setStartPromptValues({});
     setActiveRunId(undefined);
+    setAgentSubview("list");
   };
   const [mcpOpen, setMcpOpen] = useState(false);
   const [agentForm] = Form.useForm<{
@@ -317,7 +463,8 @@ export function AIAssetsPage() {
     mutationFn: (payload: UpsertManagedAgentPayload) => createManagedAgent(payload),
     onSuccess: () => {
       message.success("Agent 已创建");
-      setAgentOpen(false);
+      setAgentSubview("list");
+      setEditingAgent(null);
       agentForm.resetFields();
       void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
     },
@@ -329,7 +476,7 @@ export function AIAssetsPage() {
       updateManagedAgent(editingAgent?.agent_id || "", payload),
     onSuccess: () => {
       message.success("Agent 已更新");
-      setAgentOpen(false);
+      setAgentSubview("list");
       setEditingAgent(null);
       agentForm.resetFields();
       void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
@@ -349,12 +496,16 @@ export function AIAssetsPage() {
   });
 
   const runAgentMutation = useMutation({
-    mutationFn: () =>
-      startManagedAgentRun(runningAgent?.agent_id || "", {
-        message: runMessage,
+    mutationFn: () => {
+      const template = runningAgent?.start_prompt_template?.trim() || "";
+      const promptVariables = extractPromptVariables(template);
+      const messageText = template ? renderPromptPreview(template, startPromptValues) : runMessage;
+      return startManagedAgentRun(runningAgent?.agent_id || "", {
+        message: messageText,
         model_id: runModelId.trim() || undefined,
-        params: parseParamLines(runParamsText)
-      }),
+        params: promptVariables.length ? startPromptValues : undefined
+      });
+    },
     onSuccess: (run) => {
       message.success("Agent 已提交运行");
       setActiveRunId(run.id);
@@ -408,22 +559,6 @@ export function AIAssetsPage() {
     onError: (err: unknown) => message.error(errorMessage(err))
   });
 
-  const skillOptions = useMemo(
-    () =>
-      skills.map((skill) => ({
-        label: `${skill.name || skill.slug} (${skill.slug}@${skill.version})`,
-        value: refKey(skill.owner, skill.slug, skill.version)
-      })),
-    [skills]
-  );
-  const mcpOptions = useMemo(
-    () =>
-      mcpEntries.map((entry) => ({
-        label: `${entry.name || entry.slug} (${entry.slug}@${entry.version})`,
-        value: refKey(entry.owner, entry.slug, entry.version)
-      })),
-    [mcpEntries]
-  );
   const agentOptions = useMemo(
     () =>
       agents.map((agent) => ({
@@ -432,6 +567,45 @@ export function AIAssetsPage() {
       })),
     [agents]
   );
+
+  const openCreateAgent = () => {
+    setEditingAgent(null);
+    setRunningAgent(null);
+    setTab("agents");
+    agentForm.resetFields();
+    agentForm.setFieldsValue({ engine: "codex", skills: [], mcp_bindings: [] });
+    setAgentSubview("editor");
+  };
+
+  const openEditAgent = (agent: ManagedAgent) => {
+    setEditingAgent(agent);
+    setRunningAgent(null);
+    setTab("agents");
+    agentForm.resetFields();
+    agentForm.setFieldsValue({
+      name: agent.name,
+      description: agent.description,
+      engine: agent.engine,
+      instructions: agent.instructions,
+      default_model_id: agent.default_model_id,
+      start_prompt_template: agent.start_prompt_template,
+      skills: currentSkillKeys(agent),
+      mcp_bindings: currentMCPKeys(agent)
+    });
+    setAgentSubview("editor");
+  };
+
+  const openRunAgent = (agent: ManagedAgent) => {
+    const keys = extractPromptVariables(agent.start_prompt_template);
+    setRunningAgent(agent);
+    setEditingAgent(null);
+    setTab("agents");
+    setRunMessage("");
+    setRunModelId("");
+    setStartPromptValues(Object.fromEntries(keys.map((key) => [key, ""])));
+    setActiveRunId(undefined);
+    setAgentSubview("runner");
+  };
 
   const openCreateSchedule = () => {
     setEditingSchedule(null);
@@ -557,36 +731,11 @@ export function AIAssetsPage() {
             icon={<PlayCircleOutlined />}
             disabled={platformBlocked}
             title={platformActionTitle}
-            onClick={() => {
-              setRunningAgent(record);
-              setRunMessage("");
-              setRunModelId(record.default_model_id || "");
-              setRunParamsText("");
-              setActiveRunId(undefined);
-            }}
+            onClick={() => openRunAgent(record)}
           >
             运行
           </Button>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingAgent(record);
-              agentForm.setFieldsValue({
-                name: record.name,
-                description: record.description,
-                engine: record.engine,
-                instructions: record.instructions,
-                default_model_id: record.default_model_id,
-                start_prompt_template: record.start_prompt_template,
-                skills: record.skills?.map((item) => refKey(item.owner, item.slug, item.version)),
-                mcp_bindings: record.mcp_bindings?.map((item) =>
-                  refKey(item.owner, item.slug, item.version)
-                )
-              });
-              setAgentOpen(true);
-            }}
-          >
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEditAgent(record)}>
             编辑
           </Button>
         </Space>
@@ -739,12 +888,7 @@ export function AIAssetsPage() {
         icon={<PlusOutlined />}
         disabled={platformBlocked}
         title={platformActionTitle}
-        onClick={() => {
-          setEditingAgent(null);
-          agentForm.resetFields();
-          agentForm.setFieldsValue({ engine: "codex" });
-          setAgentOpen(true);
-        }}
+        onClick={openCreateAgent}
       >
         新建 Agent
       </Button>
@@ -760,6 +904,250 @@ export function AIAssetsPage() {
         日报 MCP/Skill
       </Button>
     </Space>
+  );
+
+  const runningTemplate = runningAgent?.start_prompt_template?.trim() || "";
+  const runningPromptVariables = useMemo(
+    () => extractPromptVariables(runningTemplate),
+    [runningTemplate]
+  );
+  const missingPromptVariables = runningPromptVariables.filter(
+    (key) => !startPromptValues[key]?.trim()
+  );
+  const promptPreview = runningTemplate
+    ? renderPromptPreview(runningTemplate, startPromptValues)
+    : "";
+
+  const renderAgentEditor = () => (
+    <section className="ai-assets-workspace">
+      <Breadcrumb
+        items={[
+          { title: "Agents" },
+          { title: editingAgent?.name || "新建 Agent" },
+          { title: editingAgent ? "编辑" : "创建" }
+        ]}
+      />
+      <div className="ai-assets-workspace__header">
+        <div>
+          <h2>{editingAgent ? "编辑 Managed Agent" : "新建 Managed Agent"}</h2>
+          <p>配置 Agent 基础信息、运行参数、Prompt 和资源绑定。保存仍使用当前 Aida Agent 接口。</p>
+        </div>
+        <Space>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => {
+              setAgentSubview("list");
+              setEditingAgent(null);
+              agentForm.resetFields();
+            }}
+          >
+            取消
+          </Button>
+          <Button
+            type="primary"
+            loading={createAgentMutation.isPending || updateAgentMutation.isPending}
+            onClick={() => agentForm.submit()}
+          >
+            {editingAgent ? "保存" : "创建 Agent"}
+          </Button>
+        </Space>
+      </div>
+      <Form
+        form={agentForm}
+        layout="vertical"
+        initialValues={{ engine: "codex" }}
+        onFinish={(values) => {
+          const payload = {
+            name: values.name,
+            description: values.description,
+            engine: values.engine,
+            instructions: values.instructions,
+            default_model_id: values.default_model_id,
+            start_prompt_template: values.start_prompt_template,
+            skills: values.skills?.map(parseRefKey),
+            mcp_bindings: values.mcp_bindings?.map(parseMCPBindingKey)
+          };
+          if (editingAgent) {
+            updateAgentMutation.mutate(payload);
+          } else {
+            createAgentMutation.mutate(payload);
+          }
+        }}
+      >
+        <Card title="基础信息" className="ai-assets-editor-section">
+          <div className="ai-assets-editor-grid">
+            <Form.Item label="Agent ID">
+              <Input value={editingAgent?.agent_id || "创建后由平台生成"} disabled />
+            </Form.Item>
+            <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
+              <Input placeholder="Agent 名称" />
+            </Form.Item>
+            <Form.Item name="description" label="描述" className="ai-assets-editor-grid__wide">
+              <Input.TextArea rows={3} placeholder="这个 Agent 能做什么" />
+            </Form.Item>
+          </div>
+        </Card>
+
+        <Card title="运行配置" className="ai-assets-editor-section">
+          <div className="ai-assets-editor-grid">
+            <Form.Item
+              name="engine"
+              label="Engine"
+              rules={[{ required: true, message: "请选择 engine" }]}
+            >
+              <Select
+                options={[
+                  { label: "codex", value: "codex" },
+                  { label: "claude-code", value: "claude-code" }
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="default_model_id" label="默认模型">
+              <Input placeholder="留空则由平台默认值决定" />
+            </Form.Item>
+          </div>
+        </Card>
+
+        <Card title="Prompt 配置" className="ai-assets-editor-section">
+          <Form.Item name="instructions" label="Instructions">
+            <Input.TextArea rows={6} placeholder="系统指令" />
+          </Form.Item>
+          <Form.Item name="start_prompt_template" label="Start Prompt 模板">
+            <Input.TextArea
+              rows={5}
+              placeholder="例如：请帮我分析 {{ topic }}，{{ 变量 }} 会在运行页生成输入框。"
+            />
+          </Form.Item>
+        </Card>
+
+        <Card title="资源绑定" className="ai-assets-editor-section">
+          <Form.Item name="skills" label="Skills">
+            <SkillResourcePicker skills={skills} />
+          </Form.Item>
+          <Form.Item name="mcp_bindings" label="MCP Servers">
+            <MCPResourcePicker entries={mcpEntries} />
+          </Form.Item>
+        </Card>
+      </Form>
+    </section>
+  );
+
+  const renderAgentRunner = () => (
+    <section className="ai-assets-workspace">
+      <Breadcrumb
+        items={[
+          { title: "Agents" },
+          { title: runningAgent?.name || "Agent" },
+          { title: "运行" }
+        ]}
+      />
+      <div className="ai-assets-workspace__header">
+        <div>
+          <h2>运行 {runningAgent?.name}</h2>
+          <p>根据 Start Prompt 模板填写运行参数；提交仍走当前 Aida Agent 运行接口。</p>
+        </div>
+        <Space>
+          <Button icon={<ArrowLeftOutlined />} onClick={resetRunner}>
+            返回
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            loading={runAgentMutation.isPending}
+            disabled={
+              (runningPromptVariables.length > 0 && missingPromptVariables.length > 0) ||
+              (runningPromptVariables.length === 0 && !runMessage.trim())
+            }
+            onClick={() => runAgentMutation.mutate()}
+          >
+            运行
+          </Button>
+        </Space>
+      </div>
+
+      <div className="ai-assets-run-layout">
+        <Card className="ai-assets-run-context">
+          <h3>{runningAgent?.name}</h3>
+          <p>{runningAgent?.description || "暂无描述"}</p>
+          <div className="ai-assets-run-meta">Engine：{runningAgent?.engine || "-"}</div>
+          <div className="ai-assets-run-meta">默认模型：{runningAgent?.default_model_id || "未配置"}</div>
+          <div className="ai-assets-run-meta">
+            版本：{runningAgent?.current_version_id || runningAgent?.managed_version || "-"}
+          </div>
+        </Card>
+
+        <div className="ai-assets-run-form">
+          {runningPromptVariables.length > 0 ? (
+            <Card title="Start Prompt Values" className="ai-assets-editor-section">
+              <div className="ai-assets-prompt-values">
+                {runningPromptVariables.map((key) => (
+                  <label key={key} className="ai-assets-prompt-field">
+                    <span>
+                      {key}
+                      <em>*</em>
+                    </span>
+                    <Input.TextArea
+                      rows={2}
+                      value={startPromptValues[key] || ""}
+                      onChange={(event) =>
+                        setStartPromptValues((current) => ({
+                          ...current,
+                          [key]: event.target.value
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </Card>
+          ) : (
+            <Card title="Initial Message" className="ai-assets-editor-section">
+              <Input.TextArea
+                rows={5}
+                value={runMessage}
+                onChange={(event) => setRunMessage(event.target.value)}
+                placeholder="这个 Agent 未配置 Start Prompt Template，请直接输入初始消息。"
+              />
+            </Card>
+          )}
+
+          <Card title="模型" className="ai-assets-editor-section">
+            <Input
+              value={runModelId}
+              onChange={(event) => setRunModelId(event.target.value)}
+              placeholder={runningAgent?.default_model_id || "留空使用 Agent 默认模型"}
+            />
+          </Card>
+
+          {runningTemplate ? (
+            <Card title="Prompt 预览" className="ai-assets-editor-section">
+              <pre className="ai-assets-prompt-preview">{promptPreview}</pre>
+            </Card>
+          ) : null}
+
+          <Card title="运行状态" className="ai-assets-editor-section">
+            <div className="ai-assets-runner__status">
+              <strong>状态</strong>
+              <Tag color={activeRunQuery.data?.status === "succeeded" ? "green" : "blue"}>
+                {activeRunQuery.data?.status || "未提交"}
+              </Tag>
+              {activeRunQuery.data?.external_task_id ? (
+                <span>Task: {activeRunQuery.data.external_task_id}</span>
+              ) : null}
+            </div>
+            {activeRunQuery.data?.error_message ? (
+              <pre className="ai-assets-runner__result is-error">
+                {activeRunQuery.data.error_message}
+              </pre>
+            ) : (
+              <pre className="ai-assets-runner__result">
+                {activeRunQuery.data?.result || "运行完成后，结果会显示在这里。"}
+              </pre>
+            )}
+          </Card>
+        </div>
+      </div>
+    </section>
   );
 
   return (
@@ -845,7 +1233,11 @@ export function AIAssetsPage() {
           {
             key: "agents",
             label: "我的 Agents",
-            children: (
+            children: agentSubview === "editor" ? (
+              renderAgentEditor()
+            ) : agentSubview === "runner" ? (
+              renderAgentRunner()
+            ) : (
               <div className="ai-assets-agent-pane">
                 <Table
                   rowKey="agent_id"
@@ -942,79 +1334,6 @@ export function AIAssetsPage() {
             </Button>
           </Space>
         </Space>
-      </Modal>
-
-      <Modal
-        title={editingAgent ? "编辑 Managed Agent" : "新建 Managed Agent"}
-        open={agentOpen}
-        onCancel={() => {
-          setAgentOpen(false);
-          setEditingAgent(null);
-          agentForm.resetFields();
-        }}
-        onOk={() => agentForm.submit()}
-        confirmLoading={createAgentMutation.isPending || updateAgentMutation.isPending}
-        destroyOnClose
-      >
-        <Form
-          form={agentForm}
-          layout="vertical"
-          initialValues={{ engine: "codex" }}
-          onFinish={(values) => {
-            const payload = {
-              name: values.name,
-              description: values.description,
-              engine: values.engine,
-              instructions: values.instructions,
-              default_model_id: values.default_model_id,
-              start_prompt_template: values.start_prompt_template,
-              skills: values.skills?.map(parseRefKey),
-              mcp_bindings: values.mcp_bindings?.map(parseMCPBindingKey)
-            };
-            if (editingAgent) {
-              updateAgentMutation.mutate(payload);
-            } else {
-              createAgentMutation.mutate(payload);
-            }
-          }}
-        >
-          {editingAgent ? (
-            <Form.Item label="Agent ID">
-              <Input value={editingAgent.agent_id} disabled />
-            </Form.Item>
-          ) : null}
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="engine"
-            label="Engine"
-            rules={[{ required: true, message: "请输入 engine" }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="default_model_id" label="默认模型">
-            <Input placeholder="例如 gpt-5-codex" />
-          </Form.Item>
-          <Form.Item name="start_prompt_template" label="Start Prompt 模板">
-            <Input.TextArea
-              rows={4}
-              placeholder="例如：请为 {{user_name}} 生成 {{report_date}} 的日报。"
-            />
-          </Form.Item>
-          <Form.Item name="description" label="说明">
-            <Input.TextArea rows={2} />
-          </Form.Item>
-          <Form.Item name="instructions" label="指令">
-            <Input.TextArea rows={5} />
-          </Form.Item>
-          <Form.Item name="skills" label="绑定 Skills">
-            <Select mode="multiple" options={skillOptions} />
-          </Form.Item>
-          <Form.Item name="mcp_bindings" label="绑定 MCP">
-            <Select mode="multiple" options={mcpOptions} />
-          </Form.Item>
-        </Form>
       </Modal>
 
       <Modal
@@ -1147,73 +1466,6 @@ export function AIAssetsPage() {
         </Form>
       </Modal>
 
-      <Modal
-        title={runningAgent ? `运行 ${runningAgent.name}` : "运行 Agent"}
-        open={Boolean(runningAgent)}
-        onCancel={resetRunner}
-        width={820}
-        footer={
-          <Space>
-            <Button onClick={resetRunner}>
-              关闭
-            </Button>
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              loading={runAgentMutation.isPending}
-              disabled={
-                (!runMessage.trim() && !runParamsText.trim()) ||
-                activeRunQuery.data?.status === "running"
-              }
-              onClick={() => runAgentMutation.mutate()}
-            >
-              提交运行
-            </Button>
-          </Space>
-        }
-        destroyOnClose
-      >
-        <div className="ai-assets-runner">
-          <Input
-            value={runModelId}
-            onChange={(event) => setRunModelId(event.target.value)}
-            placeholder="模型 ID，留空使用 Agent 默认模型"
-          />
-          {runningAgent?.start_prompt_template ? (
-            <pre className="ai-assets-runner__template">{runningAgent.start_prompt_template}</pre>
-          ) : null}
-          <Input.TextArea
-            rows={4}
-            value={runParamsText}
-            onChange={(event) => setRunParamsText(event.target.value)}
-            placeholder={"启动参数，每行一个 key=value，例如：\nurls=[\"https://example.com/session\"]\nreport_date=2026-06-25"}
-          />
-          <Input.TextArea
-            rows={5}
-            value={runMessage}
-            onChange={(event) => setRunMessage(event.target.value)}
-            placeholder="可选补充指令；如果 Agent 的启动模板只需要 urls，可留空。"
-          />
-          <div className="ai-assets-runner__status">
-            <strong>运行状态</strong>
-            <Tag color={activeRunQuery.data?.status === "succeeded" ? "green" : "blue"}>
-              {activeRunQuery.data?.status || "未提交"}
-            </Tag>
-            {activeRunQuery.data?.external_task_id ? (
-              <span>Task: {activeRunQuery.data.external_task_id}</span>
-            ) : null}
-          </div>
-          {activeRunQuery.data?.error_message ? (
-            <pre className="ai-assets-runner__result is-error">
-              {activeRunQuery.data.error_message}
-            </pre>
-          ) : (
-            <pre className="ai-assets-runner__result">
-              {activeRunQuery.data?.result || "运行完成后，结果会显示在这里。"}
-            </pre>
-          )}
-        </div>
-      </Modal>
     </PagePanel>
   );
 }
