@@ -1,7 +1,7 @@
 import { EditOutlined, SaveOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Empty, Input, Modal, Space, Tag } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 
 import {
@@ -55,7 +55,15 @@ function scopeName(scope: DailyGenerateScope) {
 }
 
 function reportStatus(report: DailyReport | TeamReport | DepartmentReport | null) {
-  if (!report || !report.content?.trim()) return <Tag>未生成</Tag>;
+  if (!report || !report.content?.trim()) return <Tag>暂无报告</Tag>;
+  if ("product_status" in report) {
+    if (report.product_status === "ai_generated") return <Tag color="blue">AI 已生成</Tag>;
+    if (report.product_status === "modified") return <Tag color="orange">本人已修改</Tag>;
+    if (report.product_status === "manual") return <Tag color="green">手写报告</Tag>;
+  }
+  if ("generation_mode" in report && report.generation_mode === "managed_agent") {
+    return report.edited ? <Tag color="orange">本人已修改</Tag> : <Tag color="blue">AI 已生成</Tag>;
+  }
   if ("submitted_at" in report && report.submitted_at) return <Tag color="green">已保存</Tag>;
   if ("status" in report && report.status === "saved") return <Tag color="blue">已保存</Tag>;
   return <Tag color="blue">已保存</Tag>;
@@ -132,6 +140,20 @@ export function DailyReportGenerateModal({
   const showEditor = hasContent || manualMode;
   const editorContent = contentTouched ? content : currentReport?.content ?? "";
   const personalReport = scope === "personal" ? personalReportQuery.data ?? null : null;
+  const hasUnsavedContentChange = contentTouched && editorContent !== (currentReport?.content ?? "");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!open) {
+        return;
+      }
+      setManualMode(false);
+      setContent("");
+      setContentTouched(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [date, open, reportId, scope]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const nextContent = editorContent.trim();
@@ -171,7 +193,7 @@ export function DailyReportGenerateModal({
   });
 
   const handleClose = () => {
-    if (contentTouched && editorContent !== (currentReport?.content ?? "")) {
+    if (hasUnsavedContentChange) {
       Modal.confirm({
         title: "当前内容尚未保存，关闭后将丢失，是否关闭？",
         okText: "确认关闭",
@@ -216,7 +238,7 @@ export function DailyReportGenerateModal({
                 setContentTouched(true);
               }}
             >
-              直接手写
+              直接填写
             </Button>
           )}
         </Space>
@@ -238,7 +260,7 @@ export function DailyReportGenerateModal({
             <div className="console-report-editor-layout__main">
               <div className="console-session-modal__section">
                 <strong>报告正文</strong>
-                <span>本轮仅支持手写和保存修改。</span>
+                <span>可编辑保存当前报告内容。</span>
               </div>
               <TextArea
                 rows={18}
@@ -254,7 +276,7 @@ export function DailyReportGenerateModal({
         ) : (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="当前还没有报告内容"
+            description="暂无日报，可直接填写。"
           />
         )}
       </div>

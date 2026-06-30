@@ -254,9 +254,14 @@ export interface DailyReport {
   session_ids: string[];
   generation_mode?: "default" | "managed_agent";
   managed_agent_run_id?: string;
+  agent_run_id?: string;
   agent_id?: string;
   agent_version_id?: number;
   model_id?: string;
+  origin?: "ai" | "manual";
+  updated_by_user?: boolean;
+  generated_at?: string;
+  product_status?: "missing" | "ai_generated" | "modified" | "manual";
   saved_at?: string;
   submitted_at?: string;
   created_at: string;
@@ -393,13 +398,6 @@ export interface UpsertManagedAgentPayload {
   start_prompt_template?: string;
   skills?: ManagedSkillRef[];
   mcp_bindings?: ManagedMCPBinding[];
-}
-
-export interface ManagedReportRunPayload {
-  report_date: string;
-  session_ids: string[];
-  agent_id: string;
-  model_id?: string;
 }
 
 export interface ManagedAgentManualRunPayload {

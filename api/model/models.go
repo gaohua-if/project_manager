@@ -263,9 +263,14 @@ type DailyReport struct {
 	SessionIDs        []string   `json:"session_ids"`
 	GenerationMode    string     `json:"generation_mode,omitempty"`
 	ManagedAgentRunID *string    `json:"managed_agent_run_id,omitempty"`
+	AgentRunID        *string    `json:"agent_run_id,omitempty"`
 	AgentID           *string    `json:"agent_id,omitempty"`
 	AgentVersionID    *int       `json:"agent_version_id,omitempty"`
 	ModelID           *string    `json:"model_id,omitempty"`
+	GeneratedAt       *time.Time `json:"generated_at,omitempty"`
+	ProductStatus     string     `json:"product_status,omitempty"`
+	Origin            string     `json:"origin,omitempty"`
+	UpdatedByUser     bool       `json:"updated_by_user"`
 	SavedAt           *time.Time `json:"saved_at,omitempty"`
 	SubmittedAt       *time.Time `json:"submitted_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
@@ -679,21 +684,28 @@ type ManagedMCPBinding struct {
 	CredentialSlot string `json:"credential_slot,omitempty"`
 }
 
+type ManagedCredentialSlot struct {
+	Name     string `json:"name"`
+	Required bool   `json:"required,omitempty"`
+}
+
 type ManagedAgent struct {
-	AgentID             string              `json:"agent_id"`
-	Name                string              `json:"name"`
-	Description         string              `json:"description,omitempty"`
-	Engine              string              `json:"engine"`
-	Instructions        string              `json:"instructions,omitempty"`
-	DefaultModelID      string              `json:"default_model_id,omitempty"`
-	StartPromptTemplate string              `json:"start_prompt_template,omitempty"`
-	CurrentVersionID    int                 `json:"current_version_id,omitempty"`
-	ManagedVersion      int                 `json:"managed_version,omitempty"`
-	Archived            bool                `json:"archived"`
-	IsPublic            bool                `json:"is_public"`
-	Skills              []ManagedSkillRef   `json:"skills,omitempty"`
-	MCPBindings         []ManagedMCPBinding `json:"mcp_bindings,omitempty"`
-	CreatedAt           int64               `json:"created_at,omitempty"`
+	AgentID             string                  `json:"agent_id"`
+	Name                string                  `json:"name"`
+	Description         string                  `json:"description,omitempty"`
+	Engine              string                  `json:"engine"`
+	Instructions        string                  `json:"instructions,omitempty"`
+	DefaultModelID      string                  `json:"default_model_id,omitempty"`
+	StartPromptTemplate string                  `json:"start_prompt_template,omitempty"`
+	CredentialSlots     []ManagedCredentialSlot `json:"credential_slots,omitempty"`
+	DefaultBindings     map[string]string       `json:"default_bindings,omitempty"`
+	CurrentVersionID    int                     `json:"current_version_id,omitempty"`
+	ManagedVersion      int                     `json:"managed_version,omitempty"`
+	Archived            bool                    `json:"archived"`
+	IsPublic            bool                    `json:"is_public"`
+	Skills              []ManagedSkillRef       `json:"skills,omitempty"`
+	MCPBindings         []ManagedMCPBinding     `json:"mcp_bindings,omitempty"`
+	CreatedAt           int64                   `json:"created_at,omitempty"`
 }
 
 type ListManagedSkillsResponse struct {
@@ -709,15 +721,17 @@ type ListManagedAgentsResponse struct {
 }
 
 type UpsertManagedAgentRequest struct {
-	AgentID             string              `json:"agent_id,omitempty"`
-	Name                string              `json:"name"`
-	Description         string              `json:"description,omitempty"`
-	Engine              string              `json:"engine"`
-	Instructions        string              `json:"instructions,omitempty"`
-	DefaultModelID      string              `json:"default_model_id,omitempty"`
-	StartPromptTemplate string              `json:"start_prompt_template,omitempty"`
-	Skills              []ManagedSkillRef   `json:"skills,omitempty"`
-	MCPBindings         []ManagedMCPBinding `json:"mcp_bindings,omitempty"`
+	AgentID             string                  `json:"agent_id,omitempty"`
+	Name                string                  `json:"name"`
+	Description         string                  `json:"description,omitempty"`
+	Engine              string                  `json:"engine"`
+	Instructions        string                  `json:"instructions,omitempty"`
+	DefaultModelID      string                  `json:"default_model_id,omitempty"`
+	StartPromptTemplate string                  `json:"start_prompt_template,omitempty"`
+	CredentialSlots     []ManagedCredentialSlot `json:"credential_slots,omitempty"`
+	DefaultBindings     map[string]string       `json:"default_bindings,omitempty"`
+	Skills              []ManagedSkillRef       `json:"skills,omitempty"`
+	MCPBindings         []ManagedMCPBinding     `json:"mcp_bindings,omitempty"`
 }
 
 type UpsertManagedAgentResponse struct {

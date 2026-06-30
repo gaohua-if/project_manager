@@ -49,7 +49,13 @@ func main() {
 	taskH := handler.NewTaskHandler(database)
 	sessionH := handler.NewSessionHandler(database, minioStore, aiClient)
 	reportH := handler.NewReportHandler(database, cfg.ReportGeneratorURL)
-	managedAgentH := handler.NewManagedAgentHandler(database, managedAgentClient)
+	managedAgentH := handler.NewManagedAgentHandlerWithDefaults(database, managedAgentClient, handler.ManagedAgentDefaults{
+		Engine:            cfg.ManagedAgentDefaultEngine,
+		ModelID:           cfg.ManagedAgentDefaultModelID,
+		ReportMCPSlug:     cfg.ManagedAgentReportMCPSlug,
+		ReportMCPVersion:  cfg.ManagedAgentReportMCPVersion,
+		AIDAPublicBaseURL: cfg.AIDAPublicBaseURL,
+	})
 	dailyReportMCPH := handler.NewDailyReportMCPHandler(database)
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
@@ -185,6 +191,7 @@ func main() {
 		r.Get("/teams/activity", teamH.Activity)
 
 		r.Post("/mcp/daily-report", dailyReportMCPH.Serve)
+		r.Post("/mcp/reports", dailyReportMCPH.ServeReports)
 
 		r.Get("/ai-assets/skills", managedAgentH.ListSkills)
 		r.Get("/ai-assets/mcp", managedAgentH.ListMCPEntries)

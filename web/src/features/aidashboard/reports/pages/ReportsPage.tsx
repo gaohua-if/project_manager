@@ -6,7 +6,6 @@ import {
   Card,
   DatePicker,
   Empty,
-  Modal,
   Segmented,
   Space,
   Table,
@@ -68,25 +67,25 @@ function formatDate(value?: string) {
 
 function personalStatus(record: DailyReportListItem, role?: string) {
   if (role === "director" || role === "admin") {
-    return record.status === "saved" || record.status === "submitted" ? <Tag color="blue">已保存</Tag> : <Tag>待生成</Tag>;
+    return record.status === "saved" || record.status === "submitted" ? <Tag color="blue">已保存</Tag> : <Tag>暂无报告</Tag>;
   }
   if (record.status === "submitted") return <Tag color="green">已发送</Tag>;
   if (record.status === "saved" && record.submitted_at) return <Tag color="gold">已保存，未发送最新修改</Tag>;
   if (record.status === "saved") return <Tag color="blue">已保存</Tag>;
-  return <Tag>待生成</Tag>;
+  return <Tag>暂无报告</Tag>;
 }
 
 function teamStatus(record: TeamReportListItem) {
   if (record.status === "submitted") return <Tag color="green">已发送</Tag>;
   if (record.status === "saved" && record.submitted_at) return <Tag color="gold">已保存，未发送最新修改</Tag>;
   if (record.status === "saved") return <Tag color="blue">已保存</Tag>;
-  return <Tag>待生成</Tag>;
+  return <Tag>暂无报告</Tag>;
 }
 
 function departmentStatus(record: DepartmentReportListItem) {
   return record.status === "saved" || record.status === "archived" || record.archived_at
     ? <Tag color="green">已保存</Tag>
-    : <Tag>待生成</Tag>;
+    : <Tag>暂无报告</Tag>;
 }
 
 function useTablePagination() {
@@ -119,8 +118,6 @@ export function ReportsPage() {
   const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [generateTarget, setGenerateTarget] = useState<{ scope: DailyGenerateScope; reportId?: string; reportDate?: string } | null>(null);
-  const [personalDetailReportId, setPersonalDetailReportId] = useState<string | null>(null);
-  const [departmentDetailReportId, setDepartmentDetailReportId] = useState<string | null>(null);
 
   const options =
     user?.role === "director" || user?.role === "admin"
@@ -141,10 +138,9 @@ export function ReportsPage() {
   const activeTab = queryTabIsAvailable ? queryTab : "personal";
   const from = dateRange?.[0].format("YYYY-MM-DD");
   const to = dateRange?.[1].format("YYYY-MM-DD");
-  const [teamDetailReportId, setTeamDetailReportId] = useState<string | null>(null);
-  const generateLabel =
-    activeTab === "team" ? "管理今日小组日报" : activeTab === "department" ? "管理今日部门日报" : "管理今日日报";
-  const canGenerate = activeTab !== "team" || user?.role === "team_leader";
+  const openLabel =
+    activeTab === "team" ? "打开今日小组日报" : activeTab === "department" ? "打开今日部门日报" : "打开今日日报";
+  const canOpenCurrentReport = activeTab !== "team" || user?.role === "team_leader";
 
   const handleTabChange = (value: DailyTab) => {
     setSearchParams((current) => {
@@ -159,7 +155,7 @@ export function ReportsPage() {
   return (
     <PagePanel
       title="日报"
-      description="按记录列表打开日报；个人、小组、部门日报统一通过弹窗查看或编辑正文与来源。"
+      description="按记录列表打开日报；个人、小组、部门日报统一通过弹窗查看和编辑正文。"
       breadcrumbs={[{ title: "报告" }, { title: "日报" }]}
       className="reports-page aidashboard-list"
       showNav={false}
@@ -172,9 +168,9 @@ export function ReportsPage() {
             ) : null}
             <RangePicker value={dateRange} onChange={(value) => setDateRange(value as [Dayjs, Dayjs] | null)} />
           </Space>
-          {canGenerate ? (
+          {canOpenCurrentReport ? (
             <Button type="primary" icon={<EditOutlined />} onClick={() => setGenerateTarget({ scope: activeTab })}>
-              {generateLabel}
+              {openLabel}
             </Button>
           ) : null}
         </Space>
@@ -184,8 +180,7 @@ export function ReportsPage() {
           key={`personal:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
-          onView={(record) => setPersonalDetailReportId(record.id)}
-          onEdit={(record) => setGenerateTarget({ scope: "personal", reportId: record.id, reportDate: record.report_date })}
+          onView={(record) => setGenerateTarget({ scope: "personal", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {activeTab === "team" ? (
@@ -193,7 +188,7 @@ export function ReportsPage() {
           key={`team:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
-          onView={(record) => setTeamDetailReportId(record.id)}
+          onView={(record) => setGenerateTarget({ scope: "team", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {activeTab === "department" ? (
@@ -201,7 +196,7 @@ export function ReportsPage() {
           key={`department:${from ?? ""}:${to ?? ""}`}
           from={from}
           to={to}
-          onView={(record) => setDepartmentDetailReportId(record.id)}
+          onView={(record) => setGenerateTarget({ scope: "department", reportId: record.id, reportDate: record.report_date })}
         />
       ) : null}
       {generateTarget ? (
@@ -217,48 +212,6 @@ export function ReportsPage() {
           }}
         />
       ) : null}
-      {personalDetailReportId ? (
-        <Modal
-          className="reports-detail-modal"
-          open
-          title="个人日报详情"
-          width={920}
-          centered
-          footer={null}
-          destroyOnHidden
-          onCancel={() => setPersonalDetailReportId(null)}
-        >
-          <PersonalDailyReportDetailContent id={personalDetailReportId} embedded />
-        </Modal>
-      ) : null}
-      {teamDetailReportId ? (
-        <Modal
-          className="reports-detail-modal"
-          open
-          title="小组日报"
-          width={960}
-          centered
-          footer={null}
-          destroyOnHidden
-          onCancel={() => setTeamDetailReportId(null)}
-        >
-          <TeamDailyReportContent id={teamDetailReportId} embedded />
-        </Modal>
-      ) : null}
-      {departmentDetailReportId ? (
-        <Modal
-          className="reports-detail-modal"
-          open
-          title="部门日报"
-          width={960}
-          centered
-          footer={null}
-          destroyOnHidden
-          onCancel={() => setDepartmentDetailReportId(null)}
-        >
-          <DepartmentDailyReportContent id={departmentDetailReportId} embedded />
-        </Modal>
-      ) : null}
     </PagePanel>
   );
 }
@@ -266,13 +219,11 @@ export function ReportsPage() {
 function PersonalDailyTable({
   from,
   to,
-  onView,
-  onEdit
+  onView
 }: {
   from?: string;
   to?: string;
   onView: (record: DailyReportListItem) => void;
-  onEdit: (record: DailyReportListItem) => void;
 }) {
   const { user } = useAuth();
   const { page, pageSize, tablePagination } = useTablePagination();
@@ -296,16 +247,11 @@ function PersonalDailyTable({
     {
       title: "操作",
       key: "actions",
-      width: 160,
+      width: 120,
       render: (_, record) => (
-        <Space>
-          <Button size="small" type="link" onClick={() => onView(record)}>
-            打开
-          </Button>
-          <Button size="small" type="link" onClick={() => onEdit(record)}>
-            编辑
-          </Button>
-        </Space>
+        <Button size="small" type="link" onClick={() => onView(record)}>
+          打开
+        </Button>
       )
     }
   ];
@@ -491,7 +437,7 @@ function PersonalDailyReportDetailContent({
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
-              <Text>状态：{report.edited ? "已编辑" : "自动生成"}</Text>
+              <Text>状态：{report.edited ? "已编辑" : report.generation_mode === "managed_agent" ? "AI已生成" : "已保存"}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
             </Space>
           </Card>
@@ -604,7 +550,7 @@ function DepartmentDailyReportContent({
           <Card>
             <Space size="large" wrap>
               <Text>日期：{formatDate(report.report_date)}</Text>
-              <Text>状态：{report.status === "saved" || report.archived_at ? "已保存" : "待生成"}</Text>
+              <Text>状态：{report.status === "saved" || report.archived_at ? "已保存" : "暂无报告"}</Text>
               <Text>更新时间：{formatDateTime(report.updated_at)}</Text>
             </Space>
           </Card>

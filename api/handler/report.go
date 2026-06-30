@@ -190,19 +190,24 @@ func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
 	u := getUser(r)
 	var dr model.DailyReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
-	var savedAt, submittedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, submittedAt, generatedAt sql.NullTime
 	var sessionIDsStr string
 	var reportUserTeamID sql.NullString
 
 	err := h.db.QueryRow(`
 		SELECT dr.id, dr.user_id, COALESCE(NULLIF(report_user.nickname,''), report_user.username), report_user.team_id::text, dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
+			dr.feishu_doc_url, COALESCE(dr.session_ids, '{}'), dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
+			COALESCE(dr.generation_mode, ''), dr.managed_agent_run_id::text, dr.agent_id, dr.agent_version_id, dr.model_id, ar.finished_at,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
 		JOIN users report_user ON report_user.id = dr.user_id
+		LEFT JOIN ai_runs ar ON ar.id = dr.managed_agent_run_id
 		WHERE dr.id = $1`, id).Scan(
 		&dr.ID, &dr.UserID, &dr.UserName, &reportUserTeamID, &dr.ReportDate, &dr.Content, &dr.Edited,
 		&feishuURL, &sessionIDsStr, &status, &submittedContent, &savedAt, &submittedAt, &submittedTo,
+		&generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
 		&dr.CreatedAt, &dr.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -228,6 +233,7 @@ func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
 	dr.SubmittedAt = nullTimePtr(submittedAt)
 	dr.SubmittedTo = nullStringPtr(submittedTo)
 	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	fillDailyReportProductFields(&dr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	writeJSON(w, http.StatusOK, dr)
 }
 
@@ -237,18 +243,23 @@ func (h *ReportHandler) GetOrCreateToday(w http.ResponseWriter, r *http.Request)
 
 	var dr model.DailyReport
 	var feishuURL, submittedContent, status, submittedTo sql.NullString
-	var savedAt, submittedAt sql.NullTime
+	var generationMode, managedAgentRunID, agentID, modelID sql.NullString
+	var agentVersionID sql.NullInt64
+	var savedAt, submittedAt, generatedAt sql.NullTime
 	var sessionIDsStr string
 
 	err := h.db.QueryRow(`
 		SELECT dr.id, dr.user_id, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
+			dr.feishu_doc_url, COALESCE(dr.session_ids, '{}'), dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
+			COALESCE(dr.generation_mode, ''), dr.managed_agent_run_id::text, dr.agent_id, dr.agent_version_id, dr.model_id, ar.finished_at,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
 		JOIN users u ON u.id = dr.user_id
+		LEFT JOIN ai_runs ar ON ar.id = dr.managed_agent_run_id
 		WHERE dr.user_id = $1 AND dr.report_date = $2`, u.ID, today).Scan(
 		&dr.ID, &dr.UserID, &dr.UserName, &dr.ReportDate, &dr.Content, &dr.Edited,
 		&feishuURL, &sessionIDsStr, &status, &submittedContent, &savedAt, &submittedAt, &submittedTo,
+		&generationMode, &managedAgentRunID, &agentID, &agentVersionID, &modelID, &generatedAt,
 		&dr.CreatedAt, &dr.UpdatedAt,
 	)
 
@@ -282,7 +293,33 @@ func (h *ReportHandler) GetOrCreateToday(w http.ResponseWriter, r *http.Request)
 	dr.SubmittedAt = nullTimePtr(submittedAt)
 	dr.SubmittedTo = nullStringPtr(submittedTo)
 	dr.SessionIDs = parseUUIDArray(sessionIDsStr)
+	fillDailyReportProductFields(&dr, generationMode, managedAgentRunID, agentID, agentVersionID, modelID, generatedAt)
 	writeJSON(w, http.StatusOK, dr)
+}
+
+func fillDailyReportProductFields(dr *model.DailyReport, generationMode, managedAgentRunID, agentID sql.NullString, agentVersionID sql.NullInt64, modelID sql.NullString, generatedAt sql.NullTime) {
+	dr.GenerationMode = generationMode.String
+	dr.ManagedAgentRunID = nullStringPtr(managedAgentRunID)
+	dr.AgentRunID = dr.ManagedAgentRunID
+	dr.AgentID = nullStringPtr(agentID)
+	dr.ModelID = nullStringPtr(modelID)
+	dr.GeneratedAt = nullTimePtr(generatedAt)
+	if agentVersionID.Valid {
+		v := int(agentVersionID.Int64)
+		dr.AgentVersionID = &v
+	}
+	dr.UpdatedByUser = dr.Edited
+	if dr.GenerationMode == "managed_agent" {
+		dr.Origin = "ai"
+		if dr.Edited {
+			dr.ProductStatus = "modified"
+		} else {
+			dr.ProductStatus = "ai_generated"
+		}
+		return
+	}
+	dr.Origin = "manual"
+	dr.ProductStatus = "manual"
 }
 
 func (h *ReportHandler) GenerateToday(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +546,7 @@ func (h *ReportHandler) getReportByUserDate(userID, reportDate string) (*model.D
 	var sessionIDsStr string
 	err := h.db.QueryRow(`
 		SELECT dr.id, dr.user_id, COALESCE(NULLIF(u.nickname,''), u.username), dr.report_date, dr.content, dr.edited,
-			dr.feishu_doc_url, dr.session_ids, dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
+			dr.feishu_doc_url, COALESCE(dr.session_ids, '{}'), dr.status, dr.submitted_content, dr.saved_at, dr.submitted_at, dr.submitted_to,
 			dr.created_at, dr.updated_at
 		FROM daily_reports dr
 		JOIN users u ON u.id = dr.user_id

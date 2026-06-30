@@ -14,6 +14,22 @@ import (
 	"github.com/aidashboard/api/model"
 )
 
+const (
+	ManagedAgentNotConfiguredCode = "MANAGED_AGENT_NOT_CONFIGURED"
+	ManagedAgentUnreachableCode   = "MANAGED_AGENT_UNREACHABLE"
+	ManagedAgentUpstreamErrorCode = "MANAGED_AGENT_UPSTREAM_ERROR"
+)
+
+type ManagedAgentError struct {
+	Code       string
+	Message    string
+	StatusCode int
+}
+
+func (e *ManagedAgentError) Error() string {
+	return e.Message
+}
+
 type ManagedAgentClient struct {
 	baseURL string
 	token   string
@@ -30,6 +46,16 @@ func NewManagedAgentClient(baseURL, token string) *ManagedAgentClient {
 
 func (c *ManagedAgentClient) Configured() bool {
 	return c != nil && c.baseURL != "" && c.token != ""
+}
+
+func (c *ManagedAgentClient) WithToken(token string) *ManagedAgentClient {
+	token = strings.TrimSpace(token)
+	if c == nil || token == "" {
+		return c
+	}
+	clone := *c
+	clone.token = token
+	return &clone
 }
 
 func ValidateManagedScope(scope string) string {
@@ -84,6 +110,48 @@ func (c *ManagedAgentClient) CreateMyAgent(ctx context.Context, req model.Upsert
 func (c *ManagedAgentClient) UpdateMyAgent(ctx context.Context, agentID string, req model.UpsertManagedAgentRequest) (*model.UpsertManagedAgentResponse, error) {
 	var out model.UpsertManagedAgentResponse
 	if err := c.do(ctx, http.MethodPut, "/api/my/agents/"+agentID, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type CreateManagedCredentialRequest struct {
+	Name        string            `json:"name"`
+	Kind        string            `json:"kind,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Value       string            `json:"value"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+type CreateManagedCredentialResponse struct {
+	CredentialID string `json:"credential_id"`
+}
+
+func (c *ManagedAgentClient) CreateCredential(ctx context.Context, req CreateManagedCredentialRequest) (*CreateManagedCredentialResponse, error) {
+	var out CreateManagedCredentialResponse
+	if err := c.do(ctx, http.MethodPost, "/api/credential", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type CreateManagedSessionRequest struct {
+	AgentID             string            `json:"agent_id"`
+	ModelID             string            `json:"model_id,omitempty"`
+	StartPromptValues   map[string]string `json:"start_prompt_values,omitempty"`
+	Message             string            `json:"message,omitempty"`
+	CredentialOverrides map[string]string `json:"credential_overrides,omitempty"`
+}
+
+type CreateManagedSessionResponse struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+	ModelID   string `json:"model_id,omitempty"`
+}
+
+func (c *ManagedAgentClient) CreateSession(ctx context.Context, req CreateManagedSessionRequest) (*CreateManagedSessionResponse, error) {
+	var out CreateManagedSessionResponse
+	if err := c.do(ctx, http.MethodPost, "/api/session", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -145,7 +213,10 @@ func (c *ManagedAgentClient) GetTaskStatus(ctx context.Context, taskID string) (
 
 func (c *ManagedAgentClient) do(ctx context.Context, method, path string, in any, out any) error {
 	if !c.Configured() {
-		return errors.New("managed agent platform is not configured")
+		return &ManagedAgentError{
+			Code:    ManagedAgentNotConfiguredCode,
+			Message: "managed agent platform is not configured",
+		}
 	}
 
 	var body io.Reader
@@ -159,7 +230,10 @@ func (c *ManagedAgentClient) do(ctx context.Context, method, path string, in any
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
-		return err
+		return &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.token)
@@ -169,12 +243,19 @@ func (c *ManagedAgentClient) do(ctx context.Context, method, path string, in any
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("managed agent platform returned HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 240))
+		return &ManagedAgentError{
+			Code:       ManagedAgentUpstreamErrorCode,
+			Message:    fmt.Sprintf("managed agent platform returned HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 240)),
+			StatusCode: resp.StatusCode,
+		}
 	}
 	if out == nil {
 		return nil

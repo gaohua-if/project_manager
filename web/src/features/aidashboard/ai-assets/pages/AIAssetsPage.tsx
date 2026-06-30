@@ -11,6 +11,7 @@ import {
   ToolOutlined
 } from "@ant-design/icons";
 import {
+  Alert,
   App,
   Button,
   Empty,
@@ -63,6 +64,7 @@ import {
   RequirementMetricGrid
 } from "../../requirements/components/RequirementMetricCard";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
+import { HttpError } from "@/shared/request/types";
 
 import "./AIAssetsPage.css";
 
@@ -117,6 +119,61 @@ function parseMCPBindingKey(value: string): ManagedMCPBinding {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "请求失败";
+}
+
+type ManagedAgentPlatformIssue = {
+  code: "MANAGED_AGENT_NOT_CONFIGURED" | "MANAGED_AGENT_UNREACHABLE" | "MANAGED_AGENT_UPSTREAM_ERROR" | "UNKNOWN";
+  title: string;
+  description: string;
+};
+
+function managedAgentPayloadCode(error: unknown) {
+  if (!(error instanceof HttpError) || !error.payload || typeof error.payload !== "object") {
+    return undefined;
+  }
+  const payload = error.payload as { code?: unknown };
+  return typeof payload.code === "string" ? payload.code : undefined;
+}
+
+function managedAgentPlatformIssue(error: unknown): ManagedAgentPlatformIssue | null {
+  const code = managedAgentPayloadCode(error);
+  if (code === "MANAGED_AGENT_NOT_CONFIGURED") {
+    return {
+      code,
+      title: "Managed Agent 平台未配置",
+      description: "Managed Agent 平台未配置，请联系管理员配置服务地址和 Token。"
+    };
+  }
+  if (code === "MANAGED_AGENT_UNREACHABLE") {
+    return {
+      code,
+      title: "Managed Agent 平台不可达",
+      description: "Managed Agent 平台暂时不可用，请稍后重试或联系管理员检查服务连通性。"
+    };
+  }
+  if (code === "MANAGED_AGENT_UPSTREAM_ERROR") {
+    return {
+      code,
+      title: "Managed Agent 平台返回错误",
+      description: errorMessage(error)
+    };
+  }
+  if (error) {
+    return {
+      code: "UNKNOWN",
+      title: "Managed Agent 平台请求失败",
+      description: errorMessage(error)
+    };
+  }
+  return null;
+}
+
+function externalAssetEmptyText(
+  platformIssue: ManagedAgentPlatformIssue | null,
+  emptyDescription: string
+) {
+  if (!platformIssue) return <Empty description={emptyDescription} />;
+  return <Empty description={platformIssue.title} />;
 }
 
 function parseParamLines(value: string): Record<string, string> {
@@ -239,6 +296,15 @@ export function AIAssetsPage() {
     () => schedulesQuery.data?.schedules ?? [],
     [schedulesQuery.data]
   );
+  const platformIssue = useMemo(
+    () =>
+      managedAgentPlatformIssue(skillsQuery.error) ??
+      managedAgentPlatformIssue(mcpQuery.error) ??
+      managedAgentPlatformIssue(agentsQuery.error),
+    [agentsQuery.error, mcpQuery.error, skillsQuery.error]
+  );
+  const platformBlocked = Boolean(platformIssue);
+  const platformActionTitle = platformIssue?.description;
   const agentNameByID = useMemo(() => {
     const names = new Map<string, string>();
     for (const agent of agents) {
@@ -489,13 +555,15 @@ export function AIAssetsPage() {
           <Button
             size="small"
             icon={<PlayCircleOutlined />}
+            disabled={platformBlocked}
+            title={platformActionTitle}
             onClick={() => {
-            setRunningAgent(record);
-            setRunMessage("");
-            setRunModelId(record.default_model_id || "");
-            setRunParamsText("");
-            setActiveRunId(undefined);
-          }}
+              setRunningAgent(record);
+              setRunMessage("");
+              setRunModelId(record.default_model_id || "");
+              setRunParamsText("");
+              setActiveRunId(undefined);
+            }}
           >
             运行
           </Button>
@@ -625,6 +693,8 @@ export function AIAssetsPage() {
             size="small"
             icon={<PlayCircleOutlined />}
             loading={runScheduleMutation.isPending && runScheduleMutation.variables === record.id}
+            disabled={platformBlocked}
+            title={platformActionTitle}
             onClick={() => runScheduleMutation.mutate(record.id)}
           >
             运行
@@ -656,12 +726,19 @@ export function AIAssetsPage() {
         options={SCOPE_OPTIONS}
         onChange={setScope}
       />
-      <Button icon={<ApiOutlined />} onClick={() => setMcpOpen(true)}>
+      <Button
+        icon={<ApiOutlined />}
+        disabled={platformBlocked}
+        title={platformActionTitle}
+        onClick={() => setMcpOpen(true)}
+      >
         新建 MCP
       </Button>
       <Button
         type="primary"
         icon={<PlusOutlined />}
+        disabled={platformBlocked}
+        title={platformActionTitle}
         onClick={() => {
           setEditingAgent(null);
           agentForm.resetFields();
@@ -674,7 +751,12 @@ export function AIAssetsPage() {
       <Button icon={<ClockCircleOutlined />} onClick={openCreateSchedule}>
         新建定时任务
       </Button>
-      <Button icon={<RobotOutlined />} onClick={() => setIntegrationOpen(true)}>
+      <Button
+        icon={<RobotOutlined />}
+        disabled={platformBlocked}
+        title={platformActionTitle}
+        onClick={() => setIntegrationOpen(true)}
+      >
         日报 MCP/Skill
       </Button>
     </Space>
@@ -720,6 +802,16 @@ export function AIAssetsPage() {
         />
       </RequirementMetricGrid>
 
+      {platformIssue ? (
+        <Alert
+          className="ai-assets-platform-alert"
+          type={platformIssue.code === "MANAGED_AGENT_NOT_CONFIGURED" ? "warning" : "error"}
+          showIcon
+          message={platformIssue.title}
+          description={platformIssue.description}
+        />
+      ) : null}
+
       <Tabs
         activeKey={tab}
         onChange={(key) => setTab(key as AssetTab)}
@@ -733,7 +825,7 @@ export function AIAssetsPage() {
                 columns={skillColumns}
                 dataSource={skills}
                 loading={skillsQuery.isLoading}
-                locale={{ emptyText: <Empty description="暂无 Skill" /> }}
+                locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Skill") }}
               />
             )
           },
@@ -746,7 +838,7 @@ export function AIAssetsPage() {
                 columns={mcpColumns}
                 dataSource={mcpEntries}
                 loading={mcpQuery.isLoading}
-                locale={{ emptyText: <Empty description="暂无 MCP" /> }}
+                locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 MCP") }}
               />
             )
           },
@@ -760,7 +852,7 @@ export function AIAssetsPage() {
                   columns={agentColumns}
                   dataSource={agents}
                   loading={agentsQuery.isLoading}
-                  locale={{ emptyText: <Empty description="暂无 Agent" /> }}
+                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Agent") }}
                 />
                 <section className="ai-assets-history">
                   <header>

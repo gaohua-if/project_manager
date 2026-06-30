@@ -112,7 +112,7 @@ type ReportStatus =
   | "已保存，未发送最新修改"
   | "已归档"
   | "生成失败";
-type ReportGenerateMode = "系统自动生成" | "手动生成";
+type ReportGenerateMode = "AI已生成" | "手写报告";
 type ReportModalStep = "sessions" | "source" | "editor";
 type ReportKind =
   | "personal_daily"
@@ -307,7 +307,7 @@ function createReport(
 ): ReportItem {
   return {
     sessionCount: 0,
-    generateMode: "系统自动生成",
+    generateMode: "AI已生成",
     skill: "默认日报 Skill",
     updatedAt: "-",
     ...overrides
@@ -342,7 +342,7 @@ function applyTodayDailyReportState(
     ...report,
     status,
     sessionCount: dailyReport.session_ids.length,
-    generateMode: dailyReport.edited ? "手动生成" : "系统自动生成",
+    generateMode: dailyReport.edited ? "手写报告" : "AI已生成",
     updatedAt: formatDateTime(dailyReport.updated_at, "HH:mm")
   };
 }
@@ -365,7 +365,7 @@ function applyPersonalWeeklyReportState(
     ...report,
     status: weeklyReport.status === "submitted" ? "已发送" : "已保存",
     sessionCount: weeklyReport.source_session_ids.length,
-    generateMode: "系统自动生成",
+    generateMode: "AI已生成",
     updatedAt: formatDateTime(weeklyReport.updated_at, "HH:mm")
   };
 }
@@ -394,7 +394,7 @@ function applyTeamDailyReportState(
           ? "已保存，未发送最新修改"
           : "已保存",
     sessionCount: teamReport.source_daily_report_ids.length || teamReport.member_report_ids.length,
-    generateMode: "系统自动生成",
+    generateMode: "AI已生成",
     skill: "小组日报 Agent",
     updatedAt: formatDateTime(teamReport.updated_at, "HH:mm")
   };
@@ -424,7 +424,7 @@ function applyDepartmentDailyReportState(
         ? "已保存"
         : "待生成",
     sessionCount: departmentReport.source_team_report_ids.length,
-    generateMode: "系统自动生成",
+    generateMode: "AI已生成",
     skill: "部门日报 Agent",
     updatedAt: formatDateTime(departmentReport.updated_at, "HH:mm")
   };
@@ -442,7 +442,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日 session 生成日报，请确认后发送。",
+        description: "今日日报已有内容，可继续编辑保存。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:42",
@@ -454,7 +454,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可直接手写，或查看来源后生成周报。",
+        description: "暂无本周周报，可直接填写。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
@@ -561,7 +561,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "草稿待确认",
-        description: "系统已根据今日 session 生成日报，请确认后发送。",
+        description: "今日日报已有内容，可继续编辑保存。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         sessionCount: 2,
         updatedAt: "18:30",
@@ -573,7 +573,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "草稿待确认",
-        description: "系统已根据本周日报和任务记录生成周报，请确认后发送。",
+        description: "本周周报已有内容，可继续编辑保存。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:40"
       })
@@ -585,7 +585,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "team",
         name: "今日组日报",
         status: "待生成",
-        description: "可直接手写小组日报，也可先查看成员原始日报后生成。",
+        description: "暂无小组日报，可直接填写。",
         sourceSummary: "成员当天原始日报",
         updatedAt: "-"
       }),
@@ -595,7 +595,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "team",
         name: "本周组周报",
         status: "待生成",
-        description: "可直接手写组周报，也可基于组内成员本周报告和需求看板数据生成。",
+        description: "暂无小组周报，可直接填写。",
         sourceSummary:
           "组内成员本周个人日报、个人周报、需求看板数据、本周风险与阻塞、完成/延期/下周计划",
         updatedAt: "-"
@@ -713,7 +713,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周个人周报",
         status: "草稿待确认",
-        description: "系统已根据本周日报和任务记录生成周报，请确认后发送。",
+        description: "本周个人周报已有内容，可继续编辑保存。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "17:20"
       })
@@ -725,7 +725,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "department",
         name: "今日部门日报",
         status: "待生成",
-        description: "可直接手写部门日报，也可先查看各组小组日报后生成。",
+        description: "暂无部门日报，可直接填写。",
         sourceSummary: "各组日报、各组发送情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
@@ -735,7 +735,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "department",
         name: "本周部门周报",
         status: "待生成",
-        description: "可直接手写部门周报，也可基于各组周报和部门重点需求风险生成。",
+        description: "暂无部门周报，可直接填写。",
         sourceSummary: "各组周报、各组日报摘要、部门重点需求状态、高风险事项、资源/依赖/交付风险",
         updatedAt: "-"
       })
@@ -834,7 +834,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "今日日报",
         status: "待生成",
-        description: "今日尚未生成日报，可直接手写，或选择 session 生成日报。",
+        description: "暂无日报，可直接填写。",
         sourceSummary: "个人当日 session + 用户当天相关任务/需求状态",
         updatedAt: "-"
       }),
@@ -844,7 +844,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         scope: "personal",
         name: "本周周报",
         status: "待生成",
-        description: "本周周报尚未生成，可直接手写，或查看来源后生成周报。",
+        description: "暂无本周周报，可直接填写。",
         sourceSummary: "本周个人日报、个人工作记录、风险与阻塞",
         updatedAt: "-"
       })
@@ -1248,7 +1248,7 @@ export function DashboardPage() {
       updateReport(activeReport.id, {
         status: "草稿待确认",
         sessionCount: draft.selected_session_ids.length,
-        generateMode: "手动生成",
+        generateMode: "手写报告",
         skill: draft.skill_name,
         updatedAt: "刚刚",
         nextAt: "19:00"
@@ -1271,7 +1271,7 @@ export function DashboardPage() {
       updateReport(activeReport.id, {
         status: "草稿待确认",
         sessionCount: report.source_team_report_ids.length,
-        generateMode: "系统自动生成",
+        generateMode: "AI已生成",
         skill: "部门日报 Agent",
         updatedAt: "刚刚"
       });
@@ -1294,7 +1294,7 @@ export function DashboardPage() {
       updateReport(activeReport.id, {
         status: "草稿待确认",
         sessionCount: report.source_daily_report_ids.length || report.member_report_ids.length,
-        generateMode: "系统自动生成",
+        generateMode: "AI已生成",
         skill: "小组日报 Agent",
         updatedAt: "刚刚"
       });
@@ -1331,7 +1331,7 @@ export function DashboardPage() {
               ? "已保存，未发送最新修改"
               : "已保存",
         sessionCount: report.source_daily_report_ids.length || report.member_report_ids.length,
-        generateMode: "系统自动生成",
+        generateMode: "AI已生成",
         skill: "小组日报 Agent",
         updatedAt: "刚刚"
       });
@@ -1365,7 +1365,7 @@ export function DashboardPage() {
       updateReport(activeReport.id, {
         status: "已保存",
         sessionCount: report.source_team_report_ids.length,
-        generateMode: "系统自动生成",
+        generateMode: "AI已生成",
         skill: "部门日报 Agent",
         updatedAt: "刚刚"
       });
@@ -1398,7 +1398,7 @@ export function DashboardPage() {
       updateReport(activeReport.id, {
         status: "草稿待确认",
         sessionCount: saved.session_ids.length,
-        generateMode: "手动生成",
+        generateMode: "手写报告",
         skill: saved.edited ? "默认日报 Skill" : activeReport.skill,
         updatedAt: "刚刚"
       });
@@ -1534,7 +1534,7 @@ export function DashboardPage() {
     updateReport(activeReport.id, {
       status: "草稿待确认",
       sessionCount: activeReport.sessionCount,
-      generateMode: "系统自动生成",
+      generateMode: "AI已生成",
       skill: reportSkillDraft,
       updatedAt: "刚刚"
     });
@@ -1560,7 +1560,7 @@ export function DashboardPage() {
 
   const goBackReportModalStep = () => {
     if (!activeReport) return;
-    setReportModalStep(getGenerateStepForReport(activeReport));
+    setReportModalStep("editor");
   };
 
   const sendReport = () => {
@@ -1598,7 +1598,6 @@ export function DashboardPage() {
   void goBackReportModalStep;
   void sendReport;
   void openTaskEditModal;
-  void getInitialReportModalStep;
   void getReportModalTitle;
   void getReportModalWidth;
   void getDefaultDraftMarkdown;
@@ -2198,7 +2197,7 @@ function ReportSummaryInlineRow({
       </div>
       <Button
         className="console-report-inline-action"
-        onClick={() => onOpen(report, getGenerateStepForReport(report))}
+        onClick={() => onOpen(report, "editor")}
       >
         {getCompactReportButtonText(report)}
       </Button>
@@ -2224,7 +2223,7 @@ function ReportWeeklyInlineRow({
       </div>
       <Button
         className="console-report-inline-action"
-        onClick={() => onOpen(report, getGenerateStepForReport(report))}
+        onClick={() => onOpen(report, "editor")}
       >
         {getCompactReportButtonText(report)}
       </Button>
@@ -2254,7 +2253,7 @@ function ReportManagementWeeklyInlineRow({
       </div>
       <Button
         className="console-report-inline-action"
-        onClick={() => onOpen(report, getGenerateStepForReport(report))}
+        onClick={() => onOpen(report, "editor")}
       >
         {getCompactReportButtonText(report)}
       </Button>
@@ -2298,60 +2297,9 @@ function renderReportActions(
   report: ReportItem,
   onOpen: (report: ReportItem, step?: ReportModalStep) => void
 ) {
-  if (report.status === "待生成") {
-    return (
-      <Button
-        type="primary"
-        icon={<FileDoneOutlined />}
-        onClick={() => onOpen(report, getGenerateStepForReport(report))}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
-  if (report.status === "生成中") {
-    return <Button disabled>生成中</Button>;
-  }
-
-  if (report.status === "生成失败") {
-    return (
-      <Button
-        type="primary"
-        icon={<FileDoneOutlined />}
-        onClick={() => onOpen(report, getGenerateStepForReport(report))}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
-  if (
-    report.status === "草稿待确认" ||
-    report.status === "已保存" ||
-    report.status === "已发送" ||
-    report.status === "已保存，未发送最新修改"
-  ) {
-    return (
-      <>
-        <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-          {getReportButtonText(report)}
-        </Button>
-      </>
-    );
-  }
-
-  if (report.status === "已归档") {
-    return (
-      <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
   return (
     <Button icon={<EditOutlined />} onClick={() => onOpen(report, "editor")}>
-      查看{getReportActionNoun(report)}
+      {getReportButtonText(report)}
     </Button>
   );
 }
@@ -2360,80 +2308,20 @@ function renderPrimaryReportAction(
   report: ReportItem,
   onOpen: (report: ReportItem, step?: ReportModalStep) => void
 ) {
-  if (report.status === "生成中") {
-    return (
-      <Button
-        className="console-report-primary-action console-report-primary-action--loading"
-        disabled
-      >
-        生成中
-      </Button>
-    );
-  }
-
-  if (report.status === "草稿待确认") {
-    return (
-      <Button
-        className="console-report-primary-action console-report-primary-action--confirm"
-        type="primary"
-        icon={<EditOutlined />}
-        onClick={() => onOpen(report, "editor")}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
-  if (report.status === "已保存" || report.status === "已保存，未发送最新修改") {
-    return (
-      <Button
-        className={`console-report-primary-action ${
-          report.status === "已保存，未发送最新修改"
-            ? "console-report-primary-action--edited"
-            : "console-report-primary-action--saved"
-        }`}
-        icon={<EditOutlined />}
-        onClick={() => onOpen(report, "editor")}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
-  if (report.status === "已发送") {
-    return (
-      <Button
-        className="console-report-primary-action console-report-primary-action--quiet"
-        icon={<EditOutlined />}
-        onClick={() => onOpen(report, "editor")}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
-  if (report.status === "已归档") {
-    return (
-      <Button
-        className="console-report-primary-action console-report-primary-action--quiet"
-        icon={<EditOutlined />}
-        onClick={() => onOpen(report, "editor")}
-      >
-        {getReportButtonText(report)}
-      </Button>
-    );
-  }
-
   return (
     <Button
       className={`console-report-primary-action ${
-        report.status === "生成失败"
-          ? "console-report-primary-action--regenerate"
-          : "console-report-primary-action--generate"
+        report.status === "待生成"
+          ? "console-report-primary-action--generate"
+          : report.status === "已保存，未发送最新修改"
+            ? "console-report-primary-action--edited"
+            : report.status === "已保存"
+              ? "console-report-primary-action--saved"
+              : "console-report-primary-action--quiet"
       }`}
-      type="primary"
-      icon={<FileDoneOutlined />}
-      onClick={() => onOpen(report, getGenerateStepForReport(report))}
+      type={report.status === "待生成" ? "primary" : "default"}
+      icon={<EditOutlined />}
+      onClick={() => onOpen(report, "editor")}
     >
       {getReportButtonText(report)}
     </Button>
@@ -2443,26 +2331,27 @@ function renderPrimaryReportAction(
 function getReportButtonText(report: ReportItem) {
   const noun = getReportActionNoun(report);
 
-  if (report.status === "待生成") return `生成${noun}`;
-  if (report.status === "生成失败") return "重新生成";
-  if (report.status === "草稿待确认") return `确认${noun}`;
+  if (report.status === "待生成") return `填写${noun}`;
+  if (report.status === "生成失败") return `打开${noun}`;
+  if (report.status === "草稿待确认") return `编辑${noun}`;
   if (report.status === "已保存，未发送最新修改") return "继续编辑";
   if (report.status === "已保存") return `编辑${noun}`;
-  if (report.status === "已发送") return `查看${noun}`;
-  if (report.status === "已归档") return `查看${noun}`;
+  if (report.status === "已发送") return `打开${noun}`;
+  if (report.status === "已归档") return `打开${noun}`;
+  if (report.status === "生成中") return `打开${noun}`;
 
-  return `查看${noun}`;
+  return `打开${noun}`;
 }
 
 function getCompactReportButtonText(report: ReportItem) {
-  if (report.status === "待生成") return "生成内容";
-  if (report.status === "生成失败") return "重新生成";
-  if (report.status === "草稿待确认") return "确认内容";
+  if (report.status === "待生成") return "填写报告";
+  if (report.status === "生成失败") return "打开内容";
+  if (report.status === "草稿待确认") return "编辑内容";
   if (report.status === "已保存，未发送最新修改") return "继续编辑";
   if (report.status === "已保存") return "继续编辑";
-  if (report.status === "已发送" || report.status === "已归档") return "查看内容";
-  if (report.status === "生成中") return "生成中";
-  return "查看内容";
+  if (report.status === "已发送" || report.status === "已归档") return "打开内容";
+  if (report.status === "生成中") return "打开内容";
+  return "打开内容";
 }
 
 function getReportActionNoun(report: ReportItem) {
@@ -2476,30 +2365,30 @@ function getReportActionNoun(report: ReportItem) {
 
 function getDailyReportCopy(report: ReportItem) {
   if (report.status === "已发送") {
-    return "今日日报已发送给上级，可继续打开修改并重新发送。";
+    return "今日日报已保存，可继续打开查看或编辑。";
   }
 
   if (report.status === "已保存，未发送最新修改") {
-    return "今日日报已保存，最新修改尚未再次发送给上级。";
+    return "今日日报已保存，可继续编辑。";
   }
 
   if (report.status === "已保存") {
-    return "今日日报已保存，尚未发送给上级。";
+    return "今日日报已保存，可继续编辑。";
   }
 
   if (report.status === "草稿待确认") {
-    return "已根据今日 AI 工作记录生成日报，确认内容后即可发送。";
+    return "日报内容可继续编辑保存。";
   }
 
   if (report.status === "已归档") {
-    return "今日日报已保存，可回看内容和关联的工作记录。";
+    return "今日日报已保存，可回看内容。";
   }
 
   if (report.status === "生成中") {
-    return "正在根据今日 AI 工作记录生成日报。";
+    return "日报内容可打开查看或编辑。";
   }
 
-  return "可直接手写日报，也可选择今日 AI 工作记录生成。";
+  return "暂无日报，可直接填写。";
 }
 
 function getSummaryReportLabel(report: ReportItem) {
@@ -2507,10 +2396,10 @@ function getSummaryReportLabel(report: ReportItem) {
 }
 
 function getPersonalWeeklyInlineCopy(report: ReportItem) {
-  if (report.status === "已发送") return "已提交给上级";
-  if (report.status === "已保存") return "可继续编辑或发送";
-  if (report.status === "生成中") return "正在生成周报";
-  if (report.status === "生成失败") return "可重新生成";
+  if (report.status === "已发送") return "已保存";
+  if (report.status === "已保存") return "可继续编辑";
+  if (report.status === "生成中") return "可打开编辑";
+  if (report.status === "生成失败") return "可打开编辑";
   return `已收集 ${report.sessionCount} 篇日报`;
 }
 
@@ -2520,11 +2409,11 @@ function getManagementWeeklyLabel(report: ReportItem) {
 
 function getManagementWeeklyInlineCopy(report: ReportItem, coverage?: ReportCoverage) {
   if (report.status === "已归档") return "已保存";
-  if (report.status === "已发送") return "已提交给上级";
+  if (report.status === "已发送") return "已保存";
   if (report.status === "已保存") return "可继续编辑";
-  if (report.status === "生成中") return "正在生成周报";
-  if (report.status === "生成失败") return "可重新生成";
-  if (!coverage) return report.kind === "department_weekly" ? "可直接手写或等待小组周报" : "可直接手写或等待个人周报";
+  if (report.status === "生成中") return "可打开编辑";
+  if (report.status === "生成失败") return "可打开编辑";
+  if (!coverage) return "暂无周报，可直接填写";
 
   if (report.kind === "department_weekly") {
     return `已收集 ${coverage.submitted}/${coverage.expected} 组周报`;
@@ -2541,33 +2430,15 @@ function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
   return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 人未发送`;
 }
 
-function getInitialReportModalStep(report: ReportItem): ReportModalStep {
-  if (
-    report.status === "草稿待确认" ||
-    report.status === "已归档" ||
-    report.status === "已保存" ||
-    report.status === "已发送" ||
-    report.status === "已保存，未发送最新修改"
-  ) {
-    return "editor";
-  }
-
-  return getGenerateStepForReport(report);
-}
-
-function getGenerateStepForReport(report: ReportItem): ReportModalStep {
-  return report.kind === "personal_daily" ? "sessions" : "source";
-}
-
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
   if (report.kind === "department_daily") {
-    return step === "editor" ? "编辑部门日报" : "生成部门日报";
+    return "编辑部门日报";
   }
   if (step === "editor") {
     return `编辑${report.name}`;
   }
 
-  return `生成${report.name}`;
+  return `编辑${report.name}`;
 }
 
 function getReportModalWidth(report: ReportItem, step: ReportModalStep) {
@@ -3014,7 +2885,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 跨组依赖和发送目标仍需对齐。
 
 ## 下周重点
-* 推进需求看板和报告生成闭环。`;
+* 推进需求看板和报告编辑闭环。`;
   }
 
   if (report.kind === "team_daily") {
@@ -3037,7 +2908,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 各组日报已完成汇总。
 
 ## 重点风险
-* 部门日报需要基于已发送小组日报确认后保存。
+* 部门日报可基于现有小组日报内容继续编辑保存。
 
 ## 明日重点
 * 跟进高优先级风险和跨组依赖。`;
@@ -3160,10 +3031,10 @@ function renderReportModalFooter({
           onClick={onGenerate}
         >
           {report.kind === "department_daily"
-            ? "基于已发送小组日报生成部门日报"
+            ? "继续编辑部门日报"
             : report.kind === "team_daily"
-              ? "基于已发送成员日报生成组日报"
-              : "生成日报"}
+              ? "继续编辑小组日报"
+              : "继续编辑日报"}
         </Button>
       </Space>
     );
@@ -3181,7 +3052,7 @@ function renderReportModalFooter({
       </Button>
       {report.scope === "department" ? null : (
         <Button onClick={onSave} loading={isSaving}>
-          {report.scope === "team" ? "保存组日报" : "保存日报"}
+          {report.scope === "team" ? "保存小组日报" : "保存日报"}
         </Button>
       )}
       <Button type="primary" icon={<FileDoneOutlined />} loading={isSaving} onClick={onSend}>
@@ -3602,7 +3473,7 @@ function ReportModalContent({
     <div className="console-report-modal">
       <Steps size="small" current={1} items={getReportSourceSteps(report)} />
       <div className="console-editor-shell__meta">
-        <Tag color={report.generateMode === "系统自动生成" ? "blue" : "gold"}>
+        <Tag color={report.generateMode === "AI已生成" ? "blue" : "gold"}>
           {report.generateMode}
         </Tag>
         {getEditorMeta(report).map((meta) => (
@@ -3926,7 +3797,18 @@ function ReportStatusTag({ status }: { status: ReportStatus }) {
         : status === "草稿待确认" || status === "生成中" || status === "已保存"
           ? "blue"
           : "gold";
-  const label = status === "草稿待确认" ? "待确认" : status === "已归档" ? "已保存" : status;
+  const label =
+    status === "草稿待确认"
+      ? "待编辑"
+      : status === "已归档"
+        ? "已保存"
+        : status === "待生成"
+          ? "暂无报告"
+          : status === "生成中"
+            ? "可编辑"
+            : status === "生成失败"
+              ? "可编辑"
+              : status;
   return <Tag color={color}>{label}</Tag>;
 }
 

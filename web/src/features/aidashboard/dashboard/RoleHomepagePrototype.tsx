@@ -303,9 +303,9 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
       },
       {
         title: "个人周报链接",
-        desc: "周五生成后展示链接入口，首页只验证入口位置。",
+        desc: "周五保存后展示链接入口，首页只验证入口位置。",
         meta: "周报 · 周五",
-        tag: "未生成",
+        tag: "暂无报告",
         tone: "gray",
         to: "/reports",
         action: "打开"
@@ -484,9 +484,9 @@ const roleData: Record<RoleHomeKey, RoleHomeData> = {
     side: [
       {
         title: "部门周报链接",
-        desc: "周五生成后展示飞书链接入口。",
+        desc: "周五保存后展示飞书链接入口。",
         meta: "部门报告",
-        tag: "未生成",
+        tag: "暂无报告",
         tone: "gray",
         to: "/reports",
         action: "查看"

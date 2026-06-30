@@ -164,21 +164,26 @@
 }
 
 .reports-detail-modal.ant-modal {
+  top: clamp(12px, 3vh, 24px);
   max-width: min(920px, calc(100vw - 32px));
+  padding-bottom: clamp(12px, 3vh, 24px);
 }
 
 .reports-detail-modal .ant-modal-content {
   display: flex;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - clamp(24px, 6vh, 48px));
   flex-direction: column;
+  overflow: hidden;
 }
 
 .reports-detail-modal .ant-modal-body {
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 128px);
   overflow-y: auto;
   padding-right: 4px;
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 .reports-day-section {
