@@ -62,6 +62,10 @@ cd daemon && go test ./...
 cd web && pnpm lint && pnpm typecheck && pnpm build
 ```
 
+Go 1.26.3 is installed on the host at `~/sdk/go1.26.3` and on `PATH` in any
+fresh shell (`GOTOOLCHAIN=local`). Call `go`, `gofmt`, `go test` directly on
+the host — do not bring up a Docker container just to run Go tests.
+
 ## Architecture Notes
 
 ### 1. `daemon` has two roles

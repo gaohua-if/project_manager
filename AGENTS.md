@@ -52,10 +52,15 @@ cd api && go test ./...
 cd daemon && go test ./...
 ```
 
-When the user asks to run Go tests with Docker, do not pull Go images or guess
-patch-version tags. First use a locally available Go image tag, and run Docker
-with `--pull=never` so a missing tag fails fast instead of downloading. If no
-local Go image works, stop and report that the local Docker image is missing.
+The host has Go 1.26.3 installed at `~/sdk/go1.26.3` and wired into `PATH` via
+`~/.bashrc` (`GOROOT`, `GOPATH`, `GOTOOLCHAIN=local` are all set). In a fresh
+shell `go`, `gofmt`, `go test`, `go build`, and `go vet` work directly.
+
+Prefer the host toolchain for Go test/build/format work. Do not spin up a
+Docker container just to run `go test` — call `go` on the host. Only use
+Docker for Go if you specifically need to reproduce the container build
+environment; in that case never pull a new image or guess a patch-version
+tag, run with `--pull=never`, and stop if no local Go image matches.
 
 ### Frontend
 
