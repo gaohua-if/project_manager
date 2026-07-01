@@ -2569,20 +2569,21 @@ func (h *ReportHandler) SaveDepartmentWeeklyReportCurrent(w http.ResponseWriter,
 	var reportID string
 	err = h.db.QueryRow(`
 		INSERT INTO department_weekly_reports (
-			week_start, content, source_team_weekly_report_ids, archived_at
+			week_start, week_end, content, source_team_weekly_report_ids, archived_at
 		)
-		VALUES ($1, $2, $3, CASE WHEN $4 THEN now() ELSE NULL END)
+		VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN now() ELSE NULL END)
 		ON CONFLICT (week_start)
 		DO UPDATE SET
+			week_end = EXCLUDED.week_end,
 			content = EXCLUDED.content,
 			source_team_weekly_report_ids = EXCLUDED.source_team_weekly_report_ids,
 			archived_at = CASE
-				WHEN $4 THEN COALESCE(department_weekly_reports.archived_at, now())
+				WHEN $5 THEN COALESCE(department_weekly_reports.archived_at, now())
 				ELSE department_weekly_reports.archived_at
 			END,
 			updated_at = now()
 		RETURNING id::text`,
-		weekStart, req.Content, pq.Array(sourceIDs), req.Archive,
+		weekStart, weekEnd, req.Content, pq.Array(sourceIDs), req.Archive,
 	).Scan(&reportID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -2720,12 +2721,12 @@ func (h *ReportHandler) buildTeamWeeklyReportSources(teamID, weekStart, weekEnd 
 
 	rows, err := h.db.Query(`
 		WITH eligible_people AS (
-			SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username),
+			SELECT u.id, COALESCE(NULLIF(u.nickname,''), u.username) AS display_name,
 				CASE WHEN u.app_role = 'team_leader' THEN 'leader' ELSE 'member' END AS source_role
 			FROM users u
 			WHERE u.team_id = $1 AND u.app_role IN ('team_leader', 'employee')
 		)
-		SELECT ep.id::text, ep.name, ep.source_role,
+		SELECT ep.id::text, ep.display_name, ep.source_role,
 			pwr.id::text, pwr.week_start, pwr.week_end, pwr.submitted_at,
 			COALESCE(pwr.submitted_content, pwr.content, '')
 		FROM eligible_people ep
@@ -2734,7 +2735,7 @@ func (h *ReportHandler) buildTeamWeeklyReportSources(teamID, weekStart, weekEnd 
 			AND pwr.week_start = $2
 			AND pwr.status = 'submitted'
 			AND pwr.submitted_at IS NOT NULL
-		ORDER BY CASE WHEN ep.source_role = 'leader' THEN 0 ELSE 1 END, ep.name`, teamID, weekStart)
+		ORDER BY CASE WHEN ep.source_role = 'leader' THEN 0 ELSE 1 END, ep.display_name`, teamID, weekStart)
 	if err != nil {
 		return nil, err
 	}
@@ -2799,14 +2800,15 @@ func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, week
 	if submitted {
 		err = h.db.QueryRow(`
 			INSERT INTO team_weekly_reports (
-				team_id, leader_id, week_start, content,
+				team_id, leader_id, week_start, week_end, content,
 				source_daily_report_ids, source_team_report_ids, source_task_ids,
 				source_personal_weekly_report_ids, submitted_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 			ON CONFLICT (team_id, week_start)
 			DO UPDATE SET
 				leader_id = EXCLUDED.leader_id,
+				week_end = EXCLUDED.week_end,
 				content = EXCLUDED.content,
 				source_daily_report_ids = EXCLUDED.source_daily_report_ids,
 				source_team_report_ids = EXCLUDED.source_team_report_ids,
@@ -2815,20 +2817,21 @@ func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, week
 				submitted_at = now(),
 				updated_at = now()
 			RETURNING id::text`,
-			teamID, leaderID, weekStart, content,
+			teamID, leaderID, weekStart, weekEnd, content,
 			pq.Array(sourceDailyIDs), pq.Array(sourceTeamReportIDs), pq.Array(sourceTaskIDs), pq.Array(sourceIDs),
 		).Scan(&reportID)
 	} else {
 		err = h.db.QueryRow(`
 			INSERT INTO team_weekly_reports (
-				team_id, leader_id, week_start, content,
+				team_id, leader_id, week_start, week_end, content,
 				source_daily_report_ids, source_team_report_ids, source_task_ids,
 				source_personal_weekly_report_ids, submitted_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL)
 			ON CONFLICT (team_id, week_start)
 			DO UPDATE SET
 				leader_id = EXCLUDED.leader_id,
+				week_end = EXCLUDED.week_end,
 				content = EXCLUDED.content,
 				source_daily_report_ids = EXCLUDED.source_daily_report_ids,
 				source_team_report_ids = EXCLUDED.source_team_report_ids,
@@ -2837,7 +2840,7 @@ func (h *ReportHandler) upsertTeamWeeklyReport(teamID, leaderID, weekStart, week
 				submitted_at = NULL,
 				updated_at = now()
 			RETURNING id::text`,
-			teamID, leaderID, weekStart, content,
+			teamID, leaderID, weekStart, weekEnd, content,
 			pq.Array(sourceDailyIDs), pq.Array(sourceTeamReportIDs), pq.Array(sourceTaskIDs), pq.Array(sourceIDs),
 		).Scan(&reportID)
 	}

@@ -3,23 +3,34 @@ package service
 import "fmt"
 
 const (
-	DailyReportSkillSlug    = "aida-daily-report"
-	DailyReportSkillVersion = "1.0.0"
-	DailyReportSkillName    = "Aida 日报生成 Skill"
+	ReportSkillSlug    = "aida-report"
+	ReportSkillVersion = "1.0.0"
+	ReportSkillName    = "Aida Report Skill"
+
+	// Backward-compatible aliases for legacy draft code/tests. New Report Agent
+	// configuration should use ReportSkill*.
+	DailyReportSkillSlug    = ReportSkillSlug
+	DailyReportSkillVersion = ReportSkillVersion
+	DailyReportSkillName    = ReportSkillName
 )
 
 func DailyReportOutputContract() string {
 	return `Return strict JSON only: {"report_markdown":"...","task_progress_suggestions":[{"task_id":"...","task_title":"...","requirement_id":"...","requirement_title":"...","suggested_status":"todo|in_progress|done","suggested_progress":0,"evidence_session_ids":["..."],"evidence_session_titles":["..."],"reason":"..."}]}. Do not invent facts outside the provided Aida context.`
 }
 
-func DailyReportSkillMarkdown(mcpURL string) string {
-	return fmt.Sprintf(`# Aida Daily Report Skill
+func ReportSkillMarkdown(mcpURL string) string {
+	return fmt.Sprintf(`# Aida Report Skill
 
-Use this skill when generating a personal daily report for Aida.
+Use this skill when generating Aida reports. The run input must include report_type, period, target, and run_id. Do not ask the user to provide session_ids, urls, MCP tokens, or credentials.
 
-## Start Prompt Values
+## Supported report_type
 
-- urls: required. JSON array string of session or log URLs, for example ["https://aida.example.com/api/v1/sessions/<id>/log"].
+- personal_daily: current user's daily report.
+- personal_weekly: current user's weekly report.
+- team_daily: team daily report for the current user's allowed team scope.
+- team_weekly: team weekly report for the current user's allowed team scope.
+- department_daily: department daily report for the current user's allowed department scope.
+- department_weekly: department weekly report for the current user's allowed department scope.
 
 ## Required MCP
 
@@ -28,27 +39,33 @@ Bind the Aida Report MCP server:
 %s
 
 The MCP server requires an Aida user token in the Authorization header.
+The token is supplied by Aida through the AIDA_REPORT_MCP_AUTH credential slot at run time. Never ask the user for a token and never print credentials.
 
 ## Workflow
 
-1. Call get_existing_report with report_type=personal_daily and period.date to fetch any existing report content.
-2. Call get_sessions with scope.type=self and date_range covering the report date to list the user's sessions.
-3. Call get_tasks with scope.type=self and the same date_range to list the user's tasks.
-4. Call get_requirements with scope.type=self and the same date_range to list related requirements.
-5. Use only facts returned by these atomic tools. Do not invent tasks, sessions, blockers, or progress.
-6. Produce a concise Markdown daily report with these sections:
-   - 今日完成
-   - 阻塞风险
-   - 明日计划
-7. Return strict JSON matching the output contract.
-8. If this run is allowed to save the report, call write_report_result with report_type=personal_daily, period.date, run_id, and the generated Markdown content.
-9. If generation fails, call write_report_failure with run_id and error_message.
+1. Read report_type, period, target, and run_id from the run input.
+2. Call get_existing_report first to fetch any existing report content for the same report_type + period + target.
+3. Select context tools by report_type:
+   - personal_daily: get_sessions, get_tasks, get_requirements for scope.type=self and period.date.
+   - personal_weekly: get_daily_reports, get_sessions, get_tasks, get_requirements for scope.type=self and the week range.
+   - team_daily: get_daily_reports, get_sessions, get_tasks, get_requirements, get_report_inventory for the team daily scope.
+   - team_weekly: get_weekly_reports, get_daily_reports, get_sessions, get_tasks, get_requirements, get_report_inventory for the team weekly scope.
+   - department_daily: get_daily_reports, get_report_inventory, get_requirements for department daily scope.
+   - department_weekly: get_weekly_reports, get_daily_reports, get_report_inventory, get_requirements for department weekly scope.
+4. Use only facts returned by MCP tools. Do not invent tasks, sessions, blockers, progress, members, teams, or departments.
+5. Produce concise Chinese Markdown suitable for the selected report_type.
+6. Call write_report_result with the same report_type, period, target, run_id, and generated Markdown content.
+7. If generation fails, call write_report_failure with report_type, period, target, run_id, and error_message.
 
 ## Output Rules
 
-- report_markdown must be non-empty Markdown.
-- task_progress_suggestions is optional and must reference only task ids from the MCP context.
-- Evidence session ids must come from the sessions returned by get_sessions.
+- The final report content must be non-empty Markdown.
 - If there is insufficient context, say so in the Markdown instead of filling gaps.
+- Missing daily/weekly reports are facts; include them only when relevant to the selected report type.
+- Never expose run_id, MCP URLs, token, credential slots, or internal configuration in the user-facing report.
 `, mcpURL)
+}
+
+func DailyReportSkillMarkdown(mcpURL string) string {
+	return ReportSkillMarkdown(mcpURL)
 }

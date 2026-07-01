@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -67,12 +69,72 @@ func ValidateManagedScope(scope string) string {
 	}
 }
 
+func urlPathEscape(value string) string {
+	return url.PathEscape(strings.TrimSpace(value))
+}
+
 func (c *ManagedAgentClient) ListSkills(ctx context.Context, scope string) (*model.ListManagedSkillsResponse, error) {
 	var out model.ListManagedSkillsResponse
 	if err := c.do(ctx, http.MethodGet, "/api/skill/list?scope="+ValidateManagedScope(scope), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+type CreateManagedSkillRequest struct {
+	Slug        string `json:"slug"`
+	Version     string `json:"version"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	SkillMD     string `json:"skill_md"`
+}
+
+type CreateManagedSkillResponse struct {
+	SkillID     string `json:"skill_id"`
+	Owner       string `json:"owner,omitempty"`
+	PublishedBy string `json:"published_by,omitempty"`
+	Slug        string `json:"slug"`
+	Version     string `json:"version"`
+	SHA256      string `json:"sha256,omitempty"`
+}
+
+func (c *ManagedAgentClient) CreateSkill(ctx context.Context, req CreateManagedSkillRequest) (*CreateManagedSkillResponse, error) {
+	fields := map[string]string{
+		"slug":        req.Slug,
+		"version":     req.Version,
+		"name":        req.Name,
+		"description": req.Description,
+		"skill_md":    req.SkillMD,
+	}
+	var out CreateManagedSkillResponse
+	if err := c.doMultipart(ctx, http.MethodPost, "/api/skill", fields, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type ArchiveManagedSkillRequest struct {
+	Archived bool `json:"archived"`
+}
+
+func (c *ManagedAgentClient) ArchiveSkill(ctx context.Context, slug, version string, archived bool) (map[string]any, error) {
+	var out map[string]any
+	if err := c.do(ctx, http.MethodPost, "/api/skill/"+urlPathEscape(slug)+"/"+urlPathEscape(version)+"/archive", ArchiveManagedSkillRequest{Archived: archived}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ManagedAgentClient) DeleteSkill(ctx context.Context, slug, version string) (map[string]any, error) {
+	var out map[string]any
+	if err := c.do(ctx, http.MethodDelete, "/api/skill/"+urlPathEscape(slug)+"/"+urlPathEscape(version), nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ManagedAgentClient) GetSkillFile(ctx context.Context, owner, slug, version, path string) ([]byte, error) {
+	return c.doRaw(ctx, http.MethodGet, "/api/skill/"+urlPathEscape(owner)+"/"+urlPathEscape(slug)+"/"+urlPathEscape(version)+"/file?path="+url.QueryEscape(path), nil)
 }
 
 func (c *ManagedAgentClient) ListMCPEntries(ctx context.Context, scope string) (*model.ListManagedMCPEntriesResponse, error) {
@@ -262,6 +324,110 @@ func (c *ManagedAgentClient) do(ctx context.Context, method, path string, in any
 	}
 	if raw, ok := out.(*json.RawMessage); ok {
 		*raw = append((*raw)[0:0], respBody...)
+		return nil
+	}
+	if len(bytes.TrimSpace(respBody)) == 0 {
+		return nil
+	}
+	return json.Unmarshal(respBody, out)
+}
+
+func (c *ManagedAgentClient) doRaw(ctx context.Context, method, path string, in any) ([]byte, error) {
+	if !c.Configured() {
+		return nil, &ManagedAgentError{
+			Code:    ManagedAgentNotConfiguredCode,
+			Message: "managed agent platform is not configured",
+		}
+	}
+
+	var body io.Reader
+	if in != nil {
+		payload, err := json.Marshal(in)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(payload)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, &ManagedAgentError{
+			Code:       ManagedAgentUpstreamErrorCode,
+			Message:    fmt.Sprintf("managed agent platform returned HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 240)),
+			StatusCode: resp.StatusCode,
+		}
+	}
+	return respBody, nil
+}
+
+func (c *ManagedAgentClient) doMultipart(ctx context.Context, method, path string, fields map[string]string, out any) error {
+	if !c.Configured() {
+		return &ManagedAgentError{
+			Code:    ManagedAgentNotConfiguredCode,
+			Message: "managed agent platform is not configured",
+		}
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, &body)
+	if err != nil {
+		return &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return &ManagedAgentError{
+			Code:    ManagedAgentUnreachableCode,
+			Message: "managed agent platform is unreachable: " + err.Error(),
+		}
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return &ManagedAgentError{
+			Code:       ManagedAgentUpstreamErrorCode,
+			Message:    fmt.Sprintf("managed agent platform returned HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 240)),
+			StatusCode: resp.StatusCode,
+		}
+	}
+	if out == nil {
 		return nil
 	}
 	if len(bytes.TrimSpace(respBody)) == 0 {

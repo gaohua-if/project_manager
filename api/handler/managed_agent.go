@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -17,18 +18,26 @@ import (
 )
 
 type ManagedAgentHandler struct {
-	db       *sql.DB
-	client   *service.ManagedAgentClient
-	defaults ManagedAgentDefaults
+	db          *sql.DB
+	client      *service.ManagedAgentClient
+	defaults    ManagedAgentDefaults
+	tokenIssuer func(*model.User) (string, error)
 }
 
 const (
-	personalDailyReportType       = "personal_daily"
-	defaultPersonalDailyAgentName = "日报"
-	defaultReportAgentMarker      = "AIDA_REPORT_AGENT:personal_daily"
+	defaultReportAgentName        = "报告生成 Agent"
+	defaultReportAgentMarker      = "AIDA_REPORT_AGENT:default"
+	defaultReportAgentTypesPrefix = "AIDA_REPORT_AGENT_TYPES:"
 	defaultManagedAgentMarker     = "AIDA_MANAGED_DEFAULT_AGENT:true"
+	defaultReportAssetsMarker     = "AIDA_REPORT_DEFAULT:true"
+	legacyPersonalDailyAgentName  = "日报"
+	legacyPersonalDailyMarker     = "AIDA_REPORT_AGENT:" + reportTypePersonalDaily
+	legacyReportSkillSlug         = "aida-" + "daily-report"
+	legacyReportMCPSlug           = "aida-report-mcp" + "-p0"
+	legacyReportMCPVersion        = "personal-" + "daily-v1"
 	reportMCPCredentialSlot       = "AIDA_REPORT_MCP_AUTH"
 	managedAgentConfigInvalidCode = "MANAGED_AGENT_CONFIG_INVALID"
+	reportAgentRunBusinessType    = "report_agent_run"
 )
 
 type ManagedAgentDefaults struct {
@@ -47,6 +56,10 @@ func NewManagedAgentHandlerWithDefaults(db *sql.DB, client *service.ManagedAgent
 	return &ManagedAgentHandler{db: db, client: client, defaults: normalizeManagedAgentDefaults(defaults)}
 }
 
+func (h *ManagedAgentHandler) SetUserTokenIssuer(fn func(*model.User) (string, error)) {
+	h.tokenIssuer = fn
+}
+
 func normalizeManagedAgentDefaults(defaults ManagedAgentDefaults) ManagedAgentDefaults {
 	defaults.Engine = strings.TrimSpace(defaults.Engine)
 	if defaults.Engine == "" {
@@ -58,11 +71,11 @@ func normalizeManagedAgentDefaults(defaults ManagedAgentDefaults) ManagedAgentDe
 	}
 	defaults.ReportMCPSlug = strings.TrimSpace(defaults.ReportMCPSlug)
 	if defaults.ReportMCPSlug == "" {
-		defaults.ReportMCPSlug = "aida-report-mcp-p0"
+		defaults.ReportMCPSlug = "aida-report-mcp"
 	}
 	defaults.ReportMCPVersion = strings.TrimSpace(defaults.ReportMCPVersion)
 	if defaults.ReportMCPVersion == "" {
-		defaults.ReportMCPVersion = "personal-daily-v1"
+		defaults.ReportMCPVersion = "report-v1"
 	}
 	defaults.AIDAPublicBaseURL = strings.TrimRight(strings.TrimSpace(defaults.AIDAPublicBaseURL), "/")
 	return defaults
@@ -159,6 +172,72 @@ func (h *ManagedAgentHandler) ListSkills(w http.ResponseWriter, r *http.Request)
 	h.proxyJSON(w, func() (any, error) { return client.ListSkills(r.Context(), scope) })
 }
 
+func (h *ManagedAgentHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
+	var req service.CreateManagedSkillRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Slug) == "" || strings.TrimSpace(req.Version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug and version are required"})
+		return
+	}
+	if strings.TrimSpace(req.SkillMD) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "skill_md is required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.CreateSkill(r.Context(), req) })
+}
+
+func (h *ManagedAgentHandler) ArchiveSkill(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	version := chi.URLParam(r, "version")
+	var req service.ArchiveManagedSkillRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(slug) == "" || strings.TrimSpace(version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug and version are required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.ArchiveSkill(r.Context(), slug, version, req.Archived) })
+}
+
+func (h *ManagedAgentHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	version := chi.URLParam(r, "version")
+	if strings.TrimSpace(slug) == "" || strings.TrimSpace(version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug and version are required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.DeleteSkill(r.Context(), slug, version) })
+}
+
+func (h *ManagedAgentHandler) GetSkillMarkdown(w http.ResponseWriter, r *http.Request) {
+	owner := strings.TrimSpace(chi.URLParam(r, "owner"))
+	slug := chi.URLParam(r, "slug")
+	version := chi.URLParam(r, "version")
+	if owner == "_mine" {
+		owner = currentManagedOwner(getUser(r))
+	}
+	if strings.TrimSpace(owner) == "" || strings.TrimSpace(slug) == "" || strings.TrimSpace(version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner, slug and version are required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) {
+		content, err := client.GetSkillFile(r.Context(), owner, slug, version, "SKILL.md")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"content": string(content)}, nil
+	})
+}
+
 func (h *ManagedAgentHandler) ListMCPEntries(w http.ResponseWriter, r *http.Request) {
 	scope := r.URL.Query().Get("scope")
 	client := h.clientForRequest(r)
@@ -222,154 +301,237 @@ func (h *ManagedAgentHandler) UpdateMyAgent(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ManagedAgentHandler) ensureReportMCPEntry(r *http.Request, client *service.ManagedAgentClient) error {
+	_, _, _, err := h.ensureUserReportMCPEntry(r.Context(), client)
+	return err
+}
+
+func (h *ManagedAgentHandler) ensureUserReportMCPEntry(ctx context.Context, client *service.ManagedAgentClient) (bool, model.ManagedMCPEntry, int, error) {
 	expectedURL := h.reportMCPURL()
-	resp, err := client.ListMCPEntries(r.Context(), string(model.ManagedScopeMine))
+	resp, err := client.ListMCPEntries(ctx, string(model.ManagedScopeMine))
 	if err != nil {
-		return err
+		return false, model.ManagedMCPEntry{}, 0, err
 	}
+	count := 0
+	var first model.ManagedMCPEntry
 	for _, entry := range resp.Entries {
 		if entry.Slug != h.defaults.ReportMCPSlug || entry.Version != h.defaults.ReportMCPVersion {
 			continue
 		}
-		if entry.URL != "" && strings.TrimRight(entry.URL, "/") != expectedURL {
-			return &service.ManagedAgentError{
-				Code:    managedAgentConfigInvalidCode,
-				Message: fmt.Sprintf("Report MCP entry %s@%s already exists with different url", h.defaults.ReportMCPSlug, h.defaults.ReportMCPVersion),
-			}
+		if entry.Archived {
+			continue
 		}
-		return nil
+		count++
+		if first.EntryID == "" {
+			first = entry
+		}
 	}
-	_, err = client.CreateMCPEntry(r.Context(), model.CreateManagedMCPEntryRequest{
+	if count > 0 {
+		return false, first, count, nil
+	}
+	created, err := client.CreateMCPEntry(ctx, model.CreateManagedMCPEntryRequest{
 		Slug:               h.defaults.ReportMCPSlug,
 		Version:            h.defaults.ReportMCPVersion,
 		Name:               "Aida Report MCP",
-		Description:        "Aida personal_daily Report MCP endpoint.",
+		Description:        "Aida generic Report MCP endpoint.\n" + defaultReportAssetsMarker,
 		Transport:          "http",
 		URL:                expectedURL,
 		AuthHeader:         "Authorization",
 		AuthScheme:         "Bearer",
 		RequiresCredential: true,
+		CredentialEnv:      reportMCPCredentialSlot,
 	})
-	return err
+	if err != nil {
+		return false, model.ManagedMCPEntry{}, count, err
+	}
+	return true, *created, count + 1, nil
 }
 
-func (h *ManagedAgentHandler) ensureDefaultPersonalDailyAgent(r *http.Request, client *service.ManagedAgentClient) (string, error) {
-	resp, err := client.ListMyAgents(r.Context())
+func (h *ManagedAgentHandler) ensureUserReportSkill(ctx context.Context, client *service.ManagedAgentClient) (bool, model.ManagedSkill, int, error) {
+	resp, err := client.ListSkills(ctx, string(model.ManagedScopeMine))
 	if err != nil {
-		return "", err
+		return false, model.ManagedSkill{}, 0, err
+	}
+	count := 0
+	var first model.ManagedSkill
+	for _, skill := range resp.Skills {
+		if skill.Slug == service.ReportSkillSlug && skill.Version == service.ReportSkillVersion && !skill.Archived {
+			count++
+			if first.SkillID == "" {
+				first = skill
+			}
+		}
+	}
+	if count > 0 {
+		return false, first, count, nil
+	}
+	created, err := client.CreateSkill(ctx, service.CreateManagedSkillRequest{
+		Slug:        service.ReportSkillSlug,
+		Version:     service.ReportSkillVersion,
+		Name:        service.ReportSkillName,
+		Description: "Aida shared Report Skill.\n" + defaultReportAssetsMarker,
+		SkillMD:     service.ReportSkillMarkdown(h.reportMCPURL()),
+	})
+	if err != nil {
+		return false, model.ManagedSkill{}, count, err
+	}
+	return true, model.ManagedSkill{
+		SkillID: created.SkillID,
+		Owner:   created.Owner,
+		Slug:    created.Slug,
+		Version: created.Version,
+		Name:    service.ReportSkillName,
+		SHA256:  created.SHA256,
+	}, count + 1, nil
+}
+
+func (h *ManagedAgentHandler) ensureDefaultReportAgent(r *http.Request, client *service.ManagedAgentClient) (string, error) {
+	owner := currentManagedOwner(getUser(r))
+	_, id, _, _, err := h.ensureUserDefaultReportAgent(r.Context(), client, owner)
+	return id, err
+}
+
+func (h *ManagedAgentHandler) ensureUserDefaultReportAgent(ctx context.Context, client *service.ManagedAgentClient, owner string) (bool, string, bool, bool, error) {
+	resp, err := client.ListMyAgents(ctx)
+	if err != nil {
+		return false, "", false, false, err
 	}
 	agents := resp.Agents
 	if agents == nil {
 		agents = []model.ManagedAgent{}
 	}
-	selected, found := h.selectDefaultPersonalDailyAgent(agents)
+	selected, found := h.selectDefaultReportAgent(agents)
 	if !found {
-		req := h.defaultPersonalDailyAgentRequest()
-		req.AgentID = generateManagedAgentID(defaultPersonalDailyAgentName)
-		created, err := client.CreateMyAgent(r.Context(), req)
+		req := h.defaultReportAgentRequest(owner)
+		req.AgentID = generateManagedAgentID(defaultReportAgentName)
+		created, err := client.CreateMyAgent(ctx, req)
 		if err != nil {
-			return "", err
+			return false, "", false, false, err
 		}
-		return created.AgentID, nil
+		return true, created.AgentID, false, false, nil
 	}
-	patch, needsRepair := h.repairedPersonalDailyAgentRequest(selected)
+	oldPersonalDaily := h.isLegacyPersonalDailyReportAgent(selected)
+	patch, needsRepair := h.repairedDefaultReportAgentRequest(selected, owner)
 	if needsRepair {
-		if _, err := client.UpdateMyAgent(r.Context(), selected.AgentID, patch); err != nil {
-			return "", err
+		if _, err := client.UpdateMyAgent(ctx, selected.AgentID, patch); err != nil {
+			return false, "", false, oldPersonalDaily, err
 		}
 	}
-	return selected.AgentID, nil
+	return false, selected.AgentID, needsRepair, oldPersonalDaily && needsRepair, nil
 }
 
 func (h *ManagedAgentHandler) reportMCPURL() string {
 	return h.defaults.AIDAPublicBaseURL + "/api/v1/mcp/reports"
 }
 
-func (h *ManagedAgentHandler) defaultReportMCPBinding() model.ManagedMCPBinding {
+func currentManagedOwner(user *model.User) string {
+	if user == nil {
+		return ""
+	}
+	owner := strings.TrimSpace(user.Username)
+	if owner == "" {
+		owner = strings.TrimSpace(user.ID)
+	}
+	return owner
+}
+
+func (h *ManagedAgentHandler) defaultReportMCPBinding(owner string) model.ManagedMCPBinding {
 	return model.ManagedMCPBinding{
+		Owner:          owner,
 		Slug:           h.defaults.ReportMCPSlug,
 		Version:        h.defaults.ReportMCPVersion,
 		CredentialSlot: reportMCPCredentialSlot,
 	}
 }
 
-func (h *ManagedAgentHandler) defaultPersonalDailyAgentRequest() model.UpsertManagedAgentRequest {
+func (h *ManagedAgentHandler) defaultReportAgentRequest(owner string) model.UpsertManagedAgentRequest {
 	description := strings.Join([]string{
-		"默认个人日报 Agent。",
+		"默认报告生成 Agent。",
+		defaultReportAssetsMarker,
 		defaultReportAgentMarker,
+		defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ","),
 		defaultManagedAgentMarker,
 	}, "\n")
 	return model.UpsertManagedAgentRequest{
-		Name:                defaultPersonalDailyAgentName,
+		Name:                defaultReportAgentName,
 		Description:         description,
 		Engine:              h.defaults.Engine,
 		DefaultModelID:      h.defaults.ModelID,
-		Instructions:        defaultPersonalDailyInstructions(),
-		StartPromptTemplate: defaultPersonalDailyStartPromptTemplate(),
+		Instructions:        defaultReportAgentInstructions(),
+		StartPromptTemplate: defaultReportAgentStartPromptTemplate(),
 		CredentialSlots: []model.ManagedCredentialSlot{{
 			Name:     reportMCPCredentialSlot,
 			Required: true,
 		}},
-		MCPBindings: []model.ManagedMCPBinding{h.defaultReportMCPBinding()},
+		Skills:      []model.ManagedSkillRef{{Owner: owner, Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion}},
+		MCPBindings: []model.ManagedMCPBinding{h.defaultReportMCPBinding(owner)},
 	}
 }
 
-func defaultPersonalDailyInstructions() string {
+func defaultReportAgentInstructions() string {
 	return strings.Join([]string{
+		defaultReportAssetsMarker,
 		defaultReportAgentMarker,
+		defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ","),
 		defaultManagedAgentMarker,
-		"你是 Aida 个人日报生成 Agent，只处理 report_type=personal_daily。",
-		"运行参数会包含 run_id、report_type、period.date、mcp_url、mcp_authorization。",
-		"Aida Report MCP 已通过当前用户凭据槽配置 Authorization；调用 MCP 时不要再手工拼接管理员 token。",
-		"必须使用当前用户身份调用 Aida Report MCP，不要要求用户提供 session_ids 或来源列表。",
-		"按以下顺序调用 Aida Report MCP 原子工具：先 get_existing_report 获取已有内容，再 get_sessions + get_tasks + get_requirements 拉取当日上下文，基于上下文生成中文个人日报。",
-		"生成成功后调用 write_report_result，传入相同 run_id、report_type、period.date 和 content。",
-		"生成失败时调用 write_report_failure。不要处理 weekly、team、department。",
-		"不要编造 Aida 上下文之外的事实；如果上下文为空，应明确说明暂无记录。",
+		"你是 Aida 报告生成 Agent。根据 report_type 生成个人、小组或部门的日报/周报。",
+		"运行参数由 Aida 后端注入，包含 run_id、report_type、period、target、mcp_url。不要要求用户提供 session_ids、urls、token 或 credential。",
+		"Aida Report MCP 已通过 AIDA_REPORT_MCP_AUTH 凭据槽配置当前用户 Authorization。调用 MCP 时不要手工拼接管理员 token。",
+		"必须使用当前用户身份调用 Aida Report MCP，并尊重 MCP 返回的权限边界和缺失来源事实。",
+		"先调用 get_existing_report 获取已有内容，再根据 report_type 调用 get_sessions/get_daily_reports/get_weekly_reports/get_tasks/get_requirements/get_report_inventory 等原子工具取数。",
+		"生成成功后调用 write_report_result，传入相同 run_id、report_type、period、target 和 content。",
+		"生成失败时调用 write_report_failure。不要编造 Aida 上下文之外的事实；如果上下文为空，应明确说明暂无记录。",
 	}, "\n")
 }
 
-func defaultPersonalDailyStartPromptTemplate() string {
+func defaultReportAgentStartPromptTemplate() string {
 	return strings.Join([]string{
-		"请生成 {{ report_date }} 的个人日报。",
+		"请根据以下业务参数生成 Aida 报告。",
 		"report_type={{ report_type }}",
-		"period.date={{ report_date }}",
+		"period={{ period_json }}",
+		"target={{ target_json }}",
 		"run_id={{ run_id }}",
 		"mcp_url={{ mcp_url }}",
-		"mcp_authorization 由平台凭据槽注入到 MCP Authorization header，不会出现在 prompt 中。",
-		"必须先通过 Aida Report MCP 获取上下文，再回写生成结果。",
+		"当前用户凭据已通过 AIDA_REPORT_MCP_AUTH credential slot 注入，请通过 Aida Report MCP 获取上下文并回写生成结果。",
 	}, "\n")
 }
 
-func (h *ManagedAgentHandler) selectDefaultPersonalDailyAgent(agents []model.ManagedAgent) (model.ManagedAgent, bool) {
+func (h *ManagedAgentHandler) selectDefaultReportAgent(agents []model.ManagedAgent) (model.ManagedAgent, bool) {
 	var marked []model.ManagedAgent
+	var legacy []model.ManagedAgent
 	var namedWithMCP []model.ManagedAgent
 	for _, agent := range agents {
 		if agent.Archived {
 			continue
 		}
-		if isMarkedDefaultPersonalDailyAgent(agent) {
+		if isMarkedDefaultReportAgent(agent) {
 			marked = append(marked, agent)
 			continue
 		}
-		if strings.TrimSpace(agent.Name) == defaultPersonalDailyAgentName && h.hasReportMCPBinding(agent.MCPBindings) {
+		if h.isLegacyPersonalDailyReportAgent(agent) {
+			legacy = append(legacy, agent)
+			continue
+		}
+		if strings.TrimSpace(agent.Name) == defaultReportAgentName && h.hasReportMCPBinding(agent.MCPBindings) {
 			namedWithMCP = append(namedWithMCP, agent)
 		}
 	}
 	if len(marked) > 0 {
-		return bestPersonalDailyAgent(marked, h), true
+		return bestReportAgent(marked, h), true
+	}
+	if len(legacy) > 0 {
+		return bestReportAgent(legacy, h), true
 	}
 	if len(namedWithMCP) > 0 {
-		return bestPersonalDailyAgent(namedWithMCP, h), true
+		return bestReportAgent(namedWithMCP, h), true
 	}
 	return model.ManagedAgent{}, false
 }
 
-func bestPersonalDailyAgent(agents []model.ManagedAgent, h *ManagedAgentHandler) model.ManagedAgent {
+func bestReportAgent(agents []model.ManagedAgent, h *ManagedAgentHandler) model.ManagedAgent {
 	best := agents[0]
-	bestScore := h.personalDailyAgentScore(best)
+	bestScore := h.reportAgentScore(best)
 	for _, agent := range agents[1:] {
-		score := h.personalDailyAgentScore(agent)
+		score := h.reportAgentScore(agent)
 		if score > bestScore || score == bestScore && agent.CreatedAt > best.CreatedAt {
 			best = agent
 			bestScore = score
@@ -378,9 +540,9 @@ func bestPersonalDailyAgent(agents []model.ManagedAgent, h *ManagedAgentHandler)
 	return best
 }
 
-func (h *ManagedAgentHandler) personalDailyAgentScore(agent model.ManagedAgent) int {
+func (h *ManagedAgentHandler) reportAgentScore(agent model.ManagedAgent) int {
 	score := 0
-	if isMarkedDefaultPersonalDailyAgent(agent) {
+	if isMarkedDefaultReportAgent(agent) {
 		score += 100
 	}
 	if strings.TrimSpace(agent.DefaultModelID) != "" {
@@ -395,15 +557,29 @@ func (h *ManagedAgentHandler) personalDailyAgentScore(agent model.ManagedAgent) 
 	if strings.TrimSpace(agent.StartPromptTemplate) != "" {
 		score += 5
 	}
+	if hasSkillRef(agent.Skills, service.ReportSkillSlug, service.ReportSkillVersion) {
+		score += 5
+	}
 	return score
 }
 
-func isMarkedDefaultPersonalDailyAgent(agent model.ManagedAgent) bool {
-	text := strings.Join([]string{agent.Description, agent.Instructions}, "\n")
+func isMarkedDefaultReportAgent(agent model.ManagedAgent) bool {
+	text := strings.Join([]string{agent.Description, agent.Instructions, agent.StartPromptTemplate}, "\n")
 	return strings.Contains(text, defaultReportAgentMarker) && strings.Contains(text, defaultManagedAgentMarker)
 }
 
-func (h *ManagedAgentHandler) repairedPersonalDailyAgentRequest(agent model.ManagedAgent) (model.UpsertManagedAgentRequest, bool) {
+func (h *ManagedAgentHandler) isLegacyPersonalDailyReportAgent(agent model.ManagedAgent) bool {
+	text := strings.Join([]string{agent.Description, agent.Instructions, agent.StartPromptTemplate}, "\n")
+	if strings.Contains(text, legacyPersonalDailyMarker) && strings.Contains(text, defaultManagedAgentMarker) {
+		return true
+	}
+	if strings.TrimSpace(agent.Name) == legacyPersonalDailyAgentName && (h.hasLegacyReportMCPBinding(agent.MCPBindings) || hasSkillRef(agent.Skills, legacyReportSkillSlug, service.ReportSkillVersion)) {
+		return true
+	}
+	return false
+}
+
+func (h *ManagedAgentHandler) repairedDefaultReportAgentRequest(agent model.ManagedAgent, owner string) (model.UpsertManagedAgentRequest, bool) {
 	req := model.UpsertManagedAgentRequest{
 		AgentID:             agent.AgentID,
 		Name:                agent.Name,
@@ -418,16 +594,25 @@ func (h *ManagedAgentHandler) repairedPersonalDailyAgentRequest(agent model.Mana
 		MCPBindings:         agent.MCPBindings,
 	}
 	changed := false
-	if strings.TrimSpace(req.Name) == "" {
-		req.Name = defaultPersonalDailyAgentName
+	legacyAgent := h.isLegacyPersonalDailyReportAgent(agent)
+	if strings.TrimSpace(req.Name) == "" || legacyAgent {
+		req.Name = defaultReportAgentName
 		changed = true
 	}
 	if strings.TrimSpace(req.Description) == "" {
-		req.Description = strings.Join([]string{"默认个人日报 Agent。", defaultReportAgentMarker, defaultManagedAgentMarker}, "\n")
+		req.Description = strings.Join([]string{"默认报告生成 Agent。", defaultReportAssetsMarker, defaultReportAgentMarker, defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ","), defaultManagedAgentMarker}, "\n")
 		changed = true
 	} else {
+		if !strings.Contains(req.Description, defaultReportAssetsMarker) {
+			req.Description += "\n" + defaultReportAssetsMarker
+			changed = true
+		}
 		if !strings.Contains(req.Description, defaultReportAgentMarker) {
 			req.Description += "\n" + defaultReportAgentMarker
+			changed = true
+		}
+		if !strings.Contains(req.Description, defaultReportAgentTypesPrefix) {
+			req.Description += "\n" + defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ",")
 			changed = true
 		}
 		if !strings.Contains(req.Description, defaultManagedAgentMarker) {
@@ -436,9 +621,6 @@ func (h *ManagedAgentHandler) repairedPersonalDailyAgentRequest(agent model.Mana
 		}
 	}
 	if strings.TrimSpace(req.Engine) == "" {
-		req.Engine = h.defaults.Engine
-		changed = true
-	} else if isMarkedDefaultPersonalDailyAgent(agent) && strings.TrimSpace(agent.Instructions) == defaultPersonalDailyInstructions() && req.Engine != h.defaults.Engine {
 		req.Engine = h.defaults.Engine
 		changed = true
 	}
@@ -454,24 +636,37 @@ func (h *ManagedAgentHandler) repairedPersonalDailyAgentRequest(agent model.Mana
 		changed = true
 	}
 	if !h.hasReportMCPBinding(req.MCPBindings) {
-		req.MCPBindings = append(req.MCPBindings, h.defaultReportMCPBinding())
+		req.MCPBindings = append(req.MCPBindings, h.defaultReportMCPBinding(owner))
 		changed = true
 	} else if ensureReportMCPBindingCredentialSlot(req.MCPBindings, h.defaults.ReportMCPSlug, h.defaults.ReportMCPVersion, reportMCPCredentialSlot) {
 		changed = true
 	}
+	if !hasSkillRef(req.Skills, service.ReportSkillSlug, service.ReportSkillVersion) {
+		req.Skills = append(req.Skills, model.ManagedSkillRef{Owner: owner, Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion})
+		changed = true
+	}
 	instructions := strings.TrimSpace(req.Instructions)
-	if instructions == "" || containsDefaultMarkers(instructions) && isDefaultLikeInstructions(instructions) {
-		defaultInstructions := defaultPersonalDailyInstructions()
+	if instructions == "" || legacyAgent || containsDefaultMarkers(instructions) && isDefaultLikeInstructions(instructions) {
+		defaultInstructions := defaultReportAgentInstructions()
 		if req.Instructions != defaultInstructions {
 			req.Instructions = defaultInstructions
 			changed = true
 		}
 	}
 	if strings.TrimSpace(req.StartPromptTemplate) == "" {
-		req.StartPromptTemplate = defaultPersonalDailyStartPromptTemplate()
+		req.StartPromptTemplate = defaultReportAgentStartPromptTemplate()
 		changed = true
 	}
 	return req, changed
+}
+
+func hasSkillRef(skills []model.ManagedSkillRef, slug, version string) bool {
+	for _, skill := range skills {
+		if skill.Slug == slug && skill.Version == version {
+			return true
+		}
+	}
+	return false
 }
 
 func hasCredentialSlot(slots []model.ManagedCredentialSlot, name string) bool {
@@ -499,7 +694,7 @@ func containsDefaultMarkers(text string) bool {
 }
 
 func isDefaultLikeInstructions(text string) bool {
-	return strings.Contains(text, "personal_daily") && strings.Contains(text, "write_report_result")
+	return strings.Contains(text, "write_report_result") && (strings.Contains(text, "personal_daily") || strings.Contains(text, defaultReportAgentMarker))
 }
 
 func (h *ManagedAgentHandler) hasReportMCPBinding(bindings []model.ManagedMCPBinding) bool {
@@ -509,6 +704,230 @@ func (h *ManagedAgentHandler) hasReportMCPBinding(bindings []model.ManagedMCPBin
 		}
 	}
 	return false
+}
+
+func (h *ManagedAgentHandler) hasLegacyReportMCPBinding(bindings []model.ManagedMCPBinding) bool {
+	for _, binding := range bindings {
+		if binding.Slug == legacyReportMCPSlug && binding.Version == legacyReportMCPVersion {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *ManagedAgentHandler) InitializeUserDefaultReportAssetsForUser(ctx context.Context, user *model.User) (model.DefaultReportAssetsInitResult, error) {
+	if h.tokenIssuer == nil {
+		return model.DefaultReportAssetsInitResult{}, &service.ManagedAgentError{
+			Code:    managedAgentConfigInvalidCode,
+			Message: "user token issuer is not configured",
+		}
+	}
+	token, err := h.tokenIssuer(user)
+	if err != nil {
+		return model.DefaultReportAssetsInitResult{}, err
+	}
+	return h.InitializeUserDefaultReportAssets(ctx, user, token)
+}
+
+func (h *ManagedAgentHandler) InitializeUserDefaultReportAssets(ctx context.Context, user *model.User, token string) (model.DefaultReportAssetsInitResult, error) {
+	result := model.DefaultReportAssetsInitResult{}
+	if user != nil {
+		result.UserID = user.ID
+		result.Username = user.Username
+		result.Role = user.Role
+	}
+	if h.client == nil || !h.client.Configured() {
+		err := &service.ManagedAgentError{Code: service.ManagedAgentNotConfiguredCode, Message: "managed agent platform is not configured"}
+		result.Error = err.Message
+		return result, err
+	}
+	if strings.TrimSpace(token) == "" {
+		err := &service.ManagedAgentError{Code: managedAgentConfigInvalidCode, Message: "user token is required for default Report assets initialization"}
+		result.Error = err.Message
+		return result, err
+	}
+	if h.defaults.AIDAPublicBaseURL == "" {
+		err := &service.ManagedAgentError{Code: managedAgentConfigInvalidCode, Message: "AIDA_PUBLIC_BASE_URL is required for default Report assets initialization"}
+		result.Error = err.Message
+		return result, err
+	}
+
+	client := h.client.WithToken(token)
+	skillCreated, _, skillCount, err := h.ensureUserReportSkill(ctx, client)
+	if err != nil {
+		result.Error = err.Error()
+		return result, err
+	}
+	result.SkillCreated = skillCreated
+	result.SkillExists = !skillCreated
+	result.DefaultSkillCount = skillCount
+
+	mcpCreated, _, mcpCount, err := h.ensureUserReportMCPEntry(ctx, client)
+	if err != nil {
+		result.Error = err.Error()
+		return result, err
+	}
+	result.MCPCreated = mcpCreated
+	result.MCPExists = !mcpCreated
+	result.DefaultMCPCount = mcpCount
+
+	owner := currentManagedOwner(user)
+	agentCreated, _, agentRepaired, oldPersonalDailyRepaired, err := h.ensureUserDefaultReportAgent(ctx, client, owner)
+	if err != nil {
+		result.Error = err.Error()
+		return result, err
+	}
+	result.AgentCreated = agentCreated
+	result.AgentExists = !agentCreated
+	result.AgentRepaired = agentRepaired
+	result.OldPersonalDailyRepaired = oldPersonalDailyRepaired
+
+	agentsResp, err := client.ListMyAgents(ctx)
+	if err != nil {
+		result.Error = err.Error()
+		return result, err
+	}
+	result.DefaultAgentCount = h.defaultReportAgentCount(agentsResp.Agents)
+	result.SkippedBecauseExists = !result.SkillCreated && !result.MCPCreated && !result.AgentCreated && !result.AgentRepaired
+	return result, nil
+}
+
+func (h *ManagedAgentHandler) defaultReportAgentCount(agents []model.ManagedAgent) int {
+	count := 0
+	for _, agent := range agents {
+		if !agent.Archived && isMarkedDefaultReportAgent(agent) {
+			count++
+		}
+	}
+	return count
+}
+
+func (h *ManagedAgentHandler) BackfillDefaultReportAssets(w http.ResponseWriter, r *http.Request) {
+	if !h.ensureConfigured(w) {
+		return
+	}
+	if h.defaults.AIDAPublicBaseURL == "" {
+		writeManagedAgentConfigError(w, "AIDA_PUBLIC_BASE_URL is required for default Report assets backfill")
+		return
+	}
+	if h.tokenIssuer == nil {
+		writeManagedAgentConfigError(w, "user token issuer is not configured")
+		return
+	}
+
+	users, err := queryUsers(h.db, userSelectSQL()+`
+		WHERE u.aida_enabled = true AND u.local_enabled = true
+		ORDER BY u.id`)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	resp := model.DefaultReportAssetsBackfillResponse{
+		Total:   len(users),
+		Results: []model.DefaultReportAssetsInitResult{},
+	}
+	for _, user := range users {
+		user := user
+		result, err := h.InitializeUserDefaultReportAssetsForUser(r.Context(), &user)
+		if err != nil {
+			if result.UserID == "" {
+				result.UserID = user.ID
+				result.Username = user.Username
+				result.Role = user.Role
+			}
+			result.Error = err.Error()
+			resp.Failed++
+		} else {
+			resp.Succeeded++
+		}
+		resp.Results = append(resp.Results, result)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func findMyManagedAgent(r *http.Request, client *service.ManagedAgentClient, agentID string) (*model.ManagedAgent, error) {
+	resp, err := client.ListMyAgents(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	for _, agent := range resp.Agents {
+		if agent.AgentID == agentID && !agent.Archived {
+			return &agent, nil
+		}
+	}
+	return nil, nil
+}
+
+func reportTypesForAgent(agent model.ManagedAgent) []string {
+	text := strings.Join([]string{agent.Description, agent.Instructions, agent.StartPromptTemplate}, "\n")
+	if !strings.Contains(text, defaultReportAgentMarker) {
+		return nil
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, defaultReportAgentTypesPrefix) {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, defaultReportAgentTypesPrefix))
+		types := []string{}
+		for _, item := range strings.Split(raw, ",") {
+			item = strings.TrimSpace(item)
+			if validateReportType(item) == nil && !containsString(types, item) {
+				types = append(types, item)
+			}
+		}
+		if len(types) > 0 {
+			return types
+		}
+	}
+	return append([]string{}, supportedReportTypes...)
+}
+
+func validateResolvedReportTarget(reportType string, target reportTarget) error {
+	switch reportType {
+	case reportTypePersonalDaily, reportTypePersonalWeekly:
+		if target.UserID == "" {
+			return fmt.Errorf("target user is required")
+		}
+	case reportTypeTeamDaily, reportTypeTeamWeekly:
+		if target.TeamID == "" {
+			return fmt.Errorf("target team is required")
+		}
+	case reportTypeDepartmentDaily, reportTypeDepartmentWeekly:
+		if target.DepartmentID == "" {
+			return fmt.Errorf("target department is required")
+		}
+	}
+	return nil
+}
+
+func reportPeriodInputRef(reportType, date, weekStart, weekEnd string) map[string]string {
+	if reportType == reportTypePersonalWeekly || reportType == reportTypeTeamWeekly || reportType == reportTypeDepartmentWeekly {
+		return map[string]string{"week_start": weekStart, "week_end": weekEnd}
+	}
+	return map[string]string{"date": date}
+}
+
+func reportAgentStartPromptValues(runID, reportType, date, weekStart, weekEnd string, target reportTarget, mcpURL string) map[string]string {
+	periodJSON, _ := json.Marshal(reportPeriodInputRef(reportType, date, weekStart, weekEnd))
+	targetJSON, _ := json.Marshal(target)
+	values := map[string]string{
+		"run_id":      runID,
+		"report_type": reportType,
+		"period_json": string(periodJSON),
+		"target_json": string(targetJSON),
+		"mcp_url":     mcpURL,
+	}
+	if date != "" {
+		values["report_date"] = date
+	}
+	if weekStart != "" {
+		values["week_start"] = weekStart
+	}
+	if weekEnd != "" {
+		values["week_end"] = weekEnd
+	}
+	return values
 }
 
 func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Request) {
@@ -545,11 +964,6 @@ func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if isPersonalDailyReportRun(params) {
-		h.startPersonalDailyAgentRunWithAgent(w, r, u, agentID, req.Message, req.ModelID, params)
-		return
-	}
-
 	client := h.clientForRequest(r)
 	submitResp, err := client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
 		AgentID: agentID,
@@ -580,62 +994,140 @@ func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, run)
 }
 
-func (h *ManagedAgentHandler) startPersonalDailyAgentRunWithAgent(w http.ResponseWriter, r *http.Request, u *model.User, agentID, message, modelID string, params map[string]string) {
-	periodDate := strings.TrimSpace(params["period.date"])
-	if periodDate == "" {
-		periodDate = strings.TrimSpace(params["report_date"])
+func (h *ManagedAgentHandler) StartReportAgentRun(w http.ResponseWriter, r *http.Request) {
+	if !h.ensureConfigured(w) {
+		return
 	}
-	if periodDate == "" {
-		periodDate = strings.TrimSpace(params["date"])
+	if h.defaults.AIDAPublicBaseURL == "" {
+		writeManagedAgentConfigError(w, "AIDA_PUBLIC_BASE_URL is required for Report Agent")
+		return
 	}
-	if periodDate == "" {
-		periodDate = service.TodayInLocalDate()
+	u := getUser(r)
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
 	}
-	params["report_type"] = "personal_daily"
-	params["period.date"] = periodDate
-	params["report_date"] = periodDate
-	if strings.TrimSpace(params["mcp_url"]) == "" {
-		params["mcp_url"] = agentCallbackURL(r, "/api/v1/mcp/reports")
-	}
-	if strings.TrimSpace(params["aida_report_mcp_url"]) == "" {
-		params["aida_report_mcp_url"] = params["mcp_url"]
-	}
-	if token := bearerTokenFromRequest(r); token != "" {
-		params["mcp_authorization"] = "Bearer " + token
+	token := bearerTokenFromRequest(r)
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "current user token is required"})
+		return
 	}
 
-	inputRef := map[string]any{
-		"message":        message,
-		"params":         copyStringMapForInputRef(params),
-		"trigger_source": "manual",
-		"report_type":    "personal_daily",
-		"period": map[string]string{
-			"date": periodDate,
-		},
+	agentID := strings.TrimSpace(chi.URLParam(r, "agentId"))
+	var req model.ManagedReportAgentRunRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
 	}
-	runID, err := h.insertPendingAIRun(u.ID, "manual_agent_run", agentID, modelID, inputRef)
+	req.ReportType = strings.TrimSpace(req.ReportType)
+	if err := validateReportType(req.ReportType); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "REPORT_TYPE_NOT_SUPPORTED", "error": "unsupported report_type"})
+		return
+	}
+
+	client := h.clientForRequest(r)
+	if agentID == "default" {
+		agentsResp, err := client.ListMyAgents(r.Context())
+		if err != nil {
+			writeManagedAgentError(w, err)
+			return
+		}
+		selected, found := h.selectDefaultReportAgent(agentsResp.Agents)
+		if !found {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "default Report Agent not found"})
+			return
+		}
+		agentID = selected.AgentID
+	}
+	agent, err := findMyManagedAgent(r, client, agentID)
+	if err != nil {
+		writeManagedAgentError(w, err)
+		return
+	}
+	if agent == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	supported := reportTypesForAgent(*agent)
+	if len(supported) == 0 || !containsString(supported, req.ReportType) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "REPORT_TYPE_NOT_SUPPORTED", "error": "unsupported report_type"})
+		return
+	}
+
+	period := periodArgs{Date: req.Period.Date, WeekStart: req.Period.WeekStart, WeekEnd: req.Period.WeekEnd}
+	date, weekStart, weekEnd, err := resolveReportPeriod(req.ReportType, period)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid period"})
+		return
+	}
+	targetIn := reportTarget{
+		Type:         req.Target.Type,
+		UserID:       req.Target.UserID,
+		TeamID:       req.Target.TeamID,
+		DepartmentID: req.Target.DepartmentID,
+	}
+	target, err := resolveTarget(u, targetIn, req.ReportType, true)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden target"})
+		return
+	}
+	if err := validateResolvedReportTarget(req.ReportType, target); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	modelID := strings.TrimSpace(req.ModelID)
+	inputRef := map[string]any{
+		"trigger_source":  "manual",
+		"report_type":     req.ReportType,
+		"period":          reportPeriodInputRef(req.ReportType, date, weekStart, weekEnd),
+		"target":          target,
+		"model_id":        modelID,
+		"mcp_url":         h.reportMCPURL(),
+		"credential_slot": reportMCPCredentialSlot,
+	}
+	runID, err := h.insertPendingManagedSessionAIRun(u.ID, reportAgentRunBusinessType, agentID, modelID, inputRef)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	params["run_id"] = runID
-	inputRef["params"] = copyStringMapForInputRef(params)
 
-	client := h.clientForRequest(r)
-	submitResp, err := client.SubmitTask(r.Context(), service.SubmitManagedTaskRequest{
-		AgentID: agentID,
-		ModelID: modelID,
-		Params:  params,
+	credential, err := client.CreateCredential(r.Context(), service.CreateManagedCredentialRequest{
+		Name:  "Aida Report MCP Auth " + runID,
+		Kind:  "secret",
+		Value: token,
+		Metadata: map[string]string{
+			"aida_user_id": u.ID,
+			"ai_run_id":    runID,
+			"purpose":      "report_mcp_auth",
+		},
 	})
 	if err != nil {
 		_ = h.markAIRunSubmitFailed(r, runID, u.ID, err.Error())
 		writeManagedAgentError(w, err)
 		return
 	}
-	if modelID == "" && submitResp.ModelID != "" {
-		modelID = submitResp.ModelID
+
+	startPromptValues := reportAgentStartPromptValues(runID, req.ReportType, date, weekStart, weekEnd, target, h.reportMCPURL())
+	sessionResp, err := client.CreateSession(r.Context(), service.CreateManagedSessionRequest{
+		AgentID:           agentID,
+		ModelID:           modelID,
+		StartPromptValues: startPromptValues,
+		CredentialOverrides: map[string]string{
+			reportMCPCredentialSlot: credential.CredentialID,
+		},
+	})
+	if err != nil {
+		_ = h.markAIRunSubmitFailed(r, runID, u.ID, err.Error())
+		writeManagedAgentError(w, err)
+		return
 	}
-	if err := h.attachSubmittedAIRun(runID, u.ID, submitResp, modelID, inputRef); err != nil {
+	if modelID == "" && sessionResp.ModelID != "" {
+		modelID = sessionResp.ModelID
+	}
+	inputRef["start_prompt_values"] = copyStringMap(startPromptValues)
+	inputRef["credential_override"] = "redacted"
+	if err := h.attachSessionAIRun(runID, u.ID, sessionResp, modelID, inputRef); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -741,10 +1233,10 @@ func (h *ManagedAgentHandler) DailyReportIntegration(w http.ResponseWriter, r *h
 			},
 		},
 		"skill": map[string]string{
-			"slug":     service.DailyReportSkillSlug,
-			"version":  service.DailyReportSkillVersion,
-			"name":     service.DailyReportSkillName,
-			"skill_md": service.DailyReportSkillMarkdown(mcpURL),
+			"slug":     service.ReportSkillSlug,
+			"version":  service.ReportSkillVersion,
+			"name":     service.ReportSkillName,
+			"skill_md": service.ReportSkillMarkdown(mcpURL),
 		},
 	})
 }
@@ -1135,6 +1627,21 @@ func (h *ManagedAgentHandler) insertPendingAIRun(userID, businessType, agentID, 
 	return runID, err
 }
 
+func (h *ManagedAgentHandler) insertPendingManagedSessionAIRun(userID, businessType, agentID, modelID string, inputRef map[string]any) (string, error) {
+	inputJSON, _ := json.Marshal(inputRef)
+	var runID string
+	err := h.db.QueryRow(`
+		INSERT INTO ai_runs (
+			user_id, business_type, runtime_type, agent_id,
+			model_id, status, input_ref_json, started_at
+		)
+		VALUES ($1, $2, 'managed_session', $3, $4, 'pending', $5, now())
+		RETURNING id::text`,
+		userID, businessType, agentID, nullableString(modelID), inputJSON,
+	).Scan(&runID)
+	return runID, err
+}
+
 func (h *ManagedAgentHandler) attachSubmittedAIRun(runID, userID string, submit *service.SubmitManagedTaskResponse, modelID string, inputRef map[string]any) error {
 	inputJSON, _ := json.Marshal(inputRef)
 	_, err := h.db.Exec(`
@@ -1142,6 +1649,17 @@ func (h *ManagedAgentHandler) attachSubmittedAIRun(runID, userID string, submit 
 		SET external_task_id = $1, model_id = $2, status = $3, input_ref_json = $4
 		WHERE id = $5 AND user_id = $6`,
 		submit.TaskID, nullableString(modelID), normalizeManagedRunStatus(submit.Status), inputJSON, runID, userID,
+	)
+	return err
+}
+
+func (h *ManagedAgentHandler) attachSessionAIRun(runID, userID string, session *service.CreateManagedSessionResponse, modelID string, inputRef map[string]any) error {
+	inputJSON, _ := json.Marshal(inputRef)
+	_, err := h.db.Exec(`
+		UPDATE ai_runs
+		SET external_session_id = $1, model_id = $2, status = $3, input_ref_json = $4
+		WHERE id = $5 AND user_id = $6`,
+		session.SessionID, nullableString(modelID), normalizeManagedRunStatus(session.Status), inputJSON, runID, userID,
 	)
 	return err
 }
@@ -1156,33 +1674,12 @@ func (h *ManagedAgentHandler) markAIRunSubmitFailed(r *http.Request, runID, user
 	return err
 }
 
-func isPersonalDailyReportRun(params map[string]string) bool {
-	return strings.TrimSpace(params["report_type"]) == "personal_daily"
-}
-
 func copyStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for key, value := range in {
 		out[key] = value
 	}
 	return out
-}
-
-func copyStringMapForInputRef(in map[string]string) map[string]string {
-	out := copyStringMap(in)
-	if _, ok := out["mcp_authorization"]; ok {
-		out["mcp_authorization"] = "Bearer <redacted>"
-	}
-	return out
-}
-
-func agentCallbackURL(r *http.Request, path string) string {
-	if origin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/"); origin != "" {
-		if parsed, err := url.Parse(origin); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-			return origin + path
-		}
-	}
-	return absoluteRequestURL(r, path)
 }
 
 const aiRunSelectColumns = `SELECT id::text, user_id::text, business_type, business_id::text, runtime_type,

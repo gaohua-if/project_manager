@@ -768,6 +768,26 @@ type ManagedAgentManualRunRequest struct {
 	Params  map[string]string `json:"params,omitempty"`
 }
 
+type ManagedReportRunPeriod struct {
+	Date      string `json:"date,omitempty"`
+	WeekStart string `json:"week_start,omitempty"`
+	WeekEnd   string `json:"week_end,omitempty"`
+}
+
+type ManagedReportRunTarget struct {
+	Type         string `json:"type,omitempty"`
+	UserID       string `json:"user_id,omitempty"`
+	TeamID       string `json:"team_id,omitempty"`
+	DepartmentID string `json:"department_id,omitempty"`
+}
+
+type ManagedReportAgentRunRequest struct {
+	ReportType string                 `json:"report_type"`
+	Period     ManagedReportRunPeriod `json:"period"`
+	Target     ManagedReportRunTarget `json:"target,omitempty"`
+	ModelID    string                 `json:"model_id,omitempty"`
+}
+
 type ManagedAgentSchedule struct {
 	ID           string            `json:"id"`
 	UserID       string            `json:"user_id"`
@@ -836,6 +856,32 @@ type DailyReportAgentIntegration struct {
 		Name    string `json:"name"`
 		SkillMD string `json:"skill_md"`
 	} `json:"skill"`
+}
+
+type DefaultReportAssetsInitResult struct {
+	UserID                   string `json:"user_id"`
+	Username                 string `json:"username"`
+	Role                     string `json:"role"`
+	SkillExists              bool   `json:"skill_exists"`
+	SkillCreated             bool   `json:"skill_created"`
+	MCPExists                bool   `json:"mcp_exists"`
+	MCPCreated               bool   `json:"mcp_created"`
+	AgentExists              bool   `json:"agent_exists"`
+	AgentCreated             bool   `json:"agent_created"`
+	AgentRepaired            bool   `json:"agent_repaired"`
+	OldPersonalDailyRepaired bool   `json:"old_personal_daily_repaired"`
+	SkippedBecauseExists     bool   `json:"skipped_because_exists"`
+	DefaultSkillCount        int    `json:"default_skill_count"`
+	DefaultMCPCount          int    `json:"default_mcp_count"`
+	DefaultAgentCount        int    `json:"default_agent_count"`
+	Error                    string `json:"error,omitempty"`
+}
+
+type DefaultReportAssetsBackfillResponse struct {
+	Total     int                             `json:"total"`
+	Succeeded int                             `json:"succeeded"`
+	Failed    int                             `json:"failed"`
+	Results   []DefaultReportAssetsInitResult `json:"results"`
 }
 
 type TeamReport struct {

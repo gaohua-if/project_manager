@@ -9,6 +9,7 @@ import (
 	"github.com/aidashboard/api/config"
 	"github.com/aidashboard/api/db"
 	"github.com/aidashboard/api/handler"
+	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
 	"github.com/aidashboard/api/storage"
 	"github.com/go-chi/chi/v5"
@@ -56,6 +57,13 @@ func main() {
 		ReportMCPVersion:  cfg.ManagedAgentReportMCPVersion,
 		AIDAPublicBaseURL: cfg.AIDAPublicBaseURL,
 	})
+	managedAgentH.SetUserTokenIssuer(func(u *model.User) (string, error) {
+		return handler.MintAIHubCompatibleToken(u, cfg.AIHubSecret)
+	})
+	authH.SetDefaultReportAssetsInitializer(func(ctx context.Context, u *model.User) error {
+		_, err := managedAgentH.InitializeUserDefaultReportAssetsForUser(ctx, u)
+		return err
+	})
 	dailyReportMCPH := handler.NewReportMCPHandler(database)
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
@@ -94,6 +102,7 @@ func main() {
 			r.Put("/users/{id}", authH.AdminUpdateUser)
 			r.Put("/users/{id}/profile", authH.AdminUpdateUser)
 			r.Post("/users/batch", authH.AdminBatchAddUsers)
+			r.Post("/ai-assets/default-report-assets/backfill", managedAgentH.BackfillDefaultReportAssets)
 			r.Post("/teams", authH.AdminCreateTeam)
 			r.Put("/teams/{id}", authH.AdminUpdateTeam)
 			r.Delete("/teams/{id}", authH.AdminDeleteTeam)
@@ -193,6 +202,10 @@ func main() {
 		r.Post("/mcp/reports", dailyReportMCPH.Serve)
 
 		r.Get("/ai-assets/skills", managedAgentH.ListSkills)
+		r.Post("/ai-assets/skills", managedAgentH.CreateSkill)
+		r.Get("/ai-assets/skills/{owner}/{slug}/{version}/skill-md", managedAgentH.GetSkillMarkdown)
+		r.Post("/ai-assets/skills/{slug}/{version}/archive", managedAgentH.ArchiveSkill)
+		r.Delete("/ai-assets/skills/{slug}/{version}", managedAgentH.DeleteSkill)
 		r.Get("/ai-assets/mcp", managedAgentH.ListMCPEntries)
 		r.Post("/ai-assets/mcp", managedAgentH.CreateMCPEntry)
 		r.Get("/ai-assets/daily-report-integration", managedAgentH.DailyReportIntegration)
@@ -200,6 +213,7 @@ func main() {
 		r.Post("/ai-assets/agents", managedAgentH.CreateMyAgent)
 		r.Put("/ai-assets/agents/{agentId}", managedAgentH.UpdateMyAgent)
 		r.Post("/ai-assets/agents/{agentId}/runs", managedAgentH.StartAgentRun)
+		r.Post("/ai-assets/report-agents/{agentId}/runs", managedAgentH.StartReportAgentRun)
 		r.Get("/ai-assets/agent-runs", managedAgentH.ListAgentRuns)
 		r.Get("/ai-assets/agent-runs/{runId}", managedAgentH.GetAgentRun)
 		r.Get("/ai-assets/agent-schedules", managedAgentH.ListAgentSchedules)

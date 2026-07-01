@@ -50,8 +50,8 @@ func Load() *Config {
 		ManagedAgentToken:            getEnv("MANAGED_AGENT_TOKEN", ""),
 		ManagedAgentDefaultEngine:    getEnv("MANAGED_AGENT_DEFAULT_ENGINE", "claude-code"),
 		ManagedAgentDefaultModelID:   getEnv("MANAGED_AGENT_DEFAULT_MODEL_ID", "MiniMax-M2.5"),
-		ManagedAgentReportMCPSlug:    getEnv("MANAGED_AGENT_REPORT_MCP_SLUG", "aida-report-mcp-p0"),
-		ManagedAgentReportMCPVersion: getEnv("MANAGED_AGENT_REPORT_MCP_VERSION", "personal-daily-v1"),
+		ManagedAgentReportMCPSlug:    getEnv("MANAGED_AGENT_REPORT_MCP_SLUG", "aida-report-mcp"),
+		ManagedAgentReportMCPVersion: getEnv("MANAGED_AGENT_REPORT_MCP_VERSION", "report-v1"),
 		AIDAPublicBaseURL:            getEnv("AIDA_PUBLIC_BASE_URL", ""),
 		EnablePublicRegister:         getEnv("ENABLE_PUBLIC_REGISTER", "false") == "true",
 
