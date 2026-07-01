@@ -351,6 +351,14 @@ export interface ManagedSkill {
   created_at?: number;
 }
 
+export interface CreateManagedSkillPayload {
+  slug: string;
+  version: string;
+  name?: string;
+  description?: string;
+  skill_md: string;
+}
+
 export interface ManagedMCPEntry {
   entry_id?: string;
   owner?: string;
@@ -404,6 +412,30 @@ export interface ManagedAgentManualRunPayload {
   message: string;
   model_id?: string;
   params?: Record<string, string>;
+}
+
+export type ReportType =
+  | "personal_daily"
+  | "personal_weekly"
+  | "team_daily"
+  | "team_weekly"
+  | "department_daily"
+  | "department_weekly";
+
+export interface ManagedReportAgentRunPayload {
+  report_type: ReportType;
+  period: {
+    date?: string;
+    week_start?: string;
+    week_end?: string;
+  };
+  target?: {
+    type?: "self" | "user" | "team" | "department";
+    user_id?: string;
+    team_id?: string;
+    department_id?: string;
+  };
+  model_id?: string;
 }
 
 export interface ManagedAgentSchedule {

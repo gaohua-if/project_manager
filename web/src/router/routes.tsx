@@ -14,6 +14,7 @@ import { AgentCreatePage } from "@/features/aidashboard/ai-assets/pages/AgentCre
 import { AgentEditPage } from "@/features/aidashboard/ai-assets/pages/AgentEditPage";
 import { AgentRunPage } from "@/features/aidashboard/ai-assets/pages/AgentRunPage";
 import { MCPCreatePage } from "@/features/aidashboard/ai-assets/pages/MCPCreatePage";
+import { SkillCreatePage } from "@/features/aidashboard/ai-assets/pages/SkillCreatePage";
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
 import { OrganizationPage } from "@/features/aidashboard/organization/pages/OrganizationPage";
 import { OrganizationUserEditPage } from "@/features/aidashboard/organization/pages/OrganizationUserEditPage";
@@ -188,6 +189,13 @@ export const appRoutes: AppRoute[] = [
     menuOrder: 90,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <AIAssetsPage />
+  },
+  {
+    path: "/ai-assets/skills/new",
+    title: "新建 Skill",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <SkillCreatePage />
   },
   {
     path: "/ai-assets/agents/new",

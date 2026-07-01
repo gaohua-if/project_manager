@@ -5,6 +5,7 @@ import {
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  EyeOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   RobotOutlined,
@@ -33,12 +34,15 @@ import { useNavigate } from "react-router-dom";
 
 import {
   createManagedAgentSchedule,
+  archiveManagedSkill,
+  deleteManagedSkill,
   deleteManagedAgentSchedule,
   fetchDailyReportAgentIntegration,
   fetchManagedAgentRuns,
   fetchManagedAgentSchedules,
   fetchManagedAgents,
   fetchManagedMCPEntries,
+  fetchManagedSkillMarkdown,
   fetchManagedSkills,
   runManagedAgentScheduleNow,
   updateManagedAgentSchedule
@@ -194,6 +198,7 @@ export function AIAssetsPage() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ManagedAgentSchedule | null>(null);
   const [integrationOpen, setIntegrationOpen] = useState(false);
+  const [viewingSkill, setViewingSkill] = useState<ManagedSkill | null>(null);
   const [scheduleForm] = Form.useForm<ScheduleFormValues>();
   const scheduleType = Form.useWatch("schedule_type", scheduleForm);
 
@@ -227,6 +232,18 @@ export function AIAssetsPage() {
     queryFn: () => fetchDailyReportAgentIntegration(),
     enabled: integrationOpen,
     staleTime: 60_000
+  });
+  const skillMarkdownQuery = useQuery({
+    queryKey: [
+      "managed-skill-md",
+      viewingSkill?.owner || "_mine",
+      viewingSkill?.slug,
+      viewingSkill?.version
+    ],
+    queryFn: () =>
+      fetchManagedSkillMarkdown(viewingSkill?.owner, viewingSkill?.slug || "", viewingSkill?.version || ""),
+    enabled: Boolean(viewingSkill),
+    staleTime: 30_000
   });
 
   const skills = useMemo(() => skillsQuery.data?.skills ?? [], [skillsQuery.data]);
@@ -298,6 +315,26 @@ export function AIAssetsPage() {
     onError: (err: unknown) => message.error(errorMessage(err))
   });
 
+  const archiveSkillMutation = useMutation({
+    mutationFn: (payload: { slug: string; version: string; archived: boolean }) =>
+      archiveManagedSkill(payload.slug, payload.version, payload.archived),
+    onSuccess: (_data, variables) => {
+      message.success(variables.archived ? "Skill 已归档" : "Skill 已恢复");
+      void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const deleteSkillMutation = useMutation({
+    mutationFn: (payload: { slug: string; version: string }) =>
+      deleteManagedSkill(payload.slug, payload.version),
+    onSuccess: () => {
+      message.success("Skill 已删除");
+      void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
   const agentOptions = useMemo(
     () =>
       agents.map((agent) => ({
@@ -358,7 +395,68 @@ export function AIAssetsPage() {
       render: (archived: boolean) =>
         archived ? <Tag color="default">已归档</Tag> : <Tag color="green">可用</Tag>
     },
-    { title: "创建时间", dataIndex: "created_at", width: 180, render: unixTime }
+    { title: "创建时间", dataIndex: "created_at", width: 180, render: unixTime },
+    {
+      title: "操作",
+      key: "actions",
+      width: 260,
+      render: (_: unknown, record) => (
+        <Space>
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            disabled={platformBlocked}
+            title={platformActionTitle}
+            onClick={() => setViewingSkill(record)}
+          >
+            查看
+          </Button>
+          <Button
+            size="small"
+            disabled={platformBlocked}
+            title={platformActionTitle}
+            loading={
+              archiveSkillMutation.isPending &&
+              archiveSkillMutation.variables?.slug === record.slug &&
+              archiveSkillMutation.variables?.version === record.version
+            }
+            onClick={() =>
+              archiveSkillMutation.mutate({
+                slug: record.slug,
+                version: record.version,
+                archived: !record.archived
+              })
+            }
+          >
+            {record.archived ? "恢复" : "归档"}
+          </Button>
+          <Popconfirm
+            title="删除 Skill"
+            description="删除后无法继续绑定该版本；如果已有 Agent 引用，平台会拒绝删除。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={() =>
+              deleteSkillMutation.mutate({ slug: record.slug, version: record.version })
+            }
+          >
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={platformBlocked}
+              title={platformActionTitle}
+              loading={
+                deleteSkillMutation.isPending &&
+                deleteSkillMutation.variables?.slug === record.slug &&
+                deleteSkillMutation.variables?.version === record.version
+              }
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
   ];
 
   const mcpColumns: TableProps<ManagedMCPEntry>["columns"] = [
@@ -580,6 +678,14 @@ export function AIAssetsPage() {
         onChange={setScope}
       />
       <Button
+        icon={<ToolOutlined />}
+        disabled={platformBlocked}
+        title={platformActionTitle}
+        onClick={() => navigate("/ai-assets/skills/new")}
+      >
+        新建 Skill
+      </Button>
+      <Button
         icon={<ApiOutlined />}
         disabled={platformBlocked}
         title={platformActionTitle}
@@ -790,6 +896,30 @@ export function AIAssetsPage() {
             </Button>
           </Space>
         </Space>
+      </Modal>
+
+      <Modal
+        title={viewingSkill ? `${viewingSkill.name || viewingSkill.slug} / SKILL.md` : "SKILL.md"}
+        open={Boolean(viewingSkill)}
+        width={860}
+        footer={<Button onClick={() => setViewingSkill(null)}>关闭</Button>}
+        onCancel={() => setViewingSkill(null)}
+        destroyOnClose
+      >
+        {skillMarkdownQuery.isLoading ? (
+          <Empty description="正在加载 SKILL.md" />
+        ) : skillMarkdownQuery.error ? (
+          <Alert
+            type="error"
+            showIcon
+            message="读取 SKILL.md 失败"
+            description={errorMessage(skillMarkdownQuery.error)}
+          />
+        ) : (
+          <pre className="ai-assets-skill-md-viewer">
+            {skillMarkdownQuery.data?.content || "SKILL.md 为空"}
+          </pre>
+        )}
       </Modal>
 
       <Modal
