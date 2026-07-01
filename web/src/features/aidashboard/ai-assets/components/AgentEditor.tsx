@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, Select, Space } from "antd";
+import { Alert, Button, Card, Form, Input, Select, Space } from "antd";
 import type { FormInstance } from "antd";
 
 import type {
@@ -19,6 +19,7 @@ export interface AgentEditorValues {
   name: string;
   description?: string;
   engine: string;
+  business_type?: "generic" | "report";
   instructions?: string;
   default_model_id?: string;
   start_prompt_template?: string;
@@ -45,29 +46,21 @@ export function AgentEditor({
   onCancel,
   onSubmit
 }: AgentEditorProps) {
+  const businessType = Form.useWatch("business_type", form) || "generic";
+
   return (
     <section className="ai-assets-workspace">
-      <div className="ai-assets-workspace__header">
-        <div>
-          <h2>{agent ? "编辑 Managed Agent" : "新建 Managed Agent"}</h2>
-          <p>配置 Agent 基础信息、运行参数、Prompt 和资源绑定。保存仍使用当前 Aida Agent 接口。</p>
-        </div>
-        <Space>
-          <Button onClick={onCancel}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            {agent ? "保存" : "创建 Agent"}
-          </Button>
-        </Space>
-      </div>
       <Form
         form={form}
         layout="vertical"
         initialValues={{ engine: "codex" }}
         onFinish={(values: AgentEditorValues) => {
+          const businessType = values.business_type || "generic";
           const payload: AgentEditorSubmitPayload = {
             name: values.name,
             description: values.description,
             engine: values.engine,
+            business_type: businessType,
             instructions: values.instructions,
             default_model_id: values.default_model_id,
             start_prompt_template: values.start_prompt_template,
@@ -79,16 +72,29 @@ export function AgentEditor({
       >
         <Card title="基础信息" className="ai-assets-editor-section">
           <div className="ai-assets-editor-grid">
-            <Form.Item label="Agent ID">
-              <Input value={agent?.agent_id || "创建后由平台生成"} disabled />
-            </Form.Item>
             <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
               <Input placeholder="Agent 名称" />
             </Form.Item>
             <Form.Item name="description" label="描述" className="ai-assets-editor-grid__wide">
               <Input.TextArea rows={3} placeholder="这个 Agent 能做什么" />
             </Form.Item>
+            <Form.Item name="business_type" label="Agent 类型" initialValue="generic">
+              <Select
+                options={[
+                  { label: "普通 Agent", value: "generic" },
+                  { label: "报告 Agent", value: "report" }
+                ]}
+              />
+            </Form.Item>
           </div>
+          {businessType === "report" ? (
+            <Alert
+              type="info"
+              showIcon
+              message="报告 Agent 会固定绑定 Aida Report MCP"
+              description="运行时选择报告类型、日期/周期和目标对象；report_type、period_json、target_json、run_id、mcp_url、AIDA_REPORT_MCP_AUTH 由 Aida 后端自动注入。"
+            />
+          ) : null}
         </Card>
 
         <Card title="运行配置" className="ai-assets-editor-section">
@@ -131,6 +137,15 @@ export function AgentEditor({
             <MCPResourcePicker entries={mcpEntries} />
           </Form.Item>
         </Card>
+
+        <div className="ai-assets-workspace__actions">
+          <Space>
+            <Button onClick={onCancel}>取消</Button>
+            <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+              {agent ? "保存" : "创建 Agent"}
+            </Button>
+          </Space>
+        </div>
       </Form>
     </section>
   );

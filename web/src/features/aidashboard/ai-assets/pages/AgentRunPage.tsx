@@ -28,6 +28,15 @@ const AI_ASSETS_HOME = "/ai-assets";
 
 const REPORT_AGENT_MARKER = "AIDA_REPORT_AGENT:default";
 const REPORT_TYPES_MARKER = "AIDA_REPORT_AGENT_TYPES:";
+const REPORT_SYSTEM_PROMPT_KEYS = new Set([
+  "report_type",
+  "period_json",
+  "target_json",
+  "run_id",
+  "mcp_url",
+  "credential_slot",
+  "AIDA_REPORT_MCP_AUTH"
+]);
 
 const REPORT_TYPE_OPTIONS: Array<{ label: string; value: ReportType; roles: UserRole[] }> = [
   { label: "个人日报", value: "personal_daily", roles: ["employee", "pm", "team_leader", "director", "admin"] },
@@ -47,6 +56,12 @@ function agentMarkerText(agent: ManagedAgent) {
 }
 
 function supportedReportTypes(agent: ManagedAgent): ReportType[] {
+  if (agent.business_type === "report") {
+    return agent.report_types?.length ? agent.report_types : REPORT_TYPE_OPTIONS.map((item) => item.value);
+  }
+  if (agent.business_type === "generic") {
+    return [];
+  }
   const text = agentMarkerText(agent);
   if (!text.includes(REPORT_AGENT_MARKER)) return [];
   const markerLine = text
@@ -72,11 +87,28 @@ function reportTypeOptionsForUser(agent: ManagedAgent, role?: UserRole) {
   );
 }
 
+function isReportAgent(agent: ManagedAgent) {
+  if (agent.business_type === "report") return true;
+  if (agent.business_type === "generic") return false;
+  return supportedReportTypes(agent).length > 0;
+}
+
 function defaultWeekRange(): [Dayjs, Dayjs] {
   const today = dayjs();
   const weekday = today.day() === 0 ? 7 : today.day();
   const weekStart = today.subtract(weekday - 1, "day").startOf("day");
   return [weekStart, weekStart.add(6, "day")];
+}
+
+function cleanAgentDescription(agent: ManagedAgent, reportAgent: boolean) {
+  const description = (agent.description || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("AIDA_"))
+    .join("\n");
+  if (description) return description;
+  if (reportAgent) return "标准 Agent 的 Aida 报告业务用途，运行时由 Aida 注入报告上下文和 Report MCP。";
+  return "暂无描述";
 }
 
 function RunStatusCard({ run }: { run?: AIRun }) {
@@ -102,14 +134,29 @@ function RunStatusCard({ run }: { run?: AIRun }) {
 }
 
 function AgentContextCard({ agent, reportAgent }: { agent: ManagedAgent; reportAgent: boolean }) {
+  const description = cleanAgentDescription(agent, reportAgent);
+  const version = agent.current_version_id || agent.managed_version || "-";
   return (
     <Card className="ai-assets-run-context">
-      <h3>{agent.name}</h3>
-      <p>{agent.description || "暂无描述"}</p>
-      <div className="ai-assets-run-meta">Engine：{agent.engine || "-"}</div>
-      <div className="ai-assets-run-meta">默认模型：{agent.default_model_id || "未配置"}</div>
-      <div className="ai-assets-run-meta">版本：{agent.current_version_id || agent.managed_version || "-"}</div>
-      {reportAgent ? <Tag color="purple" style={{ marginTop: 12 }}>Report Agent</Tag> : null}
+      <div className="ai-assets-run-context__head">
+        <h3>{agent.name}</h3>
+        {reportAgent ? <Tag color="purple">Report Agent</Tag> : <Tag>普通 Agent</Tag>}
+      </div>
+      <p>{description}</p>
+      <dl className="ai-assets-run-meta-list">
+        <div>
+          <dt>Engine</dt>
+          <dd>{agent.engine || "-"}</dd>
+        </div>
+        <div>
+          <dt>默认模型</dt>
+          <dd>{agent.default_model_id || "未配置"}</dd>
+        </div>
+        <div>
+          <dt>版本</dt>
+          <dd>{version}</dd>
+        </div>
+      </dl>
     </Card>
   );
 }
@@ -166,25 +213,6 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
 
   return (
     <section className="ai-assets-workspace">
-      <div className="ai-assets-workspace__header">
-        <div>
-          <h2>运行 {agent.name}</h2>
-          <p>根据 Start Prompt 模板填写运行参数；提交仍走当前 Aida Agent 运行接口。</p>
-        </div>
-        <Space>
-          <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={runMutation.isPending}
-            disabled={!canRun || runMutation.isPending}
-            onClick={() => runMutation.mutate()}
-          >
-            运行
-          </Button>
-        </Space>
-      </div>
-
       <div className="ai-assets-run-layout">
         <AgentContextCard agent={agent} reportAgent={false} />
         <div className="ai-assets-run-form">
@@ -231,6 +259,21 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
           ) : null}
 
           <RunStatusCard run={activeRunQuery.data} />
+
+          <div className="ai-assets-workspace__actions">
+            <Space>
+              <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                loading={runMutation.isPending}
+                disabled={!canRun || runMutation.isPending}
+                onClick={() => runMutation.mutate()}
+              >
+                运行
+              </Button>
+            </Space>
+          </div>
         </div>
       </div>
     </section>
@@ -243,7 +286,17 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
   const { user } = useAuth();
   const { message } = App.useApp();
 
+  const template = agent.start_prompt_template?.trim() || "";
+  const promptVariables = useMemo(() => extractPromptVariables(template), [template]);
+  const userPromptVariables = useMemo(
+    () => promptVariables.filter((key) => !REPORT_SYSTEM_PROMPT_KEYS.has(key)),
+    [promptVariables]
+  );
   const options = useMemo(() => reportTypeOptionsForUser(agent, user?.role), [agent, user?.role]);
+  const [startPromptValues, setStartPromptValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(userPromptVariables.map((key) => [key, ""]))
+  );
+  const [runMessage, setRunMessage] = useState("");
   const [reportTypeInput, setReportTypeInput] = useState<ReportType>("personal_daily");
   const [reportDate, setReportDate] = useState<Dayjs>(dayjs());
   const [weekRange, setWeekRange] = useState<[Dayjs, Dayjs]>(() => defaultWeekRange());
@@ -264,7 +317,12 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
     ? reportTypeInput
     : options[0]?.value ?? reportTypeInput;
   const modelId = runModelId.trim() || agent.default_model_id?.trim() || "";
-  const canRun = options.length > 0 && Boolean(modelId) && !activeRunQuery.isFetching;
+  const missingPromptVariables = userPromptVariables.filter((key) => !startPromptValues[key]?.trim());
+  const promptPreview = template ? renderPromptPreview(template, startPromptValues) : "";
+  const canRun = options.length > 0
+    && Boolean(modelId)
+    && missingPromptVariables.length === 0
+    && !activeRunQuery.isFetching;
 
   const runMutation = useMutation({
     mutationFn: () => {
@@ -278,7 +336,9 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
         report_type: reportType,
         period,
         target: { type: "self" },
-        model_id: modelId
+        model_id: modelId,
+        start_prompt_values: userPromptVariables.length ? startPromptValues : undefined,
+        message: runMessage.trim() || undefined
       });
     },
     onSuccess: (run) => {
@@ -291,25 +351,6 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
 
   return (
     <section className="ai-assets-workspace">
-      <div className="ai-assets-workspace__header">
-        <div>
-          <h2>运行 {agent.name}</h2>
-          <p>选择报告类型和周期后运行。系统参数、MCP 地址和凭据由 Aida 后端自动注入。</p>
-        </div>
-        <Space>
-          <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={runMutation.isPending}
-            disabled={!canRun || runMutation.isPending}
-            onClick={() => runMutation.mutate()}
-          >
-            运行
-          </Button>
-        </Space>
-      </div>
-
       <div className="ai-assets-run-layout">
         <AgentContextCard agent={agent} reportAgent />
         <div className="ai-assets-run-form">
@@ -353,6 +394,34 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
             )}
           </Card>
 
+          {userPromptVariables.length > 0 ? (
+            <Card title="Start Prompt Values" className="ai-assets-editor-section">
+              <div className="ai-assets-prompt-values">
+                {userPromptVariables.map((key) => (
+                  <label key={key} className="ai-assets-prompt-field">
+                    <span>{key}<em>*</em></span>
+                    <Input.TextArea
+                      rows={2}
+                      value={startPromptValues[key] || ""}
+                      onChange={(event) =>
+                        setStartPromptValues((current) => ({ ...current, [key]: event.target.value }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+
+          <Card title="Initial Message" className="ai-assets-editor-section">
+            <Input.TextArea
+              rows={4}
+              value={runMessage}
+              onChange={(event) => setRunMessage(event.target.value)}
+              placeholder="可选：补充本次报告生成要求。"
+            />
+          </Card>
+
           <Card title="模型" className="ai-assets-editor-section">
             <Input
               value={runModelId}
@@ -361,7 +430,28 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
             />
           </Card>
 
+          {template ? (
+            <Card title="Prompt 预览" className="ai-assets-editor-section">
+              <pre className="ai-assets-prompt-preview">{promptPreview}</pre>
+            </Card>
+          ) : null}
+
           <RunStatusCard run={activeRunQuery.data} />
+
+          <div className="ai-assets-workspace__actions">
+            <Space>
+              <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                loading={runMutation.isPending}
+                disabled={!canRun || runMutation.isPending}
+                onClick={() => runMutation.mutate()}
+              >
+                运行
+              </Button>
+            </Space>
+          </div>
         </div>
       </div>
     </section>
@@ -426,7 +516,7 @@ export function AgentRunPage() {
     );
   }
 
-  const reportAgent = supportedReportTypes(agent).length > 0;
+  const reportAgent = isReportAgent(agent);
 
   return (
     <PagePanel

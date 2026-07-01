@@ -38,7 +38,20 @@ const (
 	reportMCPCredentialSlot       = "AIDA_REPORT_MCP_AUTH"
 	managedAgentConfigInvalidCode = "MANAGED_AGENT_CONFIG_INVALID"
 	reportAgentRunBusinessType    = "report_agent_run"
+	managedAgentBusinessGeneric   = "generic"
+	managedAgentBusinessReport    = "report"
+	reservedPromptValueCode       = "RESERVED_PROMPT_VALUE"
 )
+
+var reportSystemPromptKeys = map[string]struct{}{
+	"report_type":           {},
+	"period_json":           {},
+	"target_json":           {},
+	"run_id":                {},
+	"mcp_url":               {},
+	"credential_slot":       {},
+	reportMCPCredentialSlot: {},
+}
 
 type ManagedAgentDefaults struct {
 	Engine            string
@@ -258,7 +271,194 @@ func (h *ManagedAgentHandler) CreateMCPEntry(w http.ResponseWriter, r *http.Requ
 	h.proxyJSON(w, func() (any, error) { return client.CreateMCPEntry(r.Context(), req) })
 }
 
+func (h *ManagedAgentHandler) ArchiveMCPEntry(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	version := chi.URLParam(r, "version")
+	var req service.ArchiveManagedMCPEntryRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(slug) == "" || strings.TrimSpace(version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug and version are required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.ArchiveMCPEntry(r.Context(), slug, version, req.Archived) })
+}
+
+func (h *ManagedAgentHandler) DeleteMCPEntry(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	version := chi.URLParam(r, "version")
+	if strings.TrimSpace(slug) == "" || strings.TrimSpace(version) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug and version are required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.DeleteMCPEntry(r.Context(), slug, version) })
+}
+
+type managedAgentProfile struct {
+	AgentID      string
+	BusinessType string
+	ReportTypes  []string
+}
+
+func normalizeManagedAgentBusinessType(value string) string {
+	switch strings.TrimSpace(value) {
+	case managedAgentBusinessReport:
+		return managedAgentBusinessReport
+	default:
+		return managedAgentBusinessGeneric
+	}
+}
+
+func normalizeManagedAgentReportTypes(types []string) []string {
+	normalized := []string{}
+	for _, item := range types {
+		item = strings.TrimSpace(item)
+		if validateReportType(item) == nil && !containsString(normalized, item) {
+			normalized = append(normalized, item)
+		}
+	}
+	if len(normalized) == 0 {
+		return append([]string{}, supportedReportTypes...)
+	}
+	return normalized
+}
+
+func platformManagedAgentRequest(req model.UpsertManagedAgentRequest) model.UpsertManagedAgentRequest {
+	req.BusinessType = ""
+	req.ReportTypes = nil
+	return req
+}
+
+func (h *ManagedAgentHandler) mergeManagedAgentProfiles(ctx context.Context, userID string, agents []model.ManagedAgent) []model.ManagedAgent {
+	if h.db == nil || strings.TrimSpace(userID) == "" || len(agents) == 0 {
+		return agents
+	}
+	agentIDs := []string{}
+	for _, agent := range agents {
+		if strings.TrimSpace(agent.AgentID) != "" {
+			agentIDs = append(agentIDs, agent.AgentID)
+		}
+	}
+	profiles, err := h.loadManagedAgentProfiles(ctx, userID, agentIDs)
+	if err != nil {
+		return agents
+	}
+	for idx := range agents {
+		profile, ok := profiles[agents[idx].AgentID]
+		if !ok {
+			continue
+		}
+		agents[idx].BusinessType = profile.BusinessType
+		agents[idx].ReportTypes = append([]string{}, profile.ReportTypes...)
+	}
+	return agents
+}
+
+func (h *ManagedAgentHandler) loadManagedAgentProfiles(ctx context.Context, userID string, agentIDs []string) (map[string]managedAgentProfile, error) {
+	out := map[string]managedAgentProfile{}
+	if h.db == nil || strings.TrimSpace(userID) == "" || len(agentIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, 0, len(agentIDs))
+	args := []any{userID}
+	for _, agentID := range agentIDs {
+		if strings.TrimSpace(agentID) == "" {
+			continue
+		}
+		args = append(args, agentID)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+	}
+	if len(placeholders) == 0 {
+		return out, nil
+	}
+	rows, err := h.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT agent_id, business_type, report_types
+		FROM managed_agent_profiles
+		WHERE user_id = $1 AND agent_id IN (%s)
+	`, strings.Join(placeholders, ",")), args...)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var profile managedAgentProfile
+		var raw []byte
+		if err := rows.Scan(&profile.AgentID, &profile.BusinessType, &raw); err != nil {
+			return out, err
+		}
+		_ = json.Unmarshal(raw, &profile.ReportTypes)
+		profile.BusinessType = normalizeManagedAgentBusinessType(profile.BusinessType)
+		if profile.BusinessType == managedAgentBusinessReport {
+			profile.ReportTypes = normalizeManagedAgentReportTypes(profile.ReportTypes)
+		}
+		out[profile.AgentID] = profile
+	}
+	return out, rows.Err()
+}
+
+func (h *ManagedAgentHandler) upsertManagedAgentProfile(ctx context.Context, userID, agentID, businessType string, reportTypes []string) error {
+	if h.db == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(agentID) == "" {
+		return nil
+	}
+	businessType = normalizeManagedAgentBusinessType(businessType)
+	if businessType == managedAgentBusinessReport {
+		reportTypes = normalizeManagedAgentReportTypes(reportTypes)
+	} else {
+		reportTypes = []string{}
+	}
+	raw, err := json.Marshal(reportTypes)
+	if err != nil {
+		return err
+	}
+	_, err = h.db.ExecContext(ctx, `
+		INSERT INTO managed_agent_profiles (agent_id, user_id, business_type, report_types, updated_at)
+		VALUES ($1, $2, $3, $4::jsonb, now())
+		ON CONFLICT (agent_id, user_id) DO UPDATE SET
+			business_type = EXCLUDED.business_type,
+			report_types = EXCLUDED.report_types,
+			updated_at = now()
+	`, agentID, userID, businessType, string(raw))
+	return err
+}
+
+func (h *ManagedAgentHandler) loadManagedAgentProfile(ctx context.Context, userID, agentID string) (*managedAgentProfile, error) {
+	if h.db == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(agentID) == "" {
+		return nil, nil
+	}
+	var profile managedAgentProfile
+	var raw []byte
+	err := h.db.QueryRowContext(ctx, `
+		SELECT agent_id, business_type, report_types
+		FROM managed_agent_profiles
+		WHERE user_id = $1 AND agent_id = $2
+	`, userID, agentID).Scan(&profile.AgentID, &profile.BusinessType, &raw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal(raw, &profile.ReportTypes)
+	profile.BusinessType = normalizeManagedAgentBusinessType(profile.BusinessType)
+	if profile.BusinessType == managedAgentBusinessReport {
+		profile.ReportTypes = normalizeManagedAgentReportTypes(profile.ReportTypes)
+	}
+	return &profile, nil
+}
+
+func (h *ManagedAgentHandler) ensureReportAgentBinding(req *model.UpsertManagedAgentRequest, owner string) {
+	if h.hasReportMCPBinding(req.MCPBindings) {
+		return
+	}
+	req.MCPBindings = append(req.MCPBindings, h.defaultReportMCPBinding(owner))
+}
+
 func (h *ManagedAgentHandler) ListMyAgents(w http.ResponseWriter, r *http.Request) {
+	u := getUser(r)
 	client := h.clientForRequest(r)
 	h.proxyJSON(w, func() (any, error) {
 		resp, err := client.ListMyAgents(r.Context())
@@ -267,6 +467,9 @@ func (h *ManagedAgentHandler) ListMyAgents(w http.ResponseWriter, r *http.Reques
 		}
 		if resp.Agents == nil {
 			resp.Agents = []model.ManagedAgent{}
+		}
+		if u != nil {
+			resp.Agents = h.mergeManagedAgentProfiles(r.Context(), u.ID, resp.Agents)
 		}
 		return resp, nil
 	})
@@ -285,8 +488,30 @@ func (h *ManagedAgentHandler) CreateMyAgent(w http.ResponseWriter, r *http.Reque
 	if strings.TrimSpace(req.AgentID) == "" {
 		req.AgentID = generateManagedAgentID(req.Name)
 	}
+	u := getUser(r)
 	client := h.clientForRequest(r)
-	h.proxyJSON(w, func() (any, error) { return client.CreateMyAgent(r.Context(), req) })
+	h.proxyJSON(w, func() (any, error) {
+		businessType := normalizeManagedAgentBusinessType(req.BusinessType)
+		if businessType == managedAgentBusinessReport {
+			if h.defaults.AIDAPublicBaseURL == "" {
+				return nil, &service.ManagedAgentError{Code: managedAgentConfigInvalidCode, Message: "AIDA_PUBLIC_BASE_URL is required for Report Agent"}
+			}
+			if _, _, _, err := h.ensureUserReportMCPEntry(r.Context(), client); err != nil {
+				return nil, err
+			}
+			h.ensureReportAgentBinding(&req, currentManagedOwner(u))
+		}
+		resp, err := client.CreateMyAgent(r.Context(), platformManagedAgentRequest(req))
+		if err != nil {
+			return nil, err
+		}
+		if u != nil {
+			if err := h.upsertManagedAgentProfile(r.Context(), u.ID, req.AgentID, businessType, req.ReportTypes); err != nil {
+				return nil, err
+			}
+		}
+		return resp, nil
+	})
 }
 
 func (h *ManagedAgentHandler) UpdateMyAgent(w http.ResponseWriter, r *http.Request) {
@@ -296,8 +521,45 @@ func (h *ManagedAgentHandler) UpdateMyAgent(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
 		return
 	}
+	u := getUser(r)
 	client := h.clientForRequest(r)
-	h.proxyJSON(w, func() (any, error) { return client.UpdateMyAgent(r.Context(), agentID, req) })
+	h.proxyJSON(w, func() (any, error) {
+		businessType := normalizeManagedAgentBusinessType(req.BusinessType)
+		if businessType == managedAgentBusinessReport {
+			if h.defaults.AIDAPublicBaseURL == "" {
+				return nil, &service.ManagedAgentError{Code: managedAgentConfigInvalidCode, Message: "AIDA_PUBLIC_BASE_URL is required for Report Agent"}
+			}
+			if _, _, _, err := h.ensureUserReportMCPEntry(r.Context(), client); err != nil {
+				return nil, err
+			}
+			h.ensureReportAgentBinding(&req, currentManagedOwner(u))
+		}
+		resp, err := client.UpdateMyAgent(r.Context(), agentID, platformManagedAgentRequest(req))
+		if err != nil {
+			return nil, err
+		}
+		if u != nil {
+			if err := h.upsertManagedAgentProfile(r.Context(), u.ID, agentID, businessType, req.ReportTypes); err != nil {
+				return nil, err
+			}
+		}
+		return resp, nil
+	})
+}
+
+func (h *ManagedAgentHandler) ArchiveMyAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	var req service.ArchiveManagedAgentRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(agentID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id is required"})
+		return
+	}
+	client := h.clientForRequest(r)
+	h.proxyJSON(w, func() (any, error) { return client.ArchiveMyAgent(r.Context(), agentID, req.Archived) })
 }
 
 func (h *ManagedAgentHandler) ensureReportMCPEntry(r *http.Request, client *service.ManagedAgentClient) error {
@@ -385,12 +647,17 @@ func (h *ManagedAgentHandler) ensureUserReportSkill(ctx context.Context, client 
 }
 
 func (h *ManagedAgentHandler) ensureDefaultReportAgent(r *http.Request, client *service.ManagedAgentClient) (string, error) {
-	owner := currentManagedOwner(getUser(r))
-	_, id, _, _, err := h.ensureUserDefaultReportAgent(r.Context(), client, owner)
+	user := getUser(r)
+	owner := currentManagedOwner(user)
+	userID := ""
+	if user != nil {
+		userID = user.ID
+	}
+	_, id, _, _, err := h.ensureUserDefaultReportAgent(r.Context(), client, owner, userID)
 	return id, err
 }
 
-func (h *ManagedAgentHandler) ensureUserDefaultReportAgent(ctx context.Context, client *service.ManagedAgentClient, owner string) (bool, string, bool, bool, error) {
+func (h *ManagedAgentHandler) ensureUserDefaultReportAgent(ctx context.Context, client *service.ManagedAgentClient, owner, userID string) (bool, string, bool, bool, error) {
 	resp, err := client.ListMyAgents(ctx)
 	if err != nil {
 		return false, "", false, false, err
@@ -407,6 +674,9 @@ func (h *ManagedAgentHandler) ensureUserDefaultReportAgent(ctx context.Context, 
 		if err != nil {
 			return false, "", false, false, err
 		}
+		if err := h.upsertManagedAgentProfile(ctx, userID, created.AgentID, managedAgentBusinessReport, supportedReportTypes); err != nil {
+			return false, "", false, false, err
+		}
 		return true, created.AgentID, false, false, nil
 	}
 	oldPersonalDaily := h.isLegacyPersonalDailyReportAgent(selected)
@@ -415,6 +685,9 @@ func (h *ManagedAgentHandler) ensureUserDefaultReportAgent(ctx context.Context, 
 		if _, err := client.UpdateMyAgent(ctx, selected.AgentID, patch); err != nil {
 			return false, "", false, oldPersonalDaily, err
 		}
+	}
+	if err := h.upsertManagedAgentProfile(ctx, userID, selected.AgentID, managedAgentBusinessReport, supportedReportTypes); err != nil {
+		return false, "", needsRepair, oldPersonalDaily && needsRepair, err
 	}
 	return false, selected.AgentID, needsRepair, oldPersonalDaily && needsRepair, nil
 }
@@ -772,7 +1045,7 @@ func (h *ManagedAgentHandler) InitializeUserDefaultReportAssets(ctx context.Cont
 	result.DefaultMCPCount = mcpCount
 
 	owner := currentManagedOwner(user)
-	agentCreated, _, agentRepaired, oldPersonalDailyRepaired, err := h.ensureUserDefaultReportAgent(ctx, client, owner)
+	agentCreated, _, agentRepaired, oldPersonalDailyRepaired, err := h.ensureUserDefaultReportAgent(ctx, client, owner, user.ID)
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
@@ -930,6 +1203,33 @@ func reportAgentStartPromptValues(runID, reportType, date, weekStart, weekEnd st
 	return values
 }
 
+func isReportSystemPromptKey(key string) bool {
+	_, ok := reportSystemPromptKeys[strings.TrimSpace(key)]
+	return ok
+}
+
+func mergeReportStartPromptValues(systemValues map[string]string, userValues map[string]string, message string) (map[string]string, string, bool) {
+	merged := copyStringMap(systemValues)
+	for key, value := range userValues {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if isReportSystemPromptKey(key) {
+			return nil, key, false
+		}
+		merged[key] = strings.TrimSpace(value)
+	}
+	message = strings.TrimSpace(message)
+	if message != "" {
+		if isReportSystemPromptKey("message") {
+			return nil, "message", false
+		}
+		merged["message"] = message
+	}
+	return merged, "", true
+}
+
 func (h *ManagedAgentHandler) StartAgentRun(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureConfigured(w) {
 		return
@@ -1024,6 +1324,12 @@ func (h *ManagedAgentHandler) StartReportAgentRun(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "REPORT_TYPE_NOT_SUPPORTED", "error": "unsupported report_type"})
 		return
 	}
+	for key := range req.StartPromptValues {
+		if isReportSystemPromptKey(key) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"code": reservedPromptValueCode, "error": strings.TrimSpace(key) + " is managed by Aida"})
+			return
+		}
+	}
 
 	client := h.clientForRequest(r)
 	if agentID == "default" {
@@ -1048,9 +1354,27 @@ func (h *ManagedAgentHandler) StartReportAgentRun(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	supported := reportTypesForAgent(*agent)
+	profile, err := h.loadManagedAgentProfile(r.Context(), u.ID, agentID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	var supported []string
+	if profile != nil {
+		if profile.BusinessType != managedAgentBusinessReport {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "NOT_REPORT_AGENT", "error": "agent is not a Report Agent"})
+			return
+		}
+		supported = profile.ReportTypes
+	} else {
+		supported = reportTypesForAgent(*agent)
+	}
 	if len(supported) == 0 || !containsString(supported, req.ReportType) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "REPORT_TYPE_NOT_SUPPORTED", "error": "unsupported report_type"})
+		return
+	}
+	if !h.hasReportMCPBinding(agent.MCPBindings) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "REPORT_MCP_REQUIRED", "error": "Report Agent must bind Aida Report MCP"})
 		return
 	}
 
@@ -1108,7 +1432,13 @@ func (h *ManagedAgentHandler) StartReportAgentRun(w http.ResponseWriter, r *http
 		return
 	}
 
-	startPromptValues := reportAgentStartPromptValues(runID, req.ReportType, date, weekStart, weekEnd, target, h.reportMCPURL())
+	systemPromptValues := reportAgentStartPromptValues(runID, req.ReportType, date, weekStart, weekEnd, target, h.reportMCPURL())
+	startPromptValues, reservedKey, ok := mergeReportStartPromptValues(systemPromptValues, req.StartPromptValues, req.Message)
+	if !ok {
+		_ = h.markAIRunSubmitFailed(r, runID, u.ID, reservedKey+" is managed by Aida")
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": reservedPromptValueCode, "error": reservedKey + " is managed by Aida"})
+		return
+	}
 	sessionResp, err := client.CreateSession(r.Context(), service.CreateManagedSessionRequest{
 		AgentID:           agentID,
 		ModelID:           modelID,
@@ -1126,6 +1456,9 @@ func (h *ManagedAgentHandler) StartReportAgentRun(w http.ResponseWriter, r *http
 		modelID = sessionResp.ModelID
 	}
 	inputRef["start_prompt_values"] = copyStringMap(startPromptValues)
+	if strings.TrimSpace(req.Message) != "" {
+		inputRef["message"] = strings.TrimSpace(req.Message)
+	}
 	inputRef["credential_override"] = "redacted"
 	if err := h.attachSessionAIRun(runID, u.ID, sessionResp, modelID, inputRef); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1735,7 +2068,49 @@ func scanAIRun(row rowScanner) (*model.AIRun, error) {
 }
 
 func (h *ManagedAgentHandler) loadAIRun(runID, userID string) (*model.AIRun, error) {
-	return scanAIRun(h.db.QueryRow(aiRunSelectColumns+" WHERE id = $1 AND user_id = $2", runID, userID))
+	run, err := scanAIRun(h.db.QueryRow(aiRunSelectColumns+" WHERE id = $1 AND user_id = $2", runID, userID))
+	if err != nil {
+		return nil, err
+	}
+	h.hydrateReportAIRunResult(run)
+	return run, nil
+}
+
+func (h *ManagedAgentHandler) hydrateReportAIRunResult(run *model.AIRun) {
+	if h == nil || h.db == nil || run == nil || run.BusinessType != reportAgentRunBusinessType || run.Result != "" || run.BusinessID == nil || strings.TrimSpace(*run.BusinessID) == "" {
+		return
+	}
+	reportType, _ := run.OutputRef["report_type"].(string)
+	query := ""
+	switch reportType {
+	case reportTypePersonalDaily:
+		query = "SELECT content FROM daily_reports WHERE id::text = $1"
+	case reportTypePersonalWeekly:
+		query = "SELECT content FROM personal_weekly_reports WHERE id::text = $1"
+	case reportTypeTeamDaily:
+		query = "SELECT content FROM team_reports WHERE id::text = $1"
+	case reportTypeTeamWeekly:
+		query = "SELECT content FROM team_weekly_reports WHERE id::text = $1"
+	case reportTypeDepartmentDaily:
+		query = "SELECT content FROM department_reports WHERE id::text = $1"
+	case reportTypeDepartmentWeekly:
+		query = "SELECT content FROM department_weekly_reports WHERE id::text = $1"
+	default:
+		return
+	}
+	var content string
+	if err := h.db.QueryRow(query, *run.BusinessID).Scan(&content); err != nil {
+		return
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return
+	}
+	run.Result = content
+	if run.OutputRef == nil {
+		run.OutputRef = map[string]any{}
+	}
+	run.OutputRef["result"] = content
 }
 
 const managedAgentScheduleSelectColumns = `SELECT id::text, user_id::text, name, agent_id, model_id, message,

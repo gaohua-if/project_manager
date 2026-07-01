@@ -68,6 +68,7 @@ export function AgentEditPage() {
       name: agent.name,
       description: agent.description,
       engine: agent.engine,
+      business_type: agent.business_type || "generic",
       instructions: agent.instructions,
       default_model_id: agent.default_model_id,
       start_prompt_template: agent.start_prompt_template,
@@ -122,7 +123,6 @@ export function AgentEditPage() {
   return (
     <PagePanel
       title="编辑 Managed Agent"
-      description={`配置 Agent ${agent.name} 的基础信息、运行参数、Prompt 和资源绑定`}
       backTo={AI_ASSETS_HOME}
       onBack={() => navigate(AI_ASSETS_HOME)}
       onNavigate={(path) => navigate(path)}

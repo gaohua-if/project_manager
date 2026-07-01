@@ -717,6 +717,8 @@ type ManagedAgent struct {
 	Skills              []ManagedSkillRef       `json:"skills,omitempty"`
 	MCPBindings         []ManagedMCPBinding     `json:"mcp_bindings,omitempty"`
 	CreatedAt           int64                   `json:"created_at,omitempty"`
+	BusinessType        string                  `json:"business_type,omitempty"`
+	ReportTypes         []string                `json:"report_types,omitempty"`
 }
 
 type ListManagedSkillsResponse struct {
@@ -743,6 +745,8 @@ type UpsertManagedAgentRequest struct {
 	DefaultBindings     map[string]string       `json:"default_bindings,omitempty"`
 	Skills              []ManagedSkillRef       `json:"skills,omitempty"`
 	MCPBindings         []ManagedMCPBinding     `json:"mcp_bindings,omitempty"`
+	BusinessType        string                  `json:"business_type,omitempty"`
+	ReportTypes         []string                `json:"report_types,omitempty"`
 }
 
 type UpsertManagedAgentResponse struct {
@@ -782,10 +786,12 @@ type ManagedReportRunTarget struct {
 }
 
 type ManagedReportAgentRunRequest struct {
-	ReportType string                 `json:"report_type"`
-	Period     ManagedReportRunPeriod `json:"period"`
-	Target     ManagedReportRunTarget `json:"target,omitempty"`
-	ModelID    string                 `json:"model_id,omitempty"`
+	ReportType        string                 `json:"report_type"`
+	Period            ManagedReportRunPeriod `json:"period"`
+	Target            ManagedReportRunTarget `json:"target,omitempty"`
+	ModelID           string                 `json:"model_id,omitempty"`
+	StartPromptValues map[string]string      `json:"start_prompt_values,omitempty"`
+	Message           string                 `json:"message,omitempty"`
 }
 
 type ManagedAgentSchedule struct {

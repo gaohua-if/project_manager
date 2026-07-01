@@ -42,13 +42,12 @@ export function AgentCreatePage() {
   });
 
   useEffect(() => {
-    form.setFieldsValue({ engine: "codex", skills: [], mcp_bindings: [] });
+    form.setFieldsValue({ engine: "codex", business_type: "generic", skills: [], mcp_bindings: [] });
   }, [form]);
 
   return (
     <PagePanel
       title="新建 Managed Agent"
-      description="配置 Agent 基础信息、运行参数、Prompt 和资源绑定"
       backTo={AI_ASSETS_HOME}
       onBack={() => navigate(AI_ASSETS_HOME)}
       onNavigate={(path) => navigate(path)}
@@ -70,4 +69,3 @@ export function AgentCreatePage() {
     </PagePanel>
   );
 }
-

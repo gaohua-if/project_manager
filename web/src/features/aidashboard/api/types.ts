@@ -394,6 +394,8 @@ export interface ManagedAgent {
   is_public: boolean;
   skills?: ManagedSkillRef[];
   mcp_bindings?: ManagedMCPBinding[];
+  business_type?: "generic" | "report";
+  report_types?: ReportType[];
 }
 
 export interface UpsertManagedAgentPayload {
@@ -406,6 +408,8 @@ export interface UpsertManagedAgentPayload {
   start_prompt_template?: string;
   skills?: ManagedSkillRef[];
   mcp_bindings?: ManagedMCPBinding[];
+  business_type?: "generic" | "report";
+  report_types?: ReportType[];
 }
 
 export interface ManagedAgentManualRunPayload {
@@ -436,6 +440,8 @@ export interface ManagedReportAgentRunPayload {
     department_id?: string;
   };
   model_id?: string;
+  start_prompt_values?: Record<string, string>;
+  message?: string;
 }
 
 export interface ManagedAgentSchedule {

@@ -153,6 +153,26 @@ func (c *ManagedAgentClient) CreateMCPEntry(ctx context.Context, req model.Creat
 	return &out, nil
 }
 
+type ArchiveManagedMCPEntryRequest struct {
+	Archived bool `json:"archived"`
+}
+
+func (c *ManagedAgentClient) ArchiveMCPEntry(ctx context.Context, slug, version string, archived bool) (map[string]any, error) {
+	var out map[string]any
+	if err := c.do(ctx, http.MethodPost, "/api/mcp/"+urlPathEscape(slug)+"/"+urlPathEscape(version)+"/archive", ArchiveManagedMCPEntryRequest{Archived: archived}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ManagedAgentClient) DeleteMCPEntry(ctx context.Context, slug, version string) (map[string]any, error) {
+	var out map[string]any
+	if err := c.do(ctx, http.MethodDelete, "/api/mcp/"+urlPathEscape(slug)+"/"+urlPathEscape(version), nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *ManagedAgentClient) ListMyAgents(ctx context.Context) (*model.ListManagedAgentsResponse, error) {
 	var out model.ListManagedAgentsResponse
 	if err := c.do(ctx, http.MethodGet, "/api/my/agents", nil, &out); err != nil {
@@ -171,10 +191,22 @@ func (c *ManagedAgentClient) CreateMyAgent(ctx context.Context, req model.Upsert
 
 func (c *ManagedAgentClient) UpdateMyAgent(ctx context.Context, agentID string, req model.UpsertManagedAgentRequest) (*model.UpsertManagedAgentResponse, error) {
 	var out model.UpsertManagedAgentResponse
-	if err := c.do(ctx, http.MethodPut, "/api/my/agents/"+agentID, req, &out); err != nil {
+	if err := c.do(ctx, http.MethodPut, "/api/my/agents/"+urlPathEscape(agentID), req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+type ArchiveManagedAgentRequest struct {
+	Archived bool `json:"archived"`
+}
+
+func (c *ManagedAgentClient) ArchiveMyAgent(ctx context.Context, agentID string, archived bool) (map[string]any, error) {
+	var out map[string]any
+	if err := c.do(ctx, http.MethodPost, "/api/my/agents/"+urlPathEscape(agentID)+"/archive", ArchiveManagedAgentRequest{Archived: archived}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 type CreateManagedCredentialRequest struct {

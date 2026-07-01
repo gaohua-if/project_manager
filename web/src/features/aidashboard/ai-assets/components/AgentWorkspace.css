@@ -29,6 +29,12 @@
   line-height: 1.55;
 }
 
+.ai-assets-workspace__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 0 4px;
+}
+
 .ai-assets-editor-section {
   border: 1px solid #e6ebf3;
   border-radius: 10px;
@@ -72,26 +78,71 @@
   border-radius: 10px;
 }
 
+.ai-assets-run-context .ant-card-body {
+  padding: 18px 18px 20px;
+}
+
+.ai-assets-run-context__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ai-assets-run-context__head .ant-tag {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline-end: 0;
+}
+
 .ai-assets-run-context h3 {
-  margin: 0 0 8px;
+  margin: 0;
   color: #172033;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .ai-assets-run-context p {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   color: #64748b;
   font-size: 13px;
   line-height: 1.55;
+  white-space: pre-line;
+  word-break: break-word;
 }
 
-.ai-assets-run-meta {
-  margin-top: 8px;
-  color: #334155;
+.ai-assets-run-meta-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid #edf2f7;
+}
+
+.ai-assets-run-meta-list div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ai-assets-run-meta-list dt,
+.ai-assets-run-meta-list dd {
+  margin: 0;
   font-size: 12px;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  line-height: 1.45;
+}
+
+.ai-assets-run-meta-list dt {
+  color: #7b8798;
+}
+
+.ai-assets-run-meta-list dd {
+  color: #1f2a3d;
+  font-weight: 600;
+  word-break: break-word;
 }
 
 .ai-assets-run-form {

@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -701,6 +702,9 @@ func TestStartReportAgentRunUsesSessionCredentialOverrides(t *testing.T) {
 		require: []string{"personal_daily", "2026-06-30", "https://aida.example.com/api/v1/mcp/reports", reportMCPCredentialSlot},
 		forbid:  []string{"user-token", "cred-1", "mcp_" + "authorization"},
 	}
+	mock.ExpectQuery("SELECT agent_id, business_type, report_types").
+		WithArgs("user-1", "agent-report").
+		WillReturnError(sql.ErrNoRows)
 	mock.ExpectQuery("INSERT INTO ai_runs").
 		WithArgs("user-1", reportAgentRunBusinessType, "agent-report", "MiniMax-M2.5", safeInputRef).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-report"))

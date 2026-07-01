@@ -557,6 +557,10 @@ export const fetchManagedMCPEntries = (scope: ManagedScope = "mine") =>
   unwrap(api.get<{ entries: ManagedMCPEntry[] }>("/ai-assets/mcp", { scope }, { skipErrorHandler: true }));
 export const createManagedMCPEntry = (payload: ManagedMCPEntry) =>
   unwrap(api.post<ManagedMCPEntry>("/ai-assets/mcp", payload));
+export const archiveManagedMCPEntry = (slug: string, version: string, archived: boolean) =>
+  unwrap(api.post<Record<string, unknown>>(`/ai-assets/mcp/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/archive`, { archived }));
+export const deleteManagedMCPEntry = (slug: string, version: string) =>
+  unwrap(api.delete<Record<string, unknown>>(`/ai-assets/mcp/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`));
 export const fetchDailyReportAgentIntegration = () =>
   unwrap(api.get<DailyReportAgentIntegration>("/ai-assets/daily-report-integration"));
 export const fetchManagedAgents = () =>
@@ -567,6 +571,8 @@ export const updateManagedAgent = (agentId: string, payload: UpsertManagedAgentP
   unwrap(
     api.put<{ agent_id: string; managed_version?: number }>(`/ai-assets/agents/${agentId}`, payload)
   );
+export const archiveManagedAgent = (agentId: string, archived: boolean) =>
+  unwrap(api.post<Record<string, unknown>>(`/ai-assets/agents/${encodeURIComponent(agentId)}/archive`, { archived }));
 export const startManagedAgentRun = (agentId: string, payload: ManagedAgentManualRunPayload) =>
   unwrap(api.post<AIRun>(`/ai-assets/agents/${agentId}/runs`, payload));
 export const startReportAgentRun = (agentId: string, payload: ManagedReportAgentRunPayload) =>

@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const hmrHost = process.env.VITE_DEV_HMR_HOST ?? "192.168.28.25";
+const apiTarget = process.env.VITE_DEV_API_TARGET ?? "http://127.0.0.1:18090";
 
 export default defineConfig({
   plugins: [react()],
@@ -27,7 +28,7 @@ export default defineConfig({
     },
     proxy: {
       "/api/v1": {
-        target: "http://127.0.0.1:18090",
+        target: apiTarget,
         changeOrigin: true
       }
     }

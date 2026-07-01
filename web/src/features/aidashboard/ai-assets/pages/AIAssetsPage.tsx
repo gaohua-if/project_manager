@@ -23,7 +23,6 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tabs,
   Tag
 } from "antd";
@@ -32,9 +31,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
+
 import {
+  archiveManagedAgent,
+  archiveManagedMCPEntry,
   createManagedAgentSchedule,
   archiveManagedSkill,
+  deleteManagedMCPEntry,
   deleteManagedSkill,
   deleteManagedAgentSchedule,
   fetchDailyReportAgentIntegration,
@@ -68,7 +72,7 @@ import { errorMessage, refKey, SCOPE_OPTIONS } from "../utils/agentAssets";
 
 import "./AIAssetsPage.css";
 
-type AssetTab = "skills" | "mcp" | "agents" | "schedules";
+type AssetTab = "agents" | "skills" | "mcp" | "schedules";
 
 interface ScheduleFormValues {
   name: string;
@@ -193,7 +197,7 @@ export function AIAssetsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [tab, setTab] = useState<AssetTab>("skills");
+  const [tab, setTab] = useState<AssetTab>("agents");
   const [scope, setScope] = useState<ManagedScope>("mine");
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ManagedAgentSchedule | null>(null);
@@ -335,6 +339,37 @@ export function AIAssetsPage() {
     onError: (err: unknown) => message.error(errorMessage(err))
   });
 
+  const archiveMCPMutation = useMutation({
+    mutationFn: (payload: { slug: string; version: string; archived: boolean }) =>
+      archiveManagedMCPEntry(payload.slug, payload.version, payload.archived),
+    onSuccess: (_data, variables) => {
+      message.success(variables.archived ? "MCP 已归档" : "MCP 已恢复");
+      void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const deleteMCPMutation = useMutation({
+    mutationFn: (payload: { slug: string; version: string }) =>
+      deleteManagedMCPEntry(payload.slug, payload.version),
+    onSuccess: () => {
+      message.success("MCP 已删除");
+      void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const archiveAgentMutation = useMutation({
+    mutationFn: (payload: { agentId: string; archived: boolean }) =>
+      archiveManagedAgent(payload.agentId, payload.archived),
+    onSuccess: (_data, variables) => {
+      message.success(variables.archived ? "Agent 已归档" : "Agent 已恢复");
+      void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
+      void queryClient.invalidateQueries({ queryKey: ["managed-agent-runs"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
   const agentOptions = useMemo(
     () =>
       agents.map((agent) => ({
@@ -399,11 +434,12 @@ export function AIAssetsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 260,
+      width: 220,
       render: (_: unknown, record) => (
-        <Space>
+        <Space size={4} className="resource-actions">
           <Button
-            size="small"
+            type="link"
+            className="resource-action"
             icon={<EyeOutlined />}
             disabled={platformBlocked}
             title={platformActionTitle}
@@ -412,7 +448,8 @@ export function AIAssetsPage() {
             查看
           </Button>
           <Button
-            size="small"
+            type="link"
+            className="resource-action"
             disabled={platformBlocked}
             title={platformActionTitle}
             loading={
@@ -440,7 +477,8 @@ export function AIAssetsPage() {
             }
           >
             <Button
-              size="small"
+              type="link"
+              className="resource-action resource-action--danger"
               danger
               icon={<DeleteOutlined />}
               disabled={platformBlocked}
@@ -478,6 +516,67 @@ export function AIAssetsPage() {
       dataIndex: "requires_credential",
       width: 100,
       render: (required: boolean) => (required ? <Tag color="orange">需要</Tag> : <Tag>无</Tag>)
+    },
+    {
+      title: "状态",
+      dataIndex: "archived",
+      width: 100,
+      render: (archived: boolean) =>
+        archived ? <Tag color="default">已归档</Tag> : <Tag color="blue">可用</Tag>
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 190,
+      render: (_: unknown, record) => (
+        <Space size={4} className="resource-actions">
+          <Button
+            type="link"
+            className="resource-action"
+            disabled={platformBlocked}
+            title={platformActionTitle}
+            loading={
+              archiveMCPMutation.isPending &&
+              archiveMCPMutation.variables?.slug === record.slug &&
+              archiveMCPMutation.variables?.version === record.version
+            }
+            onClick={() =>
+              archiveMCPMutation.mutate({
+                slug: record.slug,
+                version: record.version,
+                archived: !record.archived
+              })
+            }
+          >
+            {record.archived ? "恢复" : "归档"}
+          </Button>
+          <Popconfirm
+            title="删除 MCP"
+            description="删除后无法继续绑定该版本；如果已有 Agent 引用，平台会拒绝删除。"
+            okText="删除"
+            cancelText="取消"
+            onConfirm={() =>
+              deleteMCPMutation.mutate({ slug: record.slug, version: record.version })
+            }
+          >
+            <Button
+              type="link"
+              className="resource-action resource-action--danger"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={platformBlocked}
+              title={platformActionTitle}
+              loading={
+                deleteMCPMutation.isPending &&
+                deleteMCPMutation.variables?.slug === record.slug &&
+                deleteMCPMutation.variables?.version === record.version
+              }
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
     }
   ];
 
@@ -521,24 +620,44 @@ export function AIAssetsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 180,
+      width: 210,
       render: (_: unknown, record) => (
-        <Space>
+        <Space size={4} className="resource-actions">
           <Button
-            size="small"
+            type="link"
+            className="resource-action"
             icon={<PlayCircleOutlined />}
-            disabled={platformBlocked}
-            title={platformActionTitle}
+            disabled={platformBlocked || record.archived}
+            title={record.archived ? "已归档 Agent 不能发起新运行" : platformActionTitle}
             onClick={() => navigate(`${AGENTS_PATH}/${record.agent_id}/run`)}
           >
             运行
           </Button>
           <Button
-            size="small"
+            type="link"
+            className="resource-action"
             icon={<EditOutlined />}
             onClick={() => navigate(`${AGENTS_PATH}/${record.agent_id}/edit`)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            className="resource-action"
+            disabled={platformBlocked}
+            title={platformActionTitle}
+            loading={
+              archiveAgentMutation.isPending &&
+              archiveAgentMutation.variables?.agentId === record.agent_id
+            }
+            onClick={() =>
+              archiveAgentMutation.mutate({
+                agentId: record.agent_id,
+                archived: !record.archived
+              })
+            }
+          >
+            {record.archived ? "恢复" : "归档"}
           </Button>
         </Space>
       )
@@ -637,11 +756,12 @@ export function AIAssetsPage() {
     },
     {
       title: "操作",
-      width: 240,
+      width: 200,
       render: (_: unknown, record) => (
-        <Space>
+        <Space size={4} className="resource-actions">
           <Button
-            size="small"
+            type="link"
+            className="resource-action"
             icon={<PlayCircleOutlined />}
             loading={runScheduleMutation.isPending && runScheduleMutation.variables === record.id}
             disabled={platformBlocked}
@@ -650,7 +770,12 @@ export function AIAssetsPage() {
           >
             运行
           </Button>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEditSchedule(record)}>
+          <Button
+            type="link"
+            className="resource-action"
+            icon={<EditOutlined />}
+            onClick={() => openEditSchedule(record)}
+          >
             编辑
           </Button>
           <Popconfirm
@@ -660,7 +785,12 @@ export function AIAssetsPage() {
             cancelText="取消"
             onConfirm={() => deleteScheduleMutation.mutate(record.id)}
           >
-            <Button size="small" danger icon={<DeleteOutlined />}>
+            <Button
+              type="link"
+              className="resource-action resource-action--danger"
+              danger
+              icon={<DeleteOutlined />}
+            >
               删除
             </Button>
           </Popconfirm>
@@ -670,13 +800,22 @@ export function AIAssetsPage() {
   ];
 
   const operations = (
-    <Space>
+    <Space className="ai-assets-toolbar" wrap>
       <Select
         className="ai-assets-scope"
         value={scope}
         options={SCOPE_OPTIONS}
         onChange={setScope}
       />
+      <Button
+        type="primary"
+        icon={<PlusOutlined />}
+        disabled={platformBlocked}
+        title={platformActionTitle}
+        onClick={() => navigate(`${AGENTS_PATH}/new`)}
+      >
+        新建 Agent
+      </Button>
       <Button
         icon={<ToolOutlined />}
         disabled={platformBlocked}
@@ -692,15 +831,6 @@ export function AIAssetsPage() {
         onClick={() => navigate("/ai-assets/mcp/new")}
       >
         新建 MCP
-      </Button>
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        disabled={platformBlocked}
-        title={platformActionTitle}
-        onClick={() => navigate(`${AGENTS_PATH}/new`)}
-      >
-        新建 Agent
       </Button>
       <Button icon={<ClockCircleOutlined />} onClick={openCreateSchedule}>
         新建定时任务
@@ -726,6 +856,12 @@ export function AIAssetsPage() {
     >
       <RequirementMetricGrid>
         <RequirementMetricCard
+          tone="success"
+          icon={<RobotOutlined />}
+          loading={agentsQuery.isLoading}
+          metric={{ key: "agents", title: "Agents", value: agents.length, description: "我的" }}
+        />
+        <RequirementMetricCard
           tone="primary"
           icon={<ToolOutlined />}
           loading={skillsQuery.isLoading}
@@ -736,12 +872,6 @@ export function AIAssetsPage() {
           icon={<CloudServerOutlined />}
           loading={mcpQuery.isLoading}
           metric={{ key: "mcp", title: "MCP", value: mcpEntries.length, description: scope }}
-        />
-        <RequirementMetricCard
-          tone="success"
-          icon={<RobotOutlined />}
-          loading={agentsQuery.isLoading}
-          metric={{ key: "agents", title: "Agents", value: agents.length, description: "我的" }}
         />
         <RequirementMetricCard
           tone="warning"
@@ -767,47 +897,24 @@ export function AIAssetsPage() {
       ) : null}
 
       <Tabs
+        className="ai-assets-tabs"
         activeKey={tab}
         onChange={(key) => setTab(key as AssetTab)}
         items={[
-          {
-            key: "skills",
-            label: "我的 Skills",
-            children: (
-              <Table
-                rowKey={(record) => record.skill_id || refKey(record.owner, record.slug, record.version)}
-                columns={skillColumns}
-                dataSource={skills}
-                loading={skillsQuery.isLoading}
-                locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Skill") }}
-              />
-            )
-          },
-          {
-            key: "mcp",
-            label: "我的 MCP",
-            children: (
-              <Table
-                rowKey={(record) => record.entry_id || refKey(record.owner, record.slug, record.version)}
-                columns={mcpColumns}
-                dataSource={mcpEntries}
-                loading={mcpQuery.isLoading}
-                locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 MCP") }}
-              />
-            )
-          },
           {
             key: "agents",
             label: "我的 Agents",
             children: (
               <div className="ai-assets-agent-pane">
-                <Table
-                  rowKey="agent_id"
-                  columns={agentColumns}
-                  dataSource={agents}
-                  loading={agentsQuery.isLoading}
-                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Agent") }}
-                />
+                <div className="ai-assets-table-card">
+                  <ResourceTable<ManagedAgent>
+                    rowKey="agent_id"
+                    columns={agentColumns}
+                    dataSource={agents}
+                    loading={agentsQuery.isLoading}
+                    locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Agent") }}
+                  />
+                </div>
                 <section className="ai-assets-history">
                   <header>
                     <strong>运行历史</strong>
@@ -815,15 +922,47 @@ export function AIAssetsPage() {
                       刷新
                     </Button>
                   </header>
-                  <Table
-                    rowKey="id"
-                    columns={runColumns}
-                    dataSource={runs}
-                    loading={runsQuery.isLoading}
-                    pagination={{ pageSize: 8 }}
-                    locale={{ emptyText: <Empty description="暂无运行记录" /> }}
-                  />
+                  <div className="ai-assets-table-card">
+                    <ResourceTable<AIRun>
+                      rowKey="id"
+                      columns={runColumns}
+                      dataSource={runs}
+                      loading={runsQuery.isLoading}
+                      pagination={{ pageSize: 8 }}
+                      locale={{ emptyText: <Empty description="暂无运行记录" /> }}
+                    />
+                  </div>
                 </section>
+              </div>
+            )
+          },
+          {
+            key: "skills",
+            label: "我的 Skills",
+            children: (
+              <div className="ai-assets-table-card">
+                <ResourceTable<ManagedSkill>
+                  rowKey={(record) => record.skill_id || refKey(record.owner, record.slug, record.version)}
+                  columns={skillColumns}
+                  dataSource={skills}
+                  loading={skillsQuery.isLoading}
+                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Skill") }}
+                />
+              </div>
+            )
+          },
+          {
+            key: "mcp",
+            label: "我的 MCP",
+            children: (
+              <div className="ai-assets-table-card">
+                <ResourceTable<ManagedMCPEntry>
+                  rowKey={(record) => record.entry_id || refKey(record.owner, record.slug, record.version)}
+                  columns={mcpColumns}
+                  dataSource={mcpEntries}
+                  loading={mcpQuery.isLoading}
+                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 MCP") }}
+                />
               </div>
             )
           },
@@ -831,13 +970,15 @@ export function AIAssetsPage() {
             key: "schedules",
             label: "定时任务",
             children: (
-              <Table
-                rowKey="id"
-                columns={scheduleColumns}
-                dataSource={schedules}
-                loading={schedulesQuery.isLoading}
-                locale={{ emptyText: <Empty description="暂无定时任务" /> }}
-              />
+              <div className="ai-assets-table-card">
+                <ResourceTable<ManagedAgentSchedule>
+                  rowKey="id"
+                  columns={scheduleColumns}
+                  dataSource={schedules}
+                  loading={schedulesQuery.isLoading}
+                  locale={{ emptyText: <Empty description="暂无定时任务" /> }}
+                />
+              </div>
             )
           }
         ]}
