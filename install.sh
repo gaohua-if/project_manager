@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Aida Linux CLI installer.
+# Aida Linux/macOS CLI installer.
 #
 # Usage:
 #   curl -fsSL http://<host>/statics-live/aida/install.sh | bash
@@ -21,14 +21,6 @@ TOKEN="${AIDA_TOKEN:-}"
 INSTALL_DIR="${AIDA_INSTALL_DIR:-$HOME/.local/bin}"
 
 RELEASE_URL="${RELEASE_URL%/}"
-
-echo "=== Aida Installer ==="
-echo "  Release URL: $RELEASE_URL"
-echo "  Install dir: $INSTALL_DIR"
-if [ -n "$API_URL" ]; then
-    echo "  API URL:     ${API_URL%/}"
-fi
-echo ""
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -69,11 +61,38 @@ ask_confirm() {
     return 0
 }
 
-[ "$(uname -s)" = "Linux" ] || die "unsupported OS: $(uname -s). This installer only supports Linux."
-case "$(uname -m)" in
-    x86_64|amd64) ;;
-    *) die "unsupported architecture: $(uname -m). Current release only provides linux/amd64." ;;
-esac
+detect_binary_name() {
+    local os arch
+
+    case "$(uname -s)" in
+        Linux) os="linux" ;;
+        Darwin) os="darwin" ;;
+        *) die "unsupported OS: $(uname -s). Current release provides linux/amd64 and darwin/arm64." ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64|amd64) arch="amd64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *) die "unsupported architecture: $(uname -m). Current release provides linux/amd64 and darwin/arm64." ;;
+    esac
+
+    case "$os/$arch" in
+        linux/amd64) echo "aida-linux-amd64" ;;
+        darwin/arm64) echo "aida-darwin-arm64" ;;
+        *) die "unsupported platform: $os/$arch. Current release provides linux/amd64 and darwin/arm64." ;;
+    esac
+}
+
+BINARY_NAME="$(detect_binary_name)"
+
+echo "=== Aida Installer ==="
+echo "  Release URL: $RELEASE_URL"
+echo "  Install dir: $INSTALL_DIR"
+echo "  Binary:      $BINARY_NAME"
+if [ -n "$API_URL" ]; then
+    echo "  API URL:     ${API_URL%/}"
+fi
+echo ""
 
 VERSION="$(fetch_text "$RELEASE_URL/aida-latest.txt" | tr -d '[:space:]')"
 [ -n "$VERSION" ] || die "failed to fetch aida-latest.txt"
@@ -95,13 +114,13 @@ if command -v aida >/dev/null 2>&1; then
 fi
 
 if [ "$NEED_INSTALL" -eq 1 ]; then
-    TMP="$(mktemp)"
-    echo "downloading aida-linux-amd64 ..."
-    fetch "$RELEASE_URL/aida-linux-amd64" "$TMP"
+    TMP="$(mktemp "${TMPDIR:-/tmp}/aida.XXXXXX")"
+    echo "downloading $BINARY_NAME ..."
+    fetch "$RELEASE_URL/$BINARY_NAME" "$TMP"
     SIZE="$(stat -c%s "$TMP" 2>/dev/null || stat -f%z "$TMP" 2>/dev/null || echo 0)"
     if [ "$SIZE" -lt 1048576 ]; then
         rm -f "$TMP"
-        die "downloaded binary is too small (${SIZE} bytes). Check $RELEASE_URL/aida-linux-amd64"
+        die "downloaded binary is too small (${SIZE} bytes). Check $RELEASE_URL/$BINARY_NAME"
     fi
     chmod 755 "$TMP"
     mv "$TMP" "$INSTALL_DIR/aida"

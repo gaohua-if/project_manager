@@ -544,7 +544,7 @@ docker compose ps
 
 ## 12. CLI 安装包发布
 
-`aida` CLI 的 Linux / Windows 安装包可直接发布到本机 MinIO，无需额外静态文件服务器。
+`aida` CLI 的 Linux / macOS Apple Silicon / Windows 安装包可直接发布到本机 MinIO，无需额外静态文件服务器。
 
 ## 12.1 构建发布包
 
@@ -567,6 +567,7 @@ make release-test-dir
 - `install.sh`
 - `install.ps1`
 - `aida-linux-amd64`
+- `aida-darwin-arm64`
 - `aida-windows-amd64.exe`
 - `aida-latest.txt`
 - `SHA256SUMS.txt`
@@ -614,12 +615,14 @@ docker run --rm --network host -v /tmp/aida-releases:/data:ro --entrypoint sh mi
 
 ## 12.3 CLI 安装命令
 
-### Linux
+### Linux / macOS Apple Silicon
 
 ```bash
 curl -fsSL http://<服务器IP>:9000/statics-live/aida/install.sh \
   | AIDA_API_URL=http://<服务器IP>:18090/api/v1 AIDA_TOKEN=<用户JWT> bash
 ```
+
+`install.sh` 会按当前系统选择二进制：Linux x86_64 下载 `aida-linux-amd64`，macOS arm64 下载 `aida-darwin-arm64`。
 
 ### Windows
 
@@ -717,7 +720,7 @@ http: server gave HTTP response to HTTPS client
 
 ## 14.4 CLI 安装成功，但命令找不到
 
-### Linux
+### Linux / macOS Apple Silicon
 
 - 重新执行 `source ~/.bashrc` 或对应 shell 的 rc 文件
 - 确认 `~/.local/bin` 已加入 PATH
@@ -741,7 +744,7 @@ http: server gave HTTP response to HTTPS client
 - consumer 无明显报错
 - Claude 报表生成可用
 - CLI 安装包可下载
-- Linux / Windows 安装命令至少验证一端
+- Linux / macOS Apple Silicon / Windows 安装命令至少验证一端
 
 如果这份文档后续需要扩展，可以继续补充：
 

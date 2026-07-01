@@ -1,5 +1,6 @@
 VERSION := $(shell cat VERSION 2>/dev/null || echo 0.1.0)
 GO_DOCKER_IMAGE ?= golang:1.26-alpine
+SHA256SUM ?= $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
 TEST_AIDA_RELEASE_URL ?= http://192.168.14.157:9000/statics-live/aida
 TEST_AIDA_API_URL ?= http://192.168.14.157:18090/api/v1
@@ -17,6 +18,7 @@ build-release-binaries:
 		-w /app/daemon \
 		$(GO_DOCKER_IMAGE) \
 		sh -c 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o /app/dist/aida-linux-amd64 . && \
+		       CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o /app/dist/aida-darwin-arm64 . && \
 		       CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o /app/dist/aida-windows-amd64.exe .'
 
 # Backward-compatible default: build the local test release package.
@@ -30,27 +32,28 @@ release-prod-dir: build-release-binaries
 	$(call package_release,aida-releases-release,$(AIDA_RELEASE_URL),$(AIDA_API_URL))
 
 release-test-archive: release-test-dir
-	tar -czf aida_release_$(VERSION)_test_linux_amd64.tar.gz -C aida-releases-test .
-	@ls -lh aida_release_$(VERSION)_test_linux_amd64.tar.gz
+	tar -czf aida_release_$(VERSION)_test_multi_platform.tar.gz -C aida-releases-test .
+	@ls -lh aida_release_$(VERSION)_test_multi_platform.tar.gz
 
 release-prod-archive: release-prod-dir
-	tar -czf aida_release_$(VERSION)_release_linux_amd64.tar.gz -C aida-releases-release .
-	@ls -lh aida_release_$(VERSION)_release_linux_amd64.tar.gz
+	tar -czf aida_release_$(VERSION)_release_multi_platform.tar.gz -C aida-releases-release .
+	@ls -lh aida_release_$(VERSION)_release_multi_platform.tar.gz
 
 define package_release
 	rm -rf "$(1)"
 	mkdir -p "$(1)"
 	cp dist/aida-linux-amd64 "$(1)/aida-linux-amd64"
+	cp dist/aida-darwin-arm64 "$(1)/aida-darwin-arm64"
 	cp dist/aida-windows-amd64.exe "$(1)/aida-windows-amd64.exe"
 	cp install.sh "$(1)/install.sh"
 	cp install.ps1 "$(1)/install.ps1"
-	sed -i 's|AIDA_RELEASE_URL:-[^}]*|AIDA_RELEASE_URL:-$(2)|' "$(1)/install.sh"
-	sed -i 's|AIDA_API_URL:-[^}]*|AIDA_API_URL:-$(3)|' "$(1)/install.sh"
-	sed -i 's|^\$$DefaultReleaseUrl = .*|$$DefaultReleaseUrl = "$(2)"|' "$(1)/install.ps1"
-	sed -i 's|^\$$DefaultApiUrl = .*|$$DefaultApiUrl = "$(3)"|' "$(1)/install.ps1"
+	perl -0pi -e 's|AIDA_RELEASE_URL:-[^}]*|AIDA_RELEASE_URL:-$(2)|' "$(1)/install.sh"
+	perl -0pi -e 's|AIDA_API_URL:-[^}]*|AIDA_API_URL:-$(3)|' "$(1)/install.sh"
+	perl -0pi -e 's|^\$$DefaultReleaseUrl = .*|\$$DefaultReleaseUrl = "$(2)"|m' "$(1)/install.ps1"
+	perl -0pi -e 's|^\$$DefaultApiUrl = .*|\$$DefaultApiUrl = "$(3)"|m' "$(1)/install.ps1"
 	chmod 755 "$(1)/install.sh"
 	echo "$(VERSION)" > "$(1)/aida-latest.txt"
-	cd "$(1)" && sha256sum aida-linux-amd64 aida-windows-amd64.exe install.sh install.ps1 aida-latest.txt > SHA256SUMS.txt
+	cd "$(1)" && $(SHA256SUM) aida-linux-amd64 aida-darwin-arm64 aida-windows-amd64.exe install.sh install.ps1 aida-latest.txt > SHA256SUMS.txt
 	@echo "release directory ready: ./$(1)"
 	@echo "publish its contents to: $(2)"
 	@echo "install command:"

@@ -28,6 +28,8 @@ Thumbs.db
 pgdata/
 
 # Daemon
+daemon/aida
+daemon/daemon
 daemon/bin/
 daemon/tmp/
 
