@@ -9,7 +9,6 @@ import (
 	"github.com/aidashboard/api/config"
 	"github.com/aidashboard/api/db"
 	"github.com/aidashboard/api/handler"
-	"github.com/aidashboard/api/model"
 	"github.com/aidashboard/api/service"
 	"github.com/aidashboard/api/storage"
 	"github.com/go-chi/chi/v5"
@@ -57,13 +56,6 @@ func main() {
 		ReportMCPVersion:  cfg.ManagedAgentReportMCPVersion,
 		AIDAPublicBaseURL: cfg.AIDAPublicBaseURL,
 	})
-	managedAgentH.SetUserTokenIssuer(func(u *model.User) (string, error) {
-		return handler.MintAIHubCompatibleToken(u, cfg.AIHubSecret)
-	})
-	authH.SetDefaultReportAssetsInitializer(func(ctx context.Context, u *model.User) error {
-		_, err := managedAgentH.InitializeUserDefaultReportAssetsForUser(ctx, u)
-		return err
-	})
 	dailyReportMCPH := handler.NewReportMCPHandler(database)
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
@@ -102,7 +94,6 @@ func main() {
 			r.Put("/users/{id}", authH.AdminUpdateUser)
 			r.Put("/users/{id}/profile", authH.AdminUpdateUser)
 			r.Post("/users/batch", authH.AdminBatchAddUsers)
-			r.Post("/ai-assets/default-report-assets/backfill", managedAgentH.BackfillDefaultReportAssets)
 			r.Post("/teams", authH.AdminCreateTeam)
 			r.Put("/teams/{id}", authH.AdminUpdateTeam)
 			r.Delete("/teams/{id}", authH.AdminDeleteTeam)
@@ -213,6 +204,7 @@ func main() {
 		r.Get("/ai-assets/daily-report-integration", managedAgentH.DailyReportIntegration)
 		r.Get("/ai-assets/agents", managedAgentH.ListMyAgents)
 		r.Post("/ai-assets/agents", managedAgentH.CreateMyAgent)
+		r.Post("/ai-assets/report-agents/default", managedAgentH.CreateDefaultReportAgent)
 		r.Put("/ai-assets/agents/{agentId}", managedAgentH.UpdateMyAgent)
 		r.Post("/ai-assets/agents/{agentId}/archive", managedAgentH.ArchiveMyAgent)
 		r.Post("/ai-assets/agents/{agentId}/runs", managedAgentH.StartAgentRun)

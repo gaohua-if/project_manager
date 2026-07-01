@@ -851,8 +851,12 @@ type AIRun struct {
 type DailyReportAgentIntegration struct {
 	MCP struct {
 		Name        string   `json:"name"`
+		Slug        string   `json:"slug"`
+		Version     string   `json:"version"`
 		URL         string   `json:"url"`
 		Transport   string   `json:"transport"`
+		Status      string   `json:"status,omitempty"`
+		Managed     bool     `json:"managed"`
 		Description string   `json:"description"`
 		Tools       []string `json:"tools"`
 	} `json:"mcp"`
@@ -860,34 +864,10 @@ type DailyReportAgentIntegration struct {
 		Slug    string `json:"slug"`
 		Version string `json:"version"`
 		Name    string `json:"name"`
+		Status  string `json:"status,omitempty"`
+		Managed bool   `json:"managed"`
 		SkillMD string `json:"skill_md"`
 	} `json:"skill"`
-}
-
-type DefaultReportAssetsInitResult struct {
-	UserID                   string `json:"user_id"`
-	Username                 string `json:"username"`
-	Role                     string `json:"role"`
-	SkillExists              bool   `json:"skill_exists"`
-	SkillCreated             bool   `json:"skill_created"`
-	MCPExists                bool   `json:"mcp_exists"`
-	MCPCreated               bool   `json:"mcp_created"`
-	AgentExists              bool   `json:"agent_exists"`
-	AgentCreated             bool   `json:"agent_created"`
-	AgentRepaired            bool   `json:"agent_repaired"`
-	OldPersonalDailyRepaired bool   `json:"old_personal_daily_repaired"`
-	SkippedBecauseExists     bool   `json:"skipped_because_exists"`
-	DefaultSkillCount        int    `json:"default_skill_count"`
-	DefaultMCPCount          int    `json:"default_mcp_count"`
-	DefaultAgentCount        int    `json:"default_agent_count"`
-	Error                    string `json:"error,omitempty"`
-}
-
-type DefaultReportAssetsBackfillResponse struct {
-	Total     int                             `json:"total"`
-	Succeeded int                             `json:"succeeded"`
-	Failed    int                             `json:"failed"`
-	Results   []DefaultReportAssetsInitResult `json:"results"`
 }
 
 type TeamReport struct {

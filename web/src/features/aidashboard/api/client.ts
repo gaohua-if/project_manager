@@ -539,8 +539,14 @@ export const fetchDepartmentWeeklyReports = (params?: Record<string, string>) =>
 
 // ───────────────────────── Managed AI assets ─────────────────────────
 
-export const fetchManagedSkills = (scope: ManagedScope = "mine") =>
-  unwrap(api.get<{ skills: ManagedSkill[] }>("/ai-assets/skills", { scope }, { skipErrorHandler: true }));
+export const fetchManagedSkills = (scope: ManagedScope = "mine", includeSystem = false) =>
+  unwrap(
+    api.get<{ skills: ManagedSkill[] }>(
+      "/ai-assets/skills",
+      includeSystem ? { scope, include_system: "true" } : { scope },
+      { skipErrorHandler: true }
+    )
+  );
 export const createManagedSkill = (payload: CreateManagedSkillPayload) =>
   unwrap(api.post<ManagedSkill>("/ai-assets/skills", payload));
 export const fetchManagedSkillMarkdown = (owner: string | undefined, slug: string, version: string) =>
@@ -553,8 +559,14 @@ export const archiveManagedSkill = (slug: string, version: string, archived: boo
   unwrap(api.post<Record<string, unknown>>(`/ai-assets/skills/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/archive`, { archived }));
 export const deleteManagedSkill = (slug: string, version: string) =>
   unwrap(api.delete<Record<string, unknown>>(`/ai-assets/skills/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`));
-export const fetchManagedMCPEntries = (scope: ManagedScope = "mine") =>
-  unwrap(api.get<{ entries: ManagedMCPEntry[] }>("/ai-assets/mcp", { scope }, { skipErrorHandler: true }));
+export const fetchManagedMCPEntries = (scope: ManagedScope = "mine", includeSystem = false) =>
+  unwrap(
+    api.get<{ entries: ManagedMCPEntry[] }>(
+      "/ai-assets/mcp",
+      includeSystem ? { scope, include_system: "true" } : { scope },
+      { skipErrorHandler: true }
+    )
+  );
 export const createManagedMCPEntry = (payload: ManagedMCPEntry) =>
   unwrap(api.post<ManagedMCPEntry>("/ai-assets/mcp", payload));
 export const archiveManagedMCPEntry = (slug: string, version: string, archived: boolean) =>
@@ -567,6 +579,8 @@ export const fetchManagedAgents = () =>
   unwrap(api.get<{ agents: ManagedAgent[] }>("/ai-assets/agents", undefined, { skipErrorHandler: true }));
 export const createManagedAgent = (payload: UpsertManagedAgentPayload) =>
   unwrap(api.post<{ agent_id: string; managed_version?: number }>("/ai-assets/agents", payload));
+export const createDefaultReportAgent = () =>
+  unwrap(api.post<ManagedAgent>("/ai-assets/report-agents/default"));
 export const updateManagedAgent = (agentId: string, payload: UpsertManagedAgentPayload) =>
   unwrap(
     api.put<{ agent_id: string; managed_version?: number }>(`/ai-assets/agents/${agentId}`, payload)

@@ -479,8 +479,12 @@ export interface UpsertManagedAgentSchedulePayload {
 export interface DailyReportAgentIntegration {
   mcp: {
     name: string;
+    slug: string;
+    version: string;
     url: string;
     transport: "http";
+    status?: string;
+    managed: boolean;
     description: string;
     tools: string[];
   };
@@ -488,6 +492,8 @@ export interface DailyReportAgentIntegration {
     slug: string;
     version: string;
     name: string;
+    status?: string;
+    managed: boolean;
     skill_md: string;
   };
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Form, Input, Select, Space } from "antd";
+import { Button, Card, Form, Input, Select, Space } from "antd";
 import type { FormInstance } from "antd";
 
 import type {
@@ -46,8 +46,6 @@ export function AgentEditor({
   onCancel,
   onSubmit
 }: AgentEditorProps) {
-  const businessType = Form.useWatch("business_type", form) || "generic";
-
   return (
     <section className="ai-assets-workspace">
       <Form
@@ -87,14 +85,6 @@ export function AgentEditor({
               />
             </Form.Item>
           </div>
-          {businessType === "report" ? (
-            <Alert
-              type="info"
-              showIcon
-              message="报告 Agent 会固定绑定 Aida Report MCP"
-              description="运行时选择报告类型、日期/周期和目标对象；report_type、period_json、target_json、run_id、mcp_url、AIDA_REPORT_MCP_AUTH 由 Aida 后端自动注入。"
-            />
-          ) : null}
         </Card>
 
         <Card title="运行配置" className="ai-assets-editor-section">

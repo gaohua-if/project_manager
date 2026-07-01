@@ -1,7 +1,12 @@
 import { Checkbox, Empty } from "antd";
 
 import type { ManagedSkill } from "../../api/types";
-import { refKey, skillLabel } from "../utils/agentAssets";
+import {
+  getSystemBuiltinLabel,
+  isSystemBuiltinSkill,
+  refKey,
+  skillLabel
+} from "../utils/agentAssets";
 
 import "./ResourcePicker.css";
 
@@ -22,7 +27,10 @@ export function SkillResourcePicker({
     <div className="ai-assets-resource-picker">
       {skills.map((skill) => {
         const key = refKey(skill.owner, skill.slug, skill.version);
-        const checked = selected.has(key);
+        const ownerlessKey = refKey(undefined, skill.slug, skill.version);
+        const removableKeys = new Set([key, ownerlessKey]);
+        const checked = selected.has(key) || selected.has(ownerlessKey);
+        const title = `${skill.name || skill.slug}${isSystemBuiltinSkill(skill) ? `（${getSystemBuiltinLabel()}）` : ""}`;
         return (
           <div
             role="button"
@@ -30,20 +38,20 @@ export function SkillResourcePicker({
             key={key}
             className={`ai-assets-resource-card${checked ? " is-selected" : ""}`}
             onClick={() => {
-              const next = checked ? value.filter((item) => item !== key) : [...value, key];
+              const next = checked ? value.filter((item) => !removableKeys.has(item)) : [...value, key];
               onChange?.(next);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                const next = checked ? value.filter((item) => item !== key) : [...value, key];
+                const next = checked ? value.filter((item) => !removableKeys.has(item)) : [...value, key];
                 onChange?.(next);
               }
             }}
           >
             <Checkbox checked={checked} />
             <span className="ai-assets-resource-card__body">
-              <strong>{skill.name || skill.slug}</strong>
+              <strong>{title}</strong>
               <span>{skill.description || skillLabel(skill)}</span>
               <em>{skillLabel(skill)}</em>
             </span>

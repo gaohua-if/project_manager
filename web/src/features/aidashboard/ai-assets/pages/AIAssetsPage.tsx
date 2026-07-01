@@ -36,6 +36,7 @@ import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 import {
   archiveManagedAgent,
   archiveManagedMCPEntry,
+  createDefaultReportAgent,
   createManagedAgentSchedule,
   archiveManagedSkill,
   deleteManagedMCPEntry,
@@ -68,7 +69,14 @@ import {
 } from "../../requirements/components/RequirementMetricCard";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { HttpError } from "@/shared/request/types";
-import { errorMessage, refKey, SCOPE_OPTIONS } from "../utils/agentAssets";
+import {
+  errorMessage,
+  isReportAgentAsset,
+  isSystemBuiltinMCP,
+  isSystemBuiltinSkill,
+  refKey,
+  SCOPE_OPTIONS
+} from "../utils/agentAssets";
 
 import "./AIAssetsPage.css";
 
@@ -258,6 +266,15 @@ export function AIAssetsPage() {
     () => schedulesQuery.data?.schedules ?? [],
     [schedulesQuery.data]
   );
+  const visibleSkills = useMemo(
+    () => skills.filter((item) => !isSystemBuiltinSkill(item)),
+    [skills]
+  );
+  const visibleMCPEntries = useMemo(
+    () => mcpEntries.filter((item) => !isSystemBuiltinMCP(item)),
+    [mcpEntries]
+  );
+  const hasReportAgent = useMemo(() => agents.some(isReportAgentAsset), [agents]);
   const platformIssue = useMemo(
     () =>
       managedAgentPlatformIssue(skillsQuery.error) ??
@@ -366,6 +383,18 @@ export function AIAssetsPage() {
       message.success(variables.archived ? "Agent 已归档" : "Agent 已恢复");
       void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
       void queryClient.invalidateQueries({ queryKey: ["managed-agent-runs"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const createDefaultReportAgentMutation = useMutation({
+    mutationFn: () => createDefaultReportAgent(),
+    onSuccess: () => {
+      message.success("默认报告 Agent 已创建");
+      setTab("agents");
+      void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
+      void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
+      void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
@@ -841,7 +870,7 @@ export function AIAssetsPage() {
         title={platformActionTitle}
         onClick={() => setIntegrationOpen(true)}
       >
-        日报 MCP/Skill
+        报告系统能力
       </Button>
     </Space>
   );
@@ -865,13 +894,13 @@ export function AIAssetsPage() {
           tone="primary"
           icon={<ToolOutlined />}
           loading={skillsQuery.isLoading}
-          metric={{ key: "skills", title: "Skills", value: skills.length, description: scope }}
+          metric={{ key: "skills", title: "Skills", value: visibleSkills.length, description: scope }}
         />
         <RequirementMetricCard
           tone="info"
           icon={<CloudServerOutlined />}
           loading={mcpQuery.isLoading}
-          metric={{ key: "mcp", title: "MCP", value: mcpEntries.length, description: scope }}
+          metric={{ key: "mcp", title: "MCP", value: visibleMCPEntries.length, description: scope }}
         />
         <RequirementMetricCard
           tone="warning"
@@ -906,6 +935,30 @@ export function AIAssetsPage() {
             label: "我的 Agents",
             children: (
               <div className="ai-assets-agent-pane">
+                {!hasReportAgent ? (
+                  <Alert
+                    className="ai-assets-report-agent-guide"
+                    type="info"
+                    showIcon
+                    message="你还没有报告 Agent"
+                    description={
+                      <div className="ai-assets-report-agent-guide__body">
+                        <span>
+                          平台可以为你创建一个默认报告 Agent，用于生成个人日报、周报和部门报告。系统会自动挂载报告 MCP / Skill，无需手动配置。
+                        </span>
+                        <Button
+                          type="primary"
+                          icon={<RobotOutlined />}
+                          loading={createDefaultReportAgentMutation.isPending}
+                          disabled={platformBlocked}
+                          onClick={() => createDefaultReportAgentMutation.mutate()}
+                        >
+                          创建默认报告 Agent
+                        </Button>
+                      </div>
+                    }
+                  />
+                ) : null}
                 <div className="ai-assets-table-card">
                   <ResourceTable<ManagedAgent>
                     rowKey="agent_id"
@@ -944,7 +997,7 @@ export function AIAssetsPage() {
                 <ResourceTable<ManagedSkill>
                   rowKey={(record) => record.skill_id || refKey(record.owner, record.slug, record.version)}
                   columns={skillColumns}
-                  dataSource={skills}
+                  dataSource={visibleSkills}
                   loading={skillsQuery.isLoading}
                   locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Skill") }}
                 />
@@ -959,7 +1012,7 @@ export function AIAssetsPage() {
                 <ResourceTable<ManagedMCPEntry>
                   rowKey={(record) => record.entry_id || refKey(record.owner, record.slug, record.version)}
                   columns={mcpColumns}
-                  dataSource={mcpEntries}
+                  dataSource={visibleMCPEntries}
                   loading={mcpQuery.isLoading}
                   locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 MCP") }}
                 />
@@ -985,7 +1038,7 @@ export function AIAssetsPage() {
       />
 
       <Modal
-        title="日报 MCP / Skill"
+        title="报告系统能力"
         open={integrationOpen}
         onCancel={() => setIntegrationOpen(false)}
         width={820}
@@ -993,8 +1046,21 @@ export function AIAssetsPage() {
         destroyOnClose
       >
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <div className="ai-assets-system-capability__head">
+            <Tag color="blue">系统内置</Tag>
+            <Tag>只读</Tag>
+          </div>
           <Input
-            addonBefore="MCP URL"
+            addonBefore="MCP"
+            value={
+              integrationQuery.data
+                ? `${integrationQuery.data.mcp.name} (${integrationQuery.data.mcp.slug}@${integrationQuery.data.mcp.version})`
+                : ""
+            }
+            readOnly
+          />
+          <Input
+            addonBefore="Endpoint"
             value={integrationQuery.data?.mcp.url ?? ""}
             readOnly
             suffix={
@@ -1011,12 +1077,37 @@ export function AIAssetsPage() {
             }
           />
           <Input
+            addonBefore="Transport"
+            value={integrationQuery.data?.mcp.transport ?? ""}
+            readOnly
+          />
+          <Input
+            addonBefore="MCP 管理方式"
+            value="系统内置；不可编辑、不可删除、不可归档"
+            readOnly
+          />
+          <Input
+            addonBefore="MCP 用途"
+            value="读取报告上下文并回写报告结果"
+            readOnly
+          />
+          <Input
             addonBefore="Skill"
             value={
               integrationQuery.data
                 ? `${integrationQuery.data.skill.slug}@${integrationQuery.data.skill.version}`
                 : ""
             }
+            readOnly
+          />
+          <Input
+            addonBefore="Skill 管理方式"
+            value="系统内置；不可编辑、不可删除、不可归档"
+            readOnly
+          />
+          <Input
+            addonBefore="Skill 用途"
+            value="约束报告 Agent 的生成流程和输出格式"
             readOnly
           />
           <Input.TextArea

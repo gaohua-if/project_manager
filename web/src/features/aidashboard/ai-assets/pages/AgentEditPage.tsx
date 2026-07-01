@@ -33,13 +33,13 @@ export function AgentEditPage() {
     staleTime: 30_000
   });
   const skillsQuery = useQuery({
-    queryKey: ["managed-skills", "mine"],
-    queryFn: () => fetchManagedSkills("mine"),
+    queryKey: ["managed-skills", "mine", "include-system"],
+    queryFn: () => fetchManagedSkills("mine", true),
     staleTime: 60_000
   });
   const mcpQuery = useQuery({
-    queryKey: ["managed-mcp", "mine"],
-    queryFn: () => fetchManagedMCPEntries("mine"),
+    queryKey: ["managed-mcp", "mine", "include-system"],
+    queryFn: () => fetchManagedMCPEntries("mine", true),
     staleTime: 60_000
   });
 

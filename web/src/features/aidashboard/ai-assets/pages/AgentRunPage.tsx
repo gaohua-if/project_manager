@@ -16,6 +16,9 @@ import type { AIRun, ManagedAgent, ReportType } from "../../api/types";
 import {
   errorMessage,
   extractPromptVariables,
+  isReportAgentAsset,
+  REPORT_AGENT_MARKER,
+  reportAgentMarkerText,
   renderPromptPreview
 } from "../utils/agentAssets";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
@@ -26,7 +29,6 @@ import "../components/AgentWorkspace.css";
 
 const AI_ASSETS_HOME = "/ai-assets";
 
-const REPORT_AGENT_MARKER = "AIDA_REPORT_AGENT:default";
 const REPORT_TYPES_MARKER = "AIDA_REPORT_AGENT_TYPES:";
 const REPORT_SYSTEM_PROMPT_KEYS = new Set([
   "report_type",
@@ -51,10 +53,6 @@ function isWeeklyReportType(type: ReportType) {
   return type.endsWith("_weekly");
 }
 
-function agentMarkerText(agent: ManagedAgent) {
-  return [agent.description, agent.instructions, agent.start_prompt_template].filter(Boolean).join("\n");
-}
-
 function supportedReportTypes(agent: ManagedAgent): ReportType[] {
   if (agent.business_type === "report") {
     return agent.report_types?.length ? agent.report_types : REPORT_TYPE_OPTIONS.map((item) => item.value);
@@ -62,7 +60,7 @@ function supportedReportTypes(agent: ManagedAgent): ReportType[] {
   if (agent.business_type === "generic") {
     return [];
   }
-  const text = agentMarkerText(agent);
+  const text = reportAgentMarkerText(agent);
   if (!text.includes(REPORT_AGENT_MARKER)) return [];
   const markerLine = text
     .split("\n")
@@ -88,9 +86,7 @@ function reportTypeOptionsForUser(agent: ManagedAgent, role?: UserRole) {
 }
 
 function isReportAgent(agent: ManagedAgent) {
-  if (agent.business_type === "report") return true;
-  if (agent.business_type === "generic") return false;
-  return supportedReportTypes(agent).length > 0;
+  return isReportAgentAsset(agent) || supportedReportTypes(agent).length > 0;
 }
 
 function defaultWeekRange(): [Dayjs, Dayjs] {

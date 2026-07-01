@@ -417,6 +417,9 @@ export function RequirementsListPage() {
   const canMoveRequirement = Boolean(
     user && ["admin", "director", "pm", "team_leader"].includes(user.role)
   );
+  const canCreateRequirement = Boolean(
+    user && ["admin", "director", "pm", "team_leader"].includes(user.role)
+  );
 
   const statusMutation = useMutation({
     mutationFn: ({
@@ -589,6 +592,14 @@ export function RequirementsListPage() {
     if (!requirement || requirement.status === nextStatus || nextStatus === "cancelled") return;
     statusMutation.mutate({ id: requirement.id, nextStatus, baseVersion: requirement.version });
   };
+  const updateRequirementStatus = (requirement: MockRequirement, nextStatus: RequirementStage) => {
+    if (!canMoveRequirement || requirement.status === nextStatus || nextStatus === "cancelled") return;
+    statusMutation.mutate({
+      id: requirement.id,
+      nextStatus,
+      baseVersion: requirement.version
+    });
+  };
 
   const toggleRequirement = (id: string) => {
     setExpanded((current) => {
@@ -661,14 +672,16 @@ export function RequirementsListPage() {
                   { value: "tree", label: "需求列表", icon: <UnorderedListOutlined /> }
                 ]}
               />
-              <Button
-                className="requirements-board__primary-action"
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => navigate(appendSearch("/requirements/create", searchParams))}
-              >
-                新建需求
-              </Button>
+              {canCreateRequirement ? (
+                <Button
+                  className="requirements-board__primary-action"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate(appendSearch("/requirements/create", searchParams))}
+                >
+                  新建需求
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -870,6 +883,8 @@ export function RequirementsListPage() {
               onOpenRequirement={setSelectedRequirement}
               onOpenTask={(task) => setSelectedTask(task)}
               onAddTask={addTask}
+              canUpdateRequirementStatus={canMoveRequirement}
+              onUpdateRequirementStatus={updateRequirementStatus}
               onToggleRequirementFavorite={toggleRequirementFavorite}
               onToggleTaskFavorite={toggleTaskFavorite}
             />
@@ -890,6 +905,8 @@ export function RequirementsListPage() {
             activeRequirement?.can_restore ||
             activeRequirement?.can_delete
         )}
+        canUpdateStatus={canMoveRequirement}
+        onUpdateStatus={updateRequirementStatus}
         onToggleFavorite={
           activeRequirement ? () => toggleRequirementFavorite(activeRequirement.id) : undefined
         }
@@ -1041,6 +1058,8 @@ function RequirementTree({
   onOpenRequirement,
   onOpenTask,
   onAddTask,
+  canUpdateRequirementStatus,
+  onUpdateRequirementStatus,
   onToggleRequirementFavorite,
   onToggleTaskFavorite
 }: {
@@ -1054,6 +1073,8 @@ function RequirementTree({
   onOpenRequirement: (requirement: MockRequirement) => void;
   onOpenTask: (task: MockTask) => void;
   onAddTask: (requirementId: string) => void;
+  canUpdateRequirementStatus: boolean;
+  onUpdateRequirementStatus: (requirement: MockRequirement, nextStatus: RequirementStage) => void;
   onToggleRequirementFavorite: (requirementId: string) => void;
   onToggleTaskFavorite: (taskId: string) => void;
 }) {
@@ -1166,6 +1187,30 @@ function RequirementTree({
             >
               {favoriteRequirementIds.has(requirement.id) ? "已关注" : "关注"}
             </Button>
+            {canUpdateRequirementStatus && requirement.status !== "cancelled" ? (
+              <Dropdown
+                menu={{
+                  items: STATUS_COLUMNS.map((item) => ({
+                    key: item.value,
+                    label: item.label,
+                    disabled: item.value === requirement.status,
+                    onClick: ({ domEvent }) => {
+                      domEvent.stopPropagation();
+                      onUpdateRequirementStatus(requirement, item.value);
+                    }
+                  }))
+                }}
+                trigger={["click"]}
+              >
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  修改进度
+                </Button>
+              </Dropdown>
+            ) : null}
           </Space>
         );
       }
@@ -1410,10 +1455,12 @@ function RequirementDrawer({
   creatorOpen,
   isFavorite,
   canManage,
+  canUpdateStatus,
   onToggleFavorite,
   onCreatorOpenChange,
   onClose,
   onSaved,
+  onUpdateStatus,
   onOpenTask
 }: {
   requirement?: MockRequirement;
@@ -1423,10 +1470,12 @@ function RequirementDrawer({
   creatorOpen: boolean;
   isFavorite: boolean;
   canManage: boolean;
+  canUpdateStatus: boolean;
   onToggleFavorite?: () => void;
   onCreatorOpenChange: (open: boolean) => void;
   onClose: () => void;
   onSaved: (requirement: MockRequirement) => void;
+  onUpdateStatus: (requirement: MockRequirement, nextStatus: RequirementStage) => void;
   onOpenTask: (task: MockTask) => void;
 }) {
   const { message, modal } = App.useApp();
@@ -1624,7 +1673,7 @@ function RequirementDrawer({
                 <RequirementPriorityTag priority={requirement.priority} />
                 {blockedCount ? <Tag color="error">{blockedCount} 个上游阻塞</Tag> : null}
               </div>
-              {canManage ? (
+              {canManage || canUpdateStatus ? (
                 <div className="requirements-drawer__actions">
                   {requirement.status === "cancelled" ? (
                     requirement.can_restore ? (
@@ -1641,6 +1690,21 @@ function RequirementDrawer({
                     <Button type="primary" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
                       编辑
                     </Button>
+                  ) : null}
+                  {canUpdateStatus && requirement.status !== "cancelled" ? (
+                    <Dropdown
+                      menu={{
+                        items: STATUS_COLUMNS.map((item) => ({
+                          key: item.value,
+                          label: item.label,
+                          disabled: item.value === requirement.status,
+                          onClick: () => onUpdateStatus(requirement, item.value)
+                        }))
+                      }}
+                      trigger={["click"]}
+                    >
+                      <Button>修改进度</Button>
+                    </Dropdown>
                   ) : null}
                   {moreActionItems.length ? (
                     <Dropdown menu={{ items: moreActionItems }} trigger={["click"]}>

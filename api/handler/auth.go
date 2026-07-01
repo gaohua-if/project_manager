@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,27 +16,13 @@ import (
 )
 
 type AuthHandler struct {
-	db                             *sql.DB
-	aihub                          *service.AIHubClient
-	bootstrapAdminUIDs             map[int64]bool
-	defaultReportAssetsInitializer func(context.Context, *model.User) error
+	db                 *sql.DB
+	aihub              *service.AIHubClient
+	bootstrapAdminUIDs map[int64]bool
 }
 
 func NewAuthHandler(db *sql.DB, aihub *service.AIHubClient, bootstrapAdminUIDs string) *AuthHandler {
 	return &AuthHandler{db: db, aihub: aihub, bootstrapAdminUIDs: parseBootstrapAdminUIDs(bootstrapAdminUIDs)}
-}
-
-func (h *AuthHandler) SetDefaultReportAssetsInitializer(fn func(context.Context, *model.User) error) {
-	h.defaultReportAssetsInitializer = fn
-}
-
-func (h *AuthHandler) initializeDefaultReportAssetsBestEffort(ctx context.Context, user *model.User) {
-	if h.defaultReportAssetsInitializer == nil || user == nil || !user.LocalEnabled {
-		return
-	}
-	if err := h.defaultReportAssetsInitializer(ctx, user); err != nil {
-		log.Printf("default report assets initialization failed for user %s: %v", user.ID, err)
-	}
 }
 
 func MintAIHubCompatibleToken(user *model.User, secret string) (string, error) {
@@ -102,9 +86,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		user, err = h.syncExistingAIHubUser(*aihubUser)
 		if errors.Is(err, sql.ErrNoRows) {
 			user, err = h.upsertAIHubUserProfile(*aihubUser, "admin", nil, true)
-			if err == nil {
-				h.initializeDefaultReportAssetsBestEffort(r.Context(), user)
-			}
 		}
 	} else {
 		user, err = h.syncExistingAIHubUser(*aihubUser)
@@ -447,9 +428,6 @@ func (h *AuthHandler) AdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if localEnabled && !existing.LocalEnabled {
-		h.initializeDefaultReportAssetsBestEffort(r.Context(), user)
-	}
 	writeJSON(w, http.StatusOK, user)
 }
 
@@ -498,14 +476,11 @@ func (h *AuthHandler) AdminBatchAddUsers(w http.ResponseWriter, r *http.Request)
 			resp.Results = append(resp.Results, model.AdminBatchAddUserResult{ID: id, Status: "failed", Error: err.Error()})
 			continue
 		}
-		user, err := h.upsertAIHubUserProfile(*aihubUser, appRole, teamID, localEnabled)
+		_, err = h.upsertAIHubUserProfile(*aihubUser, appRole, teamID, localEnabled)
 		if err != nil {
 			resp.Failed++
 			resp.Results = append(resp.Results, model.AdminBatchAddUserResult{ID: id, Username: aihubUser.Username, Nickname: aihubUser.Nickname, Email: aihubUser.Email, Status: "failed", Error: err.Error()})
 			continue
-		}
-		if localEnabled {
-			h.initializeDefaultReportAssetsBestEffort(r.Context(), user)
 		}
 		resp.Created++
 		resp.Results = append(resp.Results, model.AdminBatchAddUserResult{ID: id, Username: aihubUser.Username, Nickname: aihubUser.Nickname, Email: aihubUser.Email, Status: "created"})

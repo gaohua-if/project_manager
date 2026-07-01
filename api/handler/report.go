@@ -2400,10 +2400,12 @@ func (h *ReportHandler) ListTeamWeeklyReports(w http.ResponseWriter, r *http.Req
 		SELECT twr.id::text, twr.team_id::text, t.name, twr.leader_id::text, COALESCE(NULLIF(u.nickname,''), u.username),
 			twr.week_start, twr.content, twr.source_daily_report_ids, twr.source_team_report_ids,
 			twr.source_task_ids, twr.source_personal_weekly_report_ids,
-			twr.submitted_at, twr.created_at, twr.updated_at
+			twr.submitted_at, twr.created_at, twr.updated_at,
+			twr.edited, COALESCE(twr.generation_mode, ''), twr.managed_agent_run_id::text, twr.agent_id, twr.agent_version_id, twr.model_id, ar.finished_at
 		FROM team_weekly_reports twr
 		JOIN teams t ON t.id = twr.team_id
 		JOIN users u ON u.id = twr.leader_id
+		LEFT JOIN ai_runs ar ON ar.id = twr.managed_agent_run_id
 		WHERE 1=1`
 	args := []any{}
 	argIdx := 1

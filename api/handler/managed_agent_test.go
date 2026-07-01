@@ -393,74 +393,231 @@ func TestStartAgentRunDoesNotInjectReportMCPParams(t *testing.T) {
 	}
 }
 
-func TestEnsureDefaultReportAgentCreatesDefaultAgent(t *testing.T) {
-	var createdMCP model.CreateManagedMCPEntryRequest
-	var createdAgent model.UpsertManagedAgentRequest
+func TestListSkillsFiltersReportSystemSkill(t *testing.T) {
 	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/mcp/list":
-			writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{})
-		case r.Method == http.MethodPost && r.URL.Path == "/api/mcp":
-			if err := json.NewDecoder(r.Body).Decode(&createdMCP); err != nil {
-				t.Fatal(err)
-			}
-			writeJSON(w, http.StatusOK, model.ManagedMCPEntry{EntryID: "mcp-1", Slug: createdMCP.Slug, Version: createdMCP.Version, URL: createdMCP.URL})
-		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
-			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{})
-		case r.Method == http.MethodPost && r.URL.Path == "/api/my/agents":
-			if err := json.NewDecoder(r.Body).Decode(&createdAgent); err != nil {
-				t.Fatal(err)
-			}
-			writeJSON(w, http.StatusOK, model.UpsertManagedAgentResponse{AgentID: createdAgent.AgentID, ManagedVersion: 1})
-		default:
-			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
+		if r.Method != http.MethodGet || r.URL.Path != "/api/skill/list" {
+			t.Fatalf("platform route = %s %s", r.Method, r.URL.Path)
 		}
+		writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{Skills: []model.ManagedSkill{
+			{SkillID: "system-skill", Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion, Name: service.ReportSkillName},
+			{SkillID: "user-skill", Slug: "daily-summary", Version: "1.0.0", Name: "Daily Summary"},
+		}})
+	}))
+	defer platform.Close()
+
+	h := NewManagedAgentHandler(nil, service.NewManagedAgentClient(platform.URL, "platform-token"))
+	req := httptest.NewRequest(http.MethodGet, "/ai-assets/skills?scope=mine", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListSkills(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got model.ListManagedSkillsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Skills) != 1 || got.Skills[0].Slug != "daily-summary" {
+		t.Fatalf("skills = %#v", got.Skills)
+	}
+}
+
+func TestListSkillsIncludesReportSystemSkillForResourcePicker(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/skill/list" {
+			t.Fatalf("platform route = %s %s", r.Method, r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{Skills: []model.ManagedSkill{
+			{SkillID: "system-skill", Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion, Name: service.ReportSkillName},
+			{SkillID: "user-skill", Slug: "daily-summary", Version: "1.0.0", Name: "Daily Summary"},
+		}})
+	}))
+	defer platform.Close()
+
+	h := NewManagedAgentHandler(nil, service.NewManagedAgentClient(platform.URL, "platform-token"))
+	req := httptest.NewRequest(http.MethodGet, "/ai-assets/skills?scope=mine&include_system=true", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListSkills(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got model.ListManagedSkillsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Skills) != 2 {
+		t.Fatalf("skills = %#v", got.Skills)
+	}
+	if got.Skills[0].Slug != service.ReportSkillSlug || got.Skills[1].Slug != "daily-summary" {
+		t.Fatalf("skills order/content = %#v", got.Skills)
+	}
+}
+
+func TestListMCPEntriesFiltersReportSystemMCP(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/mcp/list" {
+			t.Fatalf("platform route = %s %s", r.Method, r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{Entries: []model.ManagedMCPEntry{
+			{EntryID: "system-mcp", Slug: "aida-report-mcp", Version: "report-v1", Name: "Aida Report MCP"},
+			{EntryID: "user-mcp", Slug: "user-tools", Version: "1.0.0", Name: "User Tools"},
+		}})
 	}))
 	defer platform.Close()
 
 	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
-	req := httptest.NewRequest(http.MethodPost, "/internal/default-report-assets", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ai-assets/mcp?scope=mine", nil)
+	rec := httptest.NewRecorder()
 
-	if err := h.ensureReportMCPEntry(req, h.client); err != nil {
+	h.ListMCPEntries(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got model.ListManagedMCPEntriesResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	agentID, err := h.ensureDefaultReportAgent(req, h.client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if agentID == "" || createdAgent.Name != defaultReportAgentName {
-		t.Fatalf("created agent id=%q request=%#v", agentID, createdAgent)
-	}
-	if createdAgent.Engine != "claude-code" || createdAgent.DefaultModelID != "MiniMax-M2.5" {
-		t.Fatalf("engine/model = %q/%q", createdAgent.Engine, createdAgent.DefaultModelID)
-	}
-	if !containsDefaultMarkers(createdAgent.Description) || !containsDefaultMarkers(createdAgent.Instructions) {
-		t.Fatalf("missing default markers: description=%q instructions=%q", createdAgent.Description, createdAgent.Instructions)
-	}
-	if !strings.Contains(createdAgent.Description, defaultReportAgentTypesPrefix+"personal_daily") {
-		t.Fatalf("missing report types marker: %q", createdAgent.Description)
-	}
-	if !hasSkillRef(createdAgent.Skills, service.ReportSkillSlug, service.ReportSkillVersion) {
-		t.Fatalf("skills = %#v", createdAgent.Skills)
-	}
-	if !h.hasReportMCPBinding(createdAgent.MCPBindings) {
-		t.Fatalf("mcp bindings = %#v", createdAgent.MCPBindings)
-	}
-	if !hasCredentialSlot(createdAgent.CredentialSlots, reportMCPCredentialSlot) || createdAgent.MCPBindings[0].CredentialSlot != reportMCPCredentialSlot {
-		t.Fatalf("credential wiring slots=%#v bindings=%#v", createdAgent.CredentialSlots, createdAgent.MCPBindings)
-	}
-	if createdMCP.URL != "https://aida.example.com/api/v1/mcp/reports" || createdMCP.Transport != "http" || !createdMCP.RequiresCredential || createdMCP.AuthHeader != "Authorization" || createdMCP.AuthScheme != "Bearer" {
-		t.Fatalf("mcp entry = %#v", createdMCP)
+	if len(got.Entries) != 1 || got.Entries[0].Slug != "user-tools" {
+		t.Fatalf("entries = %#v", got.Entries)
 	}
 }
 
-func TestInitializeUserDefaultReportAssetsCreatesUserOwnedAssets(t *testing.T) {
+func TestListMCPEntriesIncludesReportSystemMCPForResourcePicker(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/mcp/list" {
+			t.Fatalf("platform route = %s %s", r.Method, r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{Entries: []model.ManagedMCPEntry{
+			{EntryID: "system-mcp", Slug: "aida-report-mcp", Version: "report-v1", Name: "Aida Report MCP"},
+			{EntryID: "user-mcp", Slug: "user-tools", Version: "1.0.0", Name: "User Tools"},
+		}})
+	}))
+	defer platform.Close()
+
+	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
+	req := httptest.NewRequest(http.MethodGet, "/ai-assets/mcp?scope=mine&include_system=true", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMCPEntries(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got model.ListManagedMCPEntriesResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Entries) != 2 {
+		t.Fatalf("entries = %#v", got.Entries)
+	}
+	if got.Entries[0].Slug != "aida-report-mcp" || got.Entries[1].Slug != "user-tools" {
+		t.Fatalf("entries order/content = %#v", got.Entries)
+	}
+}
+
+func TestReportSkillProtectedLifecycle(t *testing.T) {
+	h := NewManagedAgentHandler(nil, service.NewManagedAgentClient("https://managed.example.com", "platform-token"))
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		call   func(http.ResponseWriter, *http.Request)
+	}{
+		{
+			name:   "archive",
+			method: http.MethodPost,
+			path:   "/ai-assets/skills/aida-report/1.0.0/archive",
+			body:   `{"archived":true}`,
+			call:   h.ArchiveSkill,
+		},
+		{
+			name:   "delete",
+			method: http.MethodDelete,
+			path:   "/ai-assets/skills/aida-report/1.0.0",
+			call:   h.DeleteSkill,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, bytes.NewBufferString(tc.body))
+			req = requestWithURLParams(req, map[string]string{"slug": service.ReportSkillSlug, "version": service.ReportSkillVersion})
+			rec := httptest.NewRecorder()
+			tc.call(rec, req)
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+			}
+			var got map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["code"] != reportSkillProtectedCode {
+				t.Fatalf("code = %q", got["code"])
+			}
+		})
+	}
+}
+
+func TestReportMCPProtectedLifecycle(t *testing.T) {
+	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient("https://managed.example.com", "platform-token"), testManagedAgentDefaults())
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		call   func(http.ResponseWriter, *http.Request)
+	}{
+		{
+			name:   "archive",
+			method: http.MethodPost,
+			path:   "/ai-assets/mcp/aida-report-mcp/report-v1/archive",
+			body:   `{"archived":true}`,
+			call:   h.ArchiveMCPEntry,
+		},
+		{
+			name:   "delete",
+			method: http.MethodDelete,
+			path:   "/ai-assets/mcp/aida-report-mcp/report-v1",
+			call:   h.DeleteMCPEntry,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, bytes.NewBufferString(tc.body))
+			req = requestWithURLParams(req, map[string]string{"slug": "aida-report-mcp", "version": "report-v1"})
+			rec := httptest.NewRecorder()
+			tc.call(rec, req)
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+			}
+			var got map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["code"] != reportMCPProtectedCode {
+				t.Fatalf("code = %q", got["code"])
+			}
+		})
+	}
+}
+
+func TestCreateDefaultReportAgentCreatesWhenOnlyOrdinaryAgentExists(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
 	var createdSkill service.CreateManagedSkillRequest
 	var createdMCP model.CreateManagedMCPEntryRequest
 	var createdAgent model.UpsertManagedAgentRequest
-	agents := []model.ManagedAgent{}
+	ordinaryAgent := model.ManagedAgent{AgentID: "agent-generic", Name: "通用 Agent", Engine: "codex"}
 	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
+			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: []model.ManagedAgent{ordinaryAgent}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/skill/list":
 			writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/skill":
@@ -482,24 +639,10 @@ func TestInitializeUserDefaultReportAssetsCreatesUserOwnedAssets(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeJSON(w, http.StatusOK, model.ManagedMCPEntry{EntryID: "mcp-1", Slug: createdMCP.Slug, Version: createdMCP.Version, URL: createdMCP.URL})
-		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
-			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: agents})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/my/agents":
 			if err := json.NewDecoder(r.Body).Decode(&createdAgent); err != nil {
 				t.Fatal(err)
 			}
-			agents = append(agents, model.ManagedAgent{
-				AgentID:             createdAgent.AgentID,
-				Name:                createdAgent.Name,
-				Description:         createdAgent.Description,
-				Engine:              createdAgent.Engine,
-				Instructions:        createdAgent.Instructions,
-				DefaultModelID:      createdAgent.DefaultModelID,
-				StartPromptTemplate: createdAgent.StartPromptTemplate,
-				CredentialSlots:     createdAgent.CredentialSlots,
-				Skills:              createdAgent.Skills,
-				MCPBindings:         createdAgent.MCPBindings,
-			})
 			writeJSON(w, http.StatusOK, model.UpsertManagedAgentResponse{AgentID: createdAgent.AgentID, ManagedVersion: 1})
 		default:
 			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
@@ -507,25 +650,60 @@ func TestInitializeUserDefaultReportAssetsCreatesUserOwnedAssets(t *testing.T) {
 	}))
 	defer platform.Close()
 
-	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
-	result, err := h.InitializeUserDefaultReportAssets(context.Background(), &model.User{ID: "307", Username: "t05", Role: "employee", LocalEnabled: true}, "user-token")
-	if err != nil {
-		t.Fatal(err)
+	mock.ExpectQuery("SELECT agent_id, business_type, report_types").
+		WithArgs("307", "agent-generic").
+		WillReturnRows(sqlmock.NewRows([]string{"agent_id", "business_type", "report_types"}))
+	mock.ExpectExec("INSERT INTO managed_agent_profiles").
+		WithArgs(sqlmock.AnyArg(), "307", managedAgentBusinessReport, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	h := NewManagedAgentHandlerWithDefaults(db, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
+	req := httptest.NewRequest(http.MethodPost, "/ai-assets/report-agents/default", nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	req = requestWithUser(req, &model.User{ID: "307", Username: "t05", Role: "employee"})
+	rec := httptest.NewRecorder()
+
+	h.CreateDefaultReportAgent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
 	}
-	if !result.SkillCreated || !result.MCPCreated || !result.AgentCreated {
-		t.Fatalf("init result = %#v", result)
-	}
-	if createdSkill.Slug != service.ReportSkillSlug || createdSkill.Version != service.ReportSkillVersion || !strings.Contains(createdSkill.SkillMD, "get_sessions") || strings.Contains(createdSkill.SkillMD, "get_"+"report_context") {
+	if createdSkill.Slug != service.ReportSkillSlug || createdSkill.Version != service.ReportSkillVersion || !strings.Contains(createdSkill.SkillMD, "get_sessions") {
 		t.Fatalf("created skill = %#v", createdSkill)
 	}
 	if createdMCP.Slug != "aida-report-mcp" || createdMCP.Version != "report-v1" || createdMCP.CredentialEnv != reportMCPCredentialSlot || strings.Contains(fmt.Sprint(createdMCP), "user-token") {
 		t.Fatalf("created mcp = %#v", createdMCP)
 	}
-	if len(createdAgent.Skills) != 1 || createdAgent.Skills[0].Owner != "t05" || len(createdAgent.MCPBindings) != 1 || createdAgent.MCPBindings[0].Owner != "t05" {
-		t.Fatalf("created agent bindings = skills %#v mcp %#v", createdAgent.Skills, createdAgent.MCPBindings)
+	if createdAgent.AgentID == "" || createdAgent.Name != defaultReportAgentName {
+		t.Fatalf("created agent request=%#v", createdAgent)
 	}
-	if !containsDefaultMarkers(createdAgent.Description) || !strings.Contains(createdAgent.Description, defaultReportAssetsMarker) {
-		t.Fatalf("created agent description = %q", createdAgent.Description)
+	if createdAgent.Engine != "claude-code" || createdAgent.DefaultModelID != "MiniMax-M2.5" {
+		t.Fatalf("engine/model = %q/%q", createdAgent.Engine, createdAgent.DefaultModelID)
+	}
+	if !containsDefaultMarkers(createdAgent.Description) || !containsDefaultMarkers(createdAgent.Instructions) {
+		t.Fatalf("missing default markers: description=%q instructions=%q", createdAgent.Description, createdAgent.Instructions)
+	}
+	if !strings.Contains(createdAgent.Description, defaultReportAgentTypesPrefix+"personal_daily") {
+		t.Fatalf("missing report types marker: %q", createdAgent.Description)
+	}
+	if !hasSkillRef(createdAgent.Skills, service.ReportSkillSlug, service.ReportSkillVersion) {
+		t.Fatalf("skills = %#v", createdAgent.Skills)
+	}
+	if !h.hasReportMCPBinding(createdAgent.MCPBindings) {
+		t.Fatalf("mcp bindings = %#v", createdAgent.MCPBindings)
+	}
+	if !hasCredentialSlot(createdAgent.CredentialSlots, reportMCPCredentialSlot) || createdAgent.MCPBindings[0].CredentialSlot != reportMCPCredentialSlot {
+		t.Fatalf("credential wiring slots=%#v bindings=%#v", createdAgent.CredentialSlots, createdAgent.MCPBindings)
+	}
+	var got model.ManagedAgent
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.BusinessType != managedAgentBusinessReport || !containsString(got.ReportTypes, reportTypePersonalDaily) {
+		t.Fatalf("response = %#v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
 	}
 }
 
@@ -558,7 +736,78 @@ func TestEnsureReportMCPEntryKeepsExistingDifferentURL(t *testing.T) {
 	}
 }
 
-func TestEnsureDefaultReportAgentRepairsMissingFieldsWithoutOverwritingCustomInstructions(t *testing.T) {
+func TestCreateDefaultReportAgentReturnsExistingReportAgent(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	existing := model.ManagedAgent{
+		AgentID:     "agent-report",
+		Name:        "我的报告 Agent",
+		Description: "custom report agent",
+		Engine:      "codex",
+	}
+	postCalled := false
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
+			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: []model.ManagedAgent{existing}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/skill/list":
+			writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{Skills: []model.ManagedSkill{{
+				SkillID: "skill-1",
+				Slug:    service.ReportSkillSlug,
+				Version: service.ReportSkillVersion,
+				Name:    service.ReportSkillName,
+			}}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/mcp/list":
+			writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{Entries: []model.ManagedMCPEntry{{
+				EntryID: "mcp-1",
+				Slug:    "aida-report-mcp",
+				Version: "report-v1",
+			}}})
+		case r.Method == http.MethodPost:
+			postCalled = true
+			t.Fatalf("idempotent create must not post to %s", r.URL.Path)
+		default:
+			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer platform.Close()
+
+	mock.ExpectQuery("SELECT agent_id, business_type, report_types").
+		WithArgs("307", "agent-report").
+		WillReturnRows(sqlmock.NewRows([]string{"agent_id", "business_type", "report_types"}).
+			AddRow("agent-report", managedAgentBusinessReport, []byte(`["personal_daily"]`)))
+	mock.ExpectExec("INSERT INTO managed_agent_profiles").
+		WithArgs("agent-report", "307", managedAgentBusinessReport, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	h := NewManagedAgentHandlerWithDefaults(db, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
+	req := httptest.NewRequest(http.MethodPost, "/ai-assets/report-agents/default", nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	req = requestWithUser(req, &model.User{ID: "307", Username: "t05", Role: "employee"})
+	rec := httptest.NewRecorder()
+
+	h.CreateDefaultReportAgent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got model.ManagedAgent
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentID != "agent-report" || got.BusinessType != managedAgentBusinessReport || postCalled {
+		t.Fatalf("response=%#v postCalled=%v", got, postCalled)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestReportAgentRepairRequestDoesNotOverwriteCustomInstructions(t *testing.T) {
 	customInstructions := defaultReportAgentMarker + "\n" + defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ",") + "\n" + defaultManagedAgentMarker + "\n" + "用户自定义报告写作风格"
 	existing := model.ManagedAgent{
 		AgentID:      "agent-custom",
@@ -567,88 +816,55 @@ func TestEnsureDefaultReportAgentRepairsMissingFieldsWithoutOverwritingCustomIns
 		Engine:       "codex",
 		Instructions: customInstructions,
 	}
-	var updateReq model.UpsertManagedAgentRequest
-	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
-			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: []model.ManagedAgent{existing}})
-		case r.Method == http.MethodPut && r.URL.Path == "/api/my/agents/agent-custom":
-			if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
-				t.Fatal(err)
-			}
-			writeJSON(w, http.StatusOK, model.UpsertManagedAgentResponse{AgentID: "agent-custom", ManagedVersion: 2})
-		default:
-			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer platform.Close()
-
-	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
-	agentID, err := h.ensureDefaultReportAgent(httptest.NewRequest(http.MethodPost, "/", nil), h.client)
-	if err != nil {
-		t.Fatal(err)
+	h := NewManagedAgentHandlerWithDefaults(nil, nil, testManagedAgentDefaults())
+	repairReq, changed := h.repairedDefaultReportAgentRequest(existing, "t05")
+	if !changed || repairReq.DefaultModelID != "MiniMax-M2.5" || !h.hasReportMCPBinding(repairReq.MCPBindings) || !hasCredentialSlot(repairReq.CredentialSlots, reportMCPCredentialSlot) {
+		t.Fatalf("repair request = %#v changed=%v", repairReq, changed)
 	}
-	if agentID != "agent-custom" {
-		t.Fatalf("agent id = %q", agentID)
+	if repairReq.Engine != "codex" {
+		t.Fatalf("custom engine should not be overwritten, got %q", repairReq.Engine)
 	}
-	if updateReq.DefaultModelID != "MiniMax-M2.5" || !h.hasReportMCPBinding(updateReq.MCPBindings) || !hasCredentialSlot(updateReq.CredentialSlots, reportMCPCredentialSlot) {
-		t.Fatalf("repair request = %#v", updateReq)
-	}
-	if updateReq.Engine != "codex" {
-		t.Fatalf("custom engine should not be overwritten, got %q", updateReq.Engine)
-	}
-	if updateReq.Instructions != customInstructions {
-		t.Fatalf("custom instructions overwritten: %q", updateReq.Instructions)
+	if repairReq.Instructions != customInstructions {
+		t.Fatalf("custom instructions overwritten: %q", repairReq.Instructions)
 	}
 }
 
-func TestEnsureDefaultReportAgentReusesBestCandidate(t *testing.T) {
-	agents := []model.ManagedAgent{
-		{
-			AgentID:     "agent-old",
-			Name:        defaultReportAgentName,
-			Description: defaultReportAssetsMarker + "\n" + defaultReportAgentMarker + "\n" + defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ",") + "\n" + defaultManagedAgentMarker,
-			CreatedAt:   1,
-		},
-		{
-			AgentID:             "agent-complete",
-			Name:                defaultReportAgentName,
-			Description:         defaultReportAssetsMarker + "\n" + defaultReportAgentMarker + "\n" + defaultReportAgentTypesPrefix + strings.Join(supportedReportTypes, ",") + "\n" + defaultManagedAgentMarker,
-			Engine:              "claude-code",
-			DefaultModelID:      "MiniMax-M2.5",
-			Instructions:        defaultReportAgentInstructions(),
-			StartPromptTemplate: defaultReportAgentStartPromptTemplate(),
-			CredentialSlots:     []model.ManagedCredentialSlot{{Name: reportMCPCredentialSlot, Required: true}},
-			Skills:              []model.ManagedSkillRef{{Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion}},
-			MCPBindings:         []model.ManagedMCPBinding{{Slug: "aida-report-mcp", Version: "report-v1", CredentialSlot: reportMCPCredentialSlot}},
-			CreatedAt:           2,
-		},
-	}
-	createCalled := false
-	updateCalled := false
-	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
-			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: agents})
-		case r.Method == http.MethodPost && r.URL.Path == "/api/my/agents":
-			createCalled = true
-			t.Fatalf("should not create when a marked default candidate exists")
-		case r.Method == http.MethodPut:
-			updateCalled = true
-			t.Fatalf("complete candidate should not be repaired")
-		default:
-			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer platform.Close()
-
-	h := NewManagedAgentHandlerWithDefaults(nil, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
-	agentID, err := h.ensureDefaultReportAgent(httptest.NewRequest(http.MethodPost, "/", nil), h.client)
+func TestSelectReportAgentPrefersProfileBusinessType(t *testing.T) {
+	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agentID != "agent-complete" || createCalled || updateCalled {
-		t.Fatalf("agent id=%q create=%v update=%v", agentID, createCalled, updateCalled)
+	defer db.Close()
+
+	agents := []model.ManagedAgent{
+		{
+			AgentID:   "agent-generic",
+			Name:      "普通 Agent",
+			Engine:    "codex",
+			CreatedAt: 2,
+		},
+		{
+			AgentID:   "agent-report",
+			Name:      "自定义报告 Agent",
+			Engine:    "codex",
+			CreatedAt: 1,
+		},
+	}
+	mock.ExpectQuery("SELECT agent_id, business_type, report_types").
+		WithArgs("307", "agent-generic", "agent-report").
+		WillReturnRows(sqlmock.NewRows([]string{"agent_id", "business_type", "report_types"}).
+			AddRow("agent-report", managedAgentBusinessReport, []byte(`["personal_daily","personal_weekly"]`)))
+
+	h := NewManagedAgentHandlerWithDefaults(db, nil, testManagedAgentDefaults())
+	selected, found, err := h.selectReportAgentForUser(context.Background(), "307", agents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || selected.AgentID != "agent-report" || selected.BusinessType != managedAgentBusinessReport {
+		t.Fatalf("selected=%#v found=%v", selected, found)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
 	}
 }
 
@@ -667,16 +883,35 @@ func TestStartReportAgentRunUsesSessionCredentialOverrides(t *testing.T) {
 		DefaultModelID:      "MiniMax-M2.5",
 		Instructions:        defaultReportAgentInstructions(),
 		StartPromptTemplate: defaultReportAgentStartPromptTemplate(),
-		CredentialSlots:     []model.ManagedCredentialSlot{{Name: reportMCPCredentialSlot, Required: true}},
 		Skills:              []model.ManagedSkillRef{{Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion}},
-		MCPBindings:         []model.ManagedMCPBinding{{Slug: "aida-report-mcp", Version: "report-v1", CredentialSlot: reportMCPCredentialSlot}},
+		MCPBindings:         []model.ManagedMCPBinding{{Slug: "aida-report-mcp", Version: "report-v1"}},
 	}
 	var createdCredential service.CreateManagedCredentialRequest
 	var createdSession service.CreateManagedSessionRequest
+	var updatedAgent model.UpsertManagedAgentRequest
 	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
 			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: []model.ManagedAgent{reportAgent}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/skill/list":
+			writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{Skills: []model.ManagedSkill{{
+				SkillID: "skill-1",
+				Slug:    service.ReportSkillSlug,
+				Version: service.ReportSkillVersion,
+				Name:    service.ReportSkillName,
+			}}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/mcp/list":
+			writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{Entries: []model.ManagedMCPEntry{{
+				EntryID: "mcp-1",
+				Slug:    "aida-report-mcp",
+				Version: "report-v1",
+				URL:     "https://aida.example.com/api/v1/mcp/reports",
+			}}})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/my/agents/agent-report":
+			if err := json.NewDecoder(r.Body).Decode(&updatedAgent); err != nil {
+				t.Fatal(err)
+			}
+			writeJSON(w, http.StatusOK, model.UpsertManagedAgentResponse{AgentID: "agent-report", ManagedVersion: 2})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/credential":
 			if err := json.NewDecoder(r.Body).Decode(&createdCredential); err != nil {
 				t.Fatal(err)
@@ -739,10 +974,123 @@ func TestStartReportAgentRunUsesSessionCredentialOverrides(t *testing.T) {
 	if createdSession.CredentialOverrides[reportMCPCredentialSlot] != "cred-1" {
 		t.Fatalf("credential overrides = %#v", createdSession.CredentialOverrides)
 	}
+	if !hasCredentialSlot(updatedAgent.CredentialSlots, reportMCPCredentialSlot) || updatedAgent.MCPBindings[0].CredentialSlot != reportMCPCredentialSlot {
+		t.Fatalf("report dependency repair = %#v", updatedAgent)
+	}
 	if _, ok := createdSession.StartPromptValues["mcp_"+"authorization"]; ok {
 		t.Fatalf("start prompt values should not contain authorization field: %#v", createdSession.StartPromptValues)
 	}
 	if createdSession.StartPromptValues["run_id"] != "run-report" || createdSession.StartPromptValues["mcp_url"] != "https://aida.example.com/api/v1/mcp/reports" {
+		t.Fatalf("start prompt values = %#v", createdSession.StartPromptValues)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestStartReportAgentRunFallsBackToMessageWhenTemplateMissing(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	reportAgent := model.ManagedAgent{
+		AgentID:        "agent-report",
+		Name:           "自定义报告 Agent",
+		Description:    "汇报用的",
+		Engine:         "claude-code",
+		DefaultModelID: "MiniMax-M2.5",
+		CredentialSlots: []model.ManagedCredentialSlot{{
+			Name:     reportMCPCredentialSlot,
+			Required: true,
+		}},
+		Skills:      []model.ManagedSkillRef{{Owner: "t03", Slug: service.ReportSkillSlug, Version: service.ReportSkillVersion}},
+		MCPBindings: []model.ManagedMCPBinding{{Owner: "t03", Slug: "aida-report-mcp", Version: "report-v1", CredentialSlot: reportMCPCredentialSlot}},
+	}
+	var createdSession service.CreateManagedSessionRequest
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/my/agents":
+			writeJSON(w, http.StatusOK, model.ListManagedAgentsResponse{Agents: []model.ManagedAgent{reportAgent}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/skill/list":
+			writeJSON(w, http.StatusOK, model.ListManagedSkillsResponse{Skills: []model.ManagedSkill{{
+				SkillID: "skill-1",
+				Slug:    service.ReportSkillSlug,
+				Version: service.ReportSkillVersion,
+				Name:    service.ReportSkillName,
+			}}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/mcp/list":
+			writeJSON(w, http.StatusOK, model.ListManagedMCPEntriesResponse{Entries: []model.ManagedMCPEntry{{
+				EntryID:            "mcp-1",
+				Slug:               "aida-report-mcp",
+				Version:            "report-v1",
+				URL:                "https://aida.example.com/api/v1/mcp/reports",
+				RequiresCredential: true,
+				CredentialEnv:      reportMCPCredentialSlot,
+				AuthHeader:         "Authorization",
+				AuthScheme:         "Bearer",
+			}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/credential":
+			writeJSON(w, http.StatusOK, service.CreateManagedCredentialResponse{CredentialID: "cred-1"})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/session":
+			if err := json.NewDecoder(r.Body).Decode(&createdSession); err != nil {
+				t.Fatal(err)
+			}
+			writeJSON(w, http.StatusOK, service.CreateManagedSessionResponse{
+				SessionID: "session-1",
+				Status:    "running",
+				ModelID:   "MiniMax-M2.5",
+			})
+		default:
+			t.Fatalf("unexpected platform request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer platform.Close()
+
+	now := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
+	safeInputRef := jsonStringArg{
+		require: []string{"personal_daily", "2026-07-01"},
+		forbid:  []string{"cred-1"},
+	}
+	mock.ExpectQuery("SELECT agent_id, business_type, report_types").
+		WithArgs("305", "agent-report").
+		WillReturnRows(sqlmock.NewRows([]string{"agent_id", "business_type", "report_types"}).
+			AddRow("agent-report", managedAgentBusinessReport, []byte(`["personal_daily"]`)))
+	mock.ExpectQuery("INSERT INTO ai_runs").
+		WithArgs("305", reportAgentRunBusinessType, "agent-report", "MiniMax-M2.5", safeInputRef).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("run-report"))
+	mock.ExpectExec("UPDATE ai_runs SET external_session_id").
+		WithArgs("session-1", "MiniMax-M2.5", "running", jsonStringArg{
+			require: []string{"personal_daily", "2026-07-01", "请生成 Aida 报告。", "report_type=personal_daily"},
+			forbid:  []string{"cred-1"},
+		}, "run-report", "305").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("SELECT id::text").
+		WithArgs("run-report", "305").
+		WillReturnRows(sqlmock.NewRows(aiRunColumns()).
+			AddRow("run-report", "305", reportAgentRunBusinessType, nil, "managed_session", "agent-report", nil, nil, "session-1", "MiniMax-M2.5", "running", []byte(`{"trigger_source":"manual","report_type":"personal_daily","period":{"date":"2026-07-01"},"target":{"type":"self","user_id":"305"},"model_id":"MiniMax-M2.5","mcp_url":"https://aida.example.com/api/v1/mcp/reports","credential_slot":"AIDA_REPORT_MCP_AUTH","start_prompt_values":{"report_type":"personal_daily","report_date":"2026-07-01"},"message":"请生成 Aida 报告。\nreport_type=personal_daily\ndate=2026-07-01\ntarget_type=self\ntarget_user_id=305","credential_override":"redacted"}`), []byte(`{}`), nil, now, nil, now))
+
+	h := NewManagedAgentHandlerWithDefaults(db, service.NewManagedAgentClient(platform.URL, "platform-token"), testManagedAgentDefaults())
+	req := httptest.NewRequest(http.MethodPost, "/ai-assets/report-agents/agent-report/runs", bytes.NewBufferString(`{"report_type":"personal_daily","period":{"date":"2026-07-01"},"target":{"type":"self"},"model_id":"MiniMax-M2.5"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer user-token")
+	req = requestWithURLParam(req, "agentId", "agent-report")
+	req = requestWithUser(req, &model.User{ID: "305", Username: "t03"})
+	rec := httptest.NewRecorder()
+
+	h.StartReportAgentRun(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(createdSession.Message) == "" {
+		t.Fatalf("expected fallback message, got session=%#v", createdSession)
+	}
+	if !strings.Contains(createdSession.Message, "report_type=personal_daily") {
+		t.Fatalf("unexpected fallback message: %q", createdSession.Message)
+	}
+	if createdSession.StartPromptValues["report_type"] != "personal_daily" {
 		t.Fatalf("start prompt values = %#v", createdSession.StartPromptValues)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

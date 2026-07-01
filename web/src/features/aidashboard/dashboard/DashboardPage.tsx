@@ -726,7 +726,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         name: "今日部门日报",
         status: "待生成",
         description: "暂无部门日报，可直接填写。",
-        sourceSummary: "各组日报、各组发送情况、部门重点需求、高优先级风险、跨组依赖和阻塞",
+        sourceSummary: "报告 Agent / MCP 上下文、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
       createReport({
@@ -2102,7 +2102,7 @@ function ReportSection({
               {summaryDailyReport ? (
                 <ReportSummaryInlineRow
                   report={summaryDailyReport}
-                  meta={coverage ? getCoverageSummary(summaryDailyReport, coverage) : undefined}
+                  meta={coverage ? getCoverageSummary(summaryDailyReport) : undefined}
                   onOpen={onOpen}
                 />
               ) : null}
@@ -2116,7 +2116,6 @@ function ReportSection({
               {summaryWeeklyReport ? (
                 <ReportManagementWeeklyInlineRow
                   report={summaryWeeklyReport}
-                  coverage={coverage}
                   onOpen={onOpen}
                 />
               ) : null}
@@ -2233,11 +2232,9 @@ function ReportWeeklyInlineRow({
 
 function ReportManagementWeeklyInlineRow({
   report,
-  coverage,
   onOpen
 }: {
   report: ReportItem;
-  coverage?: ReportCoverage;
   onOpen: (report: ReportItem, step?: ReportModalStep) => void;
 }) {
   return (
@@ -2248,7 +2245,7 @@ function ReportManagementWeeklyInlineRow({
           <ReportStatusTag status={report.status} />
         </span>
         <span className="console-report-inline-meta">
-          {getManagementWeeklyInlineCopy(report, coverage)}
+          {getManagementWeeklyInlineCopy(report)}
         </span>
       </div>
       <Button
@@ -2407,27 +2404,23 @@ function getManagementWeeklyLabel(report: ReportItem) {
   return report.kind === "department_weekly" ? "部门周报" : "小组周报";
 }
 
-function getManagementWeeklyInlineCopy(report: ReportItem, coverage?: ReportCoverage) {
+function getManagementWeeklyInlineCopy(report: ReportItem) {
   if (report.status === "已归档") return "已保存";
   if (report.status === "已发送") return "已保存";
   if (report.status === "已保存") return "可继续编辑";
   if (report.status === "生成中") return "可打开编辑";
   if (report.status === "生成失败") return "可打开编辑";
-  if (!coverage) return "暂无周报，可直接填写";
-
-  if (report.kind === "department_weekly") {
-    return `已收集 ${coverage.submitted}/${coverage.expected} 组周报`;
-  }
-
-  return `已收集 ${coverage.submitted} 篇个人周报`;
+  return "暂无周报，可通过 Agent 生成";
 }
 
-function getCoverageSummary(report: ReportItem, coverage: ReportCoverage) {
-  if (report.scope === "department") {
-    return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 组未发送`;
+function getCoverageSummary(report: ReportItem) {
+  if (report.scope === "team" || report.kind === "team_weekly") {
+    return "报告由 Agent / MCP 生成，成员发送状态不在当前服务统计";
   }
-
-  return `${coverage.submitted}/${coverage.expected} 已发送 · ${coverage.missing} 人未发送`;
+  if (report.scope === "department" || report.kind === "department_weekly") {
+    return "报告由 Agent / MCP 生成，小组发送状态不在当前服务统计";
+  }
+  return "报告由 Agent / MCP 生成";
 }
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
@@ -2933,11 +2926,11 @@ function getReportSourceTitle(report: ReportItem) {
 
 function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
   if (report.scope === "team" && coverage) {
-    return `成员发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
+    return "报告由 Agent / MCP 生成，成员发送状态不在当前服务统计";
   }
 
   if (report.scope === "department" && coverage) {
-    return `各组发送情况：应发送 ${coverage.expected}，已发送 ${coverage.submitted}，未发送 ${coverage.missing}`;
+    return "报告由 Agent / MCP 生成，小组发送状态不在当前服务统计";
   }
 
   return "旧报告配置流程已停用。";
@@ -2949,11 +2942,11 @@ function getEditorMeta(report: ReportItem) {
   }
 
   if (report.kind === "department_daily") {
-    return [`已关联 ${report.sessionCount} 个小组日报`, "来源：小组日报"];
+    return ["报告 Agent / MCP 上下文", "来源：系统报告能力"];
   }
 
   if (report.kind === "team_daily") {
-    return [`已关联 ${report.sessionCount} 份成员日报`, "来源：成员原始日报"];
+    return ["报告 Agent / MCP 上下文", "来源：系统报告能力"];
   }
 
   return [report.sourceSummary, report.skill];
@@ -3526,8 +3519,6 @@ function TeamSourceReview({
 
   const members = sources.members;
   const total = members.length;
-  const submitted = sources.submitted ?? members.filter((member) => member.has_report).length;
-  const missing = sources.missing ?? total - submitted;
   const edited = members.filter(
     (member) => member.has_report && member.content.trim().length > 0
   ).length;
@@ -3537,8 +3528,7 @@ function TeamSourceReview({
       <div className="console-session-modal__section">
         <strong>确认成员原始日报来源</strong>
         <span>
-          {sources.team_name} · {sources.report_date} · 已收集 {submitted}/{total} 份成员日报，
-          {missing} 人未发送。
+          {sources.team_name} · {sources.report_date} · 报告由 Agent / MCP 生成，成员发送状态不在当前服务统计。
         </span>
       </div>
 
@@ -3548,25 +3538,15 @@ function TeamSourceReview({
           <em>成员总数</em>
         </span>
         <span>
-          <strong>{submitted}</strong>
-          <em>已发送</em>
-        </span>
-        <span>
-          <strong>{missing}</strong>
-          <em>未发送</em>
-        </span>
-        <span>
           <strong>{edited}</strong>
-          <em>已编辑</em>
+          <em>可用来源</em>
         </span>
       </div>
 
       <section className="console-department-source__block console-team-source__block">
         <div className="console-department-source__head">
           <strong>成员原始日报</strong>
-          <Tag color={missing > 0 ? "gold" : "green"}>
-            {submitted}/{total} 已发送
-          </Tag>
+          <Tag color="blue">Agent 来源</Tag>
         </div>
         {members.length === 0 ? (
           <div className="console-session-empty">暂无团队成员</div>
@@ -3584,14 +3564,14 @@ function TeamSourceReview({
                     <div className="console-team-source__member">
                       <strong title={member.user_name}>{member.user_name}</strong>
                       <Tag color={member.has_report ? "blue" : "gold"} variant="filled">
-                        {member.has_report ? "已发送" : "未发送"}
+                        {member.has_report ? "有来源" : "无来源"}
                       </Tag>
                     </div>
                     <div className="console-team-source__actions">
                       <time>
                         {member.submitted_at
                           ? formatDateTime(member.submitted_at, "HH:mm")
-                          : "未发送"}
+                          : "无来源"}
                       </time>
                       {member.has_report ? (
                         <Button
@@ -3608,7 +3588,7 @@ function TeamSourceReview({
                       {member.content || "暂无内容"}
                     </pre>
                   ) : !member.has_report ? (
-                    <p className="console-team-source__missing-note">成员今日尚未发送原始日报。</p>
+                    <p className="console-team-source__missing-note">当前没有可用的成员原始日报来源。</p>
                   ) : null}
                 </article>
               );
@@ -3653,18 +3633,17 @@ function DepartmentSourceReview({
       <div className="console-session-modal__section">
         <strong>确认小组日报来源</strong>
         <span>
-          已收集 {sources.submitted_team_count}/{sources.total_team_count} 个小组日报，
-          {missing.length} 个小组未发送。
+          报告由 Agent / MCP 生成，小组发送状态不在当前服务统计。
         </span>
       </div>
 
       <section className="console-department-source__block">
         <div className="console-department-source__head">
-          <strong>已发送小组</strong>
-          <Tag color="blue">{submitted.length} 组</Tag>
+          <strong>小组日报来源</strong>
+          <Tag color="blue">Agent 来源</Tag>
         </div>
         {submitted.length === 0 ? (
-          <div className="console-session-empty">暂无已发送小组日报</div>
+          <div className="console-session-empty">暂无可用小组日报来源</div>
         ) : (
           <div className="console-department-source__list">
             {submitted.map((item) => {
@@ -3703,11 +3682,11 @@ function DepartmentSourceReview({
 
       <section className="console-department-source__block">
         <div className="console-department-source__head">
-          <strong>未发送小组</strong>
+          <strong>暂无来源小组</strong>
           <Tag color={missing.length > 0 ? "gold" : "green"}>{missing.length} 组</Tag>
         </div>
         {missing.length === 0 ? (
-          <div className="console-session-empty">所有小组均已发送</div>
+          <div className="console-session-empty">所有小组都有可用来源</div>
         ) : (
           <div className="console-department-source__missing">
             {missing.map((team) => (
