@@ -1012,13 +1012,26 @@ func userCountEntries(m map[string]int, infoMap map[string]userInfo) []map[strin
 	return out
 }
 
+func dailyReportDateKey(value string) string {
+	if len(value) >= len("2006-01-02") {
+		candidate := value[:len("2006-01-02")]
+		if _, err := time.Parse("2006-01-02", candidate); err == nil {
+			return candidate
+		}
+	}
+	return value
+}
+
 func computeDailyMissing(ctx context.Context, db *sql.DB, reportScope string, visible []string, start, end string, reports []dailyReportItem) []map[string]any {
 	if reportScope != "personal" {
 		return []map[string]any{}
 	}
 	existing := map[string]bool{}
 	for _, r := range reports {
-		existing[r.Owner.UserID+"|"+r.Date] = true
+		if r.Owner.UserID == "" {
+			continue
+		}
+		existing[r.Owner.UserID+"|"+dailyReportDateKey(r.Date)] = true
 	}
 	infoMap, _ := loadUserInfoMap(ctx, db, visible)
 	missing := []map[string]any{}

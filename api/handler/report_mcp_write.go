@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -14,10 +15,14 @@ import (
 
 // reportAIRun is the validated AI run after aiRunGuard.
 type reportAIRun struct {
-	ID        string
-	AgentID   string
-	ModelID   *string
-	CreatedAt time.Time
+	ID           string
+	BusinessType string
+	AgentID      string
+	ModelID      *string
+	Status       string
+	InputRef     map[string]any
+	OutputRef    map[string]any
+	CreatedAt    time.Time
 }
 
 type writeReportResultArgs struct {
@@ -66,6 +71,18 @@ func (h *ReportMCPHandler) toolWriteReportResult(r *http.Request, rawArgs json.R
 	if content == "" {
 		return nil, mcpErr("INVALID_ARGUMENT", "content is required")
 	}
+	resultHash := reportResultHash(content)
+	if idempotent, reportID, err := validateReportWriteAllowed(run, args.ReportType, date, ws, we, target, resultHash); err != nil {
+		return nil, err
+	} else if idempotent {
+		return mcpTextResult(map[string]any{
+			"status":          "saved",
+			"report_id":       reportID,
+			"report_type":     args.ReportType,
+			"agent_run_id":    run.ID,
+			"already_written": true,
+		}), nil
+	}
 
 	ctx := r.Context()
 	tx, err := h.db.BeginTx(ctx, nil)
@@ -94,13 +111,18 @@ func (h *ReportMCPHandler) toolWriteReportResult(r *http.Request, rawArgs json.R
 		return nil, errMCPInternal
 	}
 
-	outputRef, _ := json.Marshal(map[string]any{
-		"report_type": args.ReportType,
-		"date":        date,
-		"week_start":  ws,
-		"week_end":    we,
-		"summary":     args.Summary,
-	})
+	outputPayload := map[string]any{
+		"report_type":        args.ReportType,
+		"report_id":          reportID,
+		"date":               date,
+		"week_start":         ws,
+		"week_end":           we,
+		"target":             target,
+		"summary":            args.Summary,
+		"report_result_hash": resultHash,
+	}
+	copyReportRunMetadata(outputPayload, run.InputRef)
+	outputRef, _ := json.Marshal(outputPayload)
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE ai_runs
 		SET status = 'succeeded',
@@ -127,6 +149,17 @@ func (h *ReportMCPHandler) toolWriteReportResult(r *http.Request, rawArgs json.R
 	}), nil
 }
 
+func copyReportRunMetadata(out map[string]any, input map[string]any) {
+	if out == nil || input == nil {
+		return
+	}
+	for _, key := range []string{"trigger_source", "scheduled_trigger_at", "schedule_id", "schedule_name"} {
+		if value := strings.TrimSpace(stringFromAny(input[key])); value != "" {
+			out[key] = value
+		}
+	}
+}
+
 func (h *ReportMCPHandler) toolWriteReportFailure(r *http.Request, rawArgs json.RawMessage) (any, error) {
 	u, err := requireUser(r)
 	if err != nil {
@@ -148,7 +181,11 @@ func (h *ReportMCPHandler) toolWriteReportFailure(r *http.Request, rawArgs json.
 	if strings.TrimSpace(args.RunID) == "" {
 		return nil, mcpErr("INVALID_ARGUMENT", "run_id is required")
 	}
-	if _, err := h.aiRunGuard(r, args.RunID, u.ID); err != nil {
+	run, err := h.aiRunGuard(r, args.RunID, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateReportFailureAllowed(run); err != nil {
 		return nil, err
 	}
 	errorMessage := strings.TrimSpace(args.ErrorMessage)
@@ -184,11 +221,12 @@ func (h *ReportMCPHandler) aiRunGuard(r *http.Request, runID, userID string) (*r
 	var run reportAIRun
 	var modelID sql.NullString
 	var createdAt sql.NullTime
+	var inputRaw, outputRaw []byte
 	err := h.db.QueryRowContext(r.Context(), `
-		SELECT id::text, COALESCE(agent_id, ''), model_id, created_at
+		SELECT id::text, business_type, COALESCE(agent_id, ''), model_id, status, input_ref_json, output_ref_json, created_at
 		FROM ai_runs
 		WHERE id::text = $1 AND user_id = $2`, runID, userID).
-		Scan(&run.ID, &run.AgentID, &modelID, &createdAt)
+		Scan(&run.ID, &run.BusinessType, &run.AgentID, &modelID, &run.Status, &inputRaw, &outputRaw, &createdAt)
 	if err == sql.ErrNoRows {
 		return nil, errRunNotFound
 	}
@@ -202,7 +240,120 @@ func (h *ReportMCPHandler) aiRunGuard(r *http.Request, runID, userID string) (*r
 	if createdAt.Valid {
 		run.CreatedAt = createdAt.Time
 	}
+	_ = json.Unmarshal(inputRaw, &run.InputRef)
+	_ = json.Unmarshal(outputRaw, &run.OutputRef)
+	if run.InputRef == nil {
+		run.InputRef = map[string]any{}
+	}
+	if run.OutputRef == nil {
+		run.OutputRef = map[string]any{}
+	}
 	return &run, nil
+}
+
+func reportResultHash(content string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(content)))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+func validateReportWriteAllowed(run *reportAIRun, reportType, date, ws, we string, target reportTarget, resultHash string) (bool, string, error) {
+	if run.BusinessType != reportAgentRunBusinessType {
+		return false, "", mcpErr("RUN_NOT_WRITABLE", "run is not a Report Agent run")
+	}
+	if run.Status == "failed" || run.Status == "timeout" || run.Status == "pending" {
+		return false, "", mcpErr("RUN_NOT_WRITABLE", "run status does not allow report write")
+	}
+	if err := validateRunReportIdentity(run.InputRef, reportType, date, ws, we, target); err != nil {
+		return false, "", err
+	}
+	if run.Status != "succeeded" {
+		if run.Status == "running" {
+			return false, "", nil
+		}
+		return false, "", mcpErr("RUN_NOT_WRITABLE", "run status does not allow report write")
+	}
+	if stringFromAny(run.OutputRef["report_result_hash"]) != resultHash {
+		return false, "", mcpErr("REPORT_WRITE_CONFLICT", "report payload hash conflicts with existing result")
+	}
+	if err := validateRunReportIdentity(run.OutputRef, reportType, date, ws, we, target); err != nil {
+		return false, "", err
+	}
+	reportID := stringFromAny(run.OutputRef["report_id"])
+	return true, reportID, nil
+}
+
+func validateReportFailureAllowed(run *reportAIRun) error {
+	if run.BusinessType != reportAgentRunBusinessType || run.Status == "failed" || run.Status == "timeout" || run.Status == "succeeded" {
+		return mcpErr("RUN_NOT_WRITABLE", "run status does not allow failure write")
+	}
+	return nil
+}
+
+func validateRunReportIdentity(ref map[string]any, reportType, date, ws, we string, target reportTarget) error {
+	if len(ref) == 0 {
+		return nil
+	}
+	if existing := stringFromAny(ref["report_type"]); existing != "" && existing != reportType {
+		return mcpErr("REPORT_WRITE_CONFLICT", "report_type does not match run")
+	}
+	if existing := stringFromAny(ref["date"]); existing != "" && date != "" && existing != date {
+		return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+	}
+	if existing := stringFromAny(ref["week_start"]); existing != "" && ws != "" && existing != ws {
+		return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+	}
+	if existing := stringFromAny(ref["week_end"]); existing != "" && we != "" && existing != we {
+		return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+	}
+	if periodRaw, ok := ref["period"]; ok {
+		if period, ok := stringMapFromAny(periodRaw); ok {
+			if existing := period["date"]; existing != "" && date != "" && existing != date {
+				return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+			}
+			if existing := period["week_start"]; existing != "" && ws != "" && existing != ws {
+				return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+			}
+			if existing := period["week_end"]; existing != "" && we != "" && existing != we {
+				return mcpErr("REPORT_WRITE_CONFLICT", "period does not match run")
+			}
+		}
+	}
+	if targetRaw, ok := ref["target"]; ok {
+		if existing, ok := stringMapFromAny(targetRaw); ok {
+			if value := existing["type"]; value != "" && value != target.Type {
+				return mcpErr("REPORT_WRITE_CONFLICT", "target does not match run")
+			}
+			if value := existing["user_id"]; value != "" && value != target.UserID {
+				return mcpErr("REPORT_WRITE_CONFLICT", "target does not match run")
+			}
+			if value := existing["team_id"]; value != "" && value != target.TeamID {
+				return mcpErr("REPORT_WRITE_CONFLICT", "target does not match run")
+			}
+			if value := existing["department_id"]; value != "" && value != target.DepartmentID {
+				return mcpErr("REPORT_WRITE_CONFLICT", "target does not match run")
+			}
+		}
+	}
+	return nil
+}
+
+func stringMapFromAny(value any) (map[string]string, bool) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	out := map[string]string{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+func stringFromAny(value any) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	return ""
 }
 
 // existingReportRow is the SELECT FOR UPDATE result used for the防覆盖 check.

@@ -50,16 +50,31 @@ func main() {
 	sessionH := handler.NewSessionHandler(database, minioStore, aiClient)
 	reportH := handler.NewReportHandler(database, cfg.ReportGeneratorURL)
 	managedAgentH := handler.NewManagedAgentHandlerWithDefaults(database, managedAgentClient, handler.ManagedAgentDefaults{
-		Engine:            cfg.ManagedAgentDefaultEngine,
-		ModelID:           cfg.ManagedAgentDefaultModelID,
-		ReportMCPSlug:     cfg.ManagedAgentReportMCPSlug,
-		ReportMCPVersion:  cfg.ManagedAgentReportMCPVersion,
-		AIDAPublicBaseURL: cfg.AIDAPublicBaseURL,
+		Engine:                         cfg.ManagedAgentDefaultEngine,
+		ModelID:                        cfg.ManagedAgentDefaultModelID,
+		ReportSkillSlug:                cfg.ManagedAgentReportSkillSlug,
+		ReportSkillVersion:             cfg.ManagedAgentReportSkillVersion,
+		ReportSkillName:                cfg.ManagedAgentReportSkillName,
+		ReportSkillDescription:         cfg.ManagedAgentReportSkillDescription,
+		ReportSkillMarkdown:            cfg.ManagedAgentReportSkillMarkdown,
+		ReportMCPSlug:                  cfg.ManagedAgentReportMCPSlug,
+		ReportMCPVersion:               cfg.ManagedAgentReportMCPVersion,
+		ReportMCPName:                  cfg.ManagedAgentReportMCPName,
+		ReportMCPDescription:           cfg.ManagedAgentReportMCPDescription,
+		ReportMCPCredentialSlot:        cfg.ManagedAgentReportCredentialSlot,
+		ReportAgentName:                cfg.ManagedAgentReportAgentName,
+		ReportAgentDescription:         cfg.ManagedAgentReportAgentDescription,
+		ReportAgentInstructions:        cfg.ManagedAgentReportAgentInstructions,
+		ReportAgentStartPromptTemplate: cfg.ManagedAgentReportAgentStartPrompt,
+		ReportAssetRepair:              cfg.ManagedAgentReportAssetRepair,
+		ReportAssetRepairConfigured:    true,
+		AIDAPublicBaseURL:              cfg.AIDAPublicBaseURL,
+		AIHubSecret:                    cfg.AIHubSecret,
 	})
 	dailyReportMCPH := handler.NewReportMCPHandler(database)
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
-	service.NewManagedAgentScheduleRunner(database, managedAgentClient).Start(schedulerCtx)
+	handler.NewManagedAgentScheduleRunner(managedAgentH).Start(schedulerCtx)
 	service.NewManagedAgentRunStatusSyncer(database, managedAgentClient).Start(schedulerCtx)
 	docH := handler.NewDocumentHandler(database)
 	tokenH := handler.NewTokenHandler(database)
@@ -212,6 +227,7 @@ func main() {
 		r.Get("/ai-assets/agent-runs", managedAgentH.ListAgentRuns)
 		r.Get("/ai-assets/agent-runs/{runId}", managedAgentH.GetAgentRun)
 		r.Get("/ai-assets/agent-schedules", managedAgentH.ListAgentSchedules)
+		r.Post("/ai-assets/agent-schedules/preview", managedAgentH.PreviewAgentSchedule)
 		r.Post("/ai-assets/agent-schedules", managedAgentH.CreateAgentSchedule)
 		r.Put("/ai-assets/agent-schedules/{scheduleId}", managedAgentH.UpdateAgentSchedule)
 		r.Delete("/ai-assets/agent-schedules/{scheduleId}", managedAgentH.DeleteAgentSchedule)

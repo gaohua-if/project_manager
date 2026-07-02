@@ -10,7 +10,14 @@ import (
 	"time"
 )
 
-const ManagedAgentRunTimeout = time.Hour
+const (
+	ManagedAgentPendingTimeout         = 10 * time.Minute
+	ManagedAgentSessionTimeout         = 30 * time.Minute
+	ManagedAgentRunTimeout             = 2 * time.Hour
+	ManagedAgentReportWritebackGrace   = 2 * time.Minute
+	managedReportAgentRunBusinessType  = "report_agent_run"
+	reportWritebackMissingErrorMessage = "managed agent session completed without report writeback"
+)
 
 type ManagedAgentRunStatusSyncer struct {
 	db         *sql.DB
@@ -21,10 +28,14 @@ type ManagedAgentRunStatusSyncer struct {
 }
 
 type managedAgentRunStatusRow struct {
-	ID             string
-	ExternalTaskID string
-	Status         string
-	StartedAt      time.Time
+	ID                string
+	ExternalTaskID    string
+	ExternalSessionID string
+	Status            string
+	BusinessType      string
+	BusinessID        string
+	OutputRefJSON     []byte
+	StartedAt         time.Time
 }
 
 func NewManagedAgentRunStatusSyncer(db *sql.DB, client *ManagedAgentClient) *ManagedAgentRunStatusSyncer {
@@ -63,12 +74,13 @@ func (s *ManagedAgentRunStatusSyncer) Start(ctx context.Context) {
 
 func (s *ManagedAgentRunStatusSyncer) RunOnce(ctx context.Context, now time.Time) error {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id::text, external_task_id, status, COALESCE(started_at, created_at)
-		FROM ai_runs
-		WHERE external_task_id IS NOT NULL
-			AND status NOT IN ('succeeded', 'failed', 'timeout')
-		ORDER BY created_at ASC
-		LIMIT $1`, s.batchLimit)
+			SELECT id::text, COALESCE(external_task_id, ''), COALESCE(external_session_id, ''), status,
+			       business_type, COALESCE(business_id::text, ''), COALESCE(output_ref_json, '{}'::jsonb),
+			       COALESCE(started_at, created_at)
+			FROM ai_runs
+			WHERE status IN ('pending', 'running')
+			ORDER BY created_at ASC
+			LIMIT $1`, s.batchLimit)
 	if err != nil {
 		return err
 	}
@@ -76,7 +88,7 @@ func (s *ManagedAgentRunStatusSyncer) RunOnce(ctx context.Context, now time.Time
 
 	for rows.Next() {
 		var run managedAgentRunStatusRow
-		if err := rows.Scan(&run.ID, &run.ExternalTaskID, &run.Status, &run.StartedAt); err != nil {
+		if err := rows.Scan(&run.ID, &run.ExternalTaskID, &run.ExternalSessionID, &run.Status, &run.BusinessType, &run.BusinessID, &run.OutputRefJSON, &run.StartedAt); err != nil {
 			return err
 		}
 		if err := s.refreshRun(ctx, run, now); err != nil {
@@ -87,10 +99,23 @@ func (s *ManagedAgentRunStatusSyncer) RunOnce(ctx context.Context, now time.Time
 }
 
 func (s *ManagedAgentRunStatusSyncer) refreshRun(ctx context.Context, run managedAgentRunStatusRow, now time.Time) error {
-	task, err := s.client.GetTaskStatus(ctx, run.ExternalTaskID)
+	externalRunID := run.ExternalTaskID
+	if externalRunID == "" {
+		externalRunID = run.ExternalSessionID
+	}
+	if externalRunID == "" {
+		if run.Status == "pending" && !now.Before(run.StartedAt.Add(ManagedAgentPendingTimeout)) {
+			return s.updateRunStatus(ctx, run, nil, "timeout", "managed agent run pending submit timed out after 10m", now)
+		}
+		if run.Status == "running" && !now.Before(run.StartedAt.Add(s.timeout)) {
+			return s.updateRunStatus(ctx, run, nil, "timeout", "managed agent run timed out after 2h", now)
+		}
+		return nil
+	}
+	task, err := s.client.GetTaskStatus(ctx, externalRunID)
 	if err != nil {
 		if s.isTimedOut(run, now) {
-			msg := "managed agent run timed out after 1h while refreshing status: " + err.Error()
+			msg := "managed agent run timed out after 2h while refreshing status: " + err.Error()
 			return s.updateRunStatus(ctx, run, nil, "timeout", msg, now)
 		}
 		return err
@@ -101,11 +126,54 @@ func (s *ManagedAgentRunStatusSyncer) refreshRun(ctx context.Context, run manage
 	if status == "failed" && strings.TrimSpace(task.Error) != "" {
 		errMsg = task.Error
 	}
+	if run.isReportAgentRun() && status == "succeeded" && !run.hasReportWriteback() {
+		if !reportWritebackGraceElapsed(task, now) {
+			status = "running"
+		} else {
+			status = "failed"
+			errMsg = reportWritebackMissingErrorMessage
+		}
+	}
 	if !IsTerminalManagedRunStatus(status) && s.isTimedOut(run, now) {
 		status = "timeout"
-		errMsg = "managed agent run timed out after 1h"
+		errMsg = "managed agent run timed out after 2h"
 	}
 	return s.updateRunStatus(ctx, run, task, status, errMsg, now)
+}
+
+func (run managedAgentRunStatusRow) isReportAgentRun() bool {
+	return strings.TrimSpace(run.BusinessType) == managedReportAgentRunBusinessType
+}
+
+func (run managedAgentRunStatusRow) hasReportWriteback() bool {
+	if strings.TrimSpace(run.BusinessID) != "" {
+		return true
+	}
+	var output map[string]any
+	if err := json.Unmarshal(run.OutputRefJSON, &output); err != nil {
+		return false
+	}
+	return strings.TrimSpace(managedStringFromAny(output["report_id"])) != ""
+}
+
+func reportWritebackGraceElapsed(task *ManagedTaskStatus, now time.Time) bool {
+	if task == nil || task.FinishedAt <= 0 {
+		return true
+	}
+	return !now.Before(time.Unix(task.FinishedAt, 0).Add(ManagedAgentReportWritebackGrace))
+}
+
+func managedStringFromAny(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(v)
+	}
 }
 
 func (s *ManagedAgentRunStatusSyncer) isTimedOut(run managedAgentRunStatusRow, now time.Time) bool {
@@ -117,6 +185,9 @@ func (s *ManagedAgentRunStatusSyncer) updateRunStatus(ctx context.Context, run m
 		"task_id":   run.ExternalTaskID,
 		"status":    status,
 		"synced_at": now.UTC().Format(time.RFC3339),
+	}
+	if run.ExternalSessionID != "" {
+		output["session_id"] = run.ExternalSessionID
 	}
 	agentVersionID := 0
 	modelID := ""
@@ -160,7 +231,7 @@ func (s *ManagedAgentRunStatusSyncer) updateRunStatus(ctx context.Context, run m
 		argIdx++
 	}
 	args = append(args, run.ID)
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("UPDATE ai_runs SET %s WHERE id = $%d", strings.Join(sets, ", "), argIdx), args...)
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("UPDATE ai_runs SET %s WHERE id = $%d AND status IN ('pending', 'running')", strings.Join(sets, ", "), argIdx), args...)
 	return err
 }
 
@@ -172,7 +243,7 @@ func NormalizeManagedRunStatus(status string) string {
 		return "failed"
 	case "timeout", "timed_out":
 		return "timeout"
-	case "running", "in_progress", "processing":
+	case "running", "in_progress", "processing", "queued", "submitted", "pending", "created", "active":
 		return "running"
 	default:
 		return "pending"

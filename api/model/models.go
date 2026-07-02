@@ -795,35 +795,91 @@ type ManagedReportAgentRunRequest struct {
 }
 
 type ManagedAgentSchedule struct {
-	ID           string            `json:"id"`
-	UserID       string            `json:"user_id"`
-	Name         string            `json:"name"`
-	AgentID      string            `json:"agent_id"`
-	ModelID      *string           `json:"model_id"`
-	Message      string            `json:"message"`
-	Params       map[string]string `json:"params,omitempty"`
-	ScheduleType string            `json:"schedule_type"`
-	Weekdays     []int             `json:"weekdays"`
-	TimeOfDay    string            `json:"time_of_day"`
-	Timezone     string            `json:"timezone"`
-	Enabled      bool              `json:"enabled"`
-	LastRunAt    *time.Time        `json:"last_run_at,omitempty"`
-	LastAIRunID  *string           `json:"last_ai_run_id,omitempty"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
+	ID                string            `json:"id"`
+	UserID            string            `json:"user_id"`
+	Name              string            `json:"name"`
+	AgentID           string            `json:"agent_id"`
+	RunKind           string            `json:"run_kind"`
+	ModelID           *string           `json:"model_id"`
+	InitialMessage    string            `json:"initial_message"`
+	Message           string            `json:"message"`
+	StartPromptValues map[string]string `json:"start_prompt_values,omitempty"`
+	Params            map[string]string `json:"params,omitempty"`
+	ReportConfig      map[string]string `json:"report_config,omitempty"`
+	ScheduleType      string            `json:"schedule_type"`
+	Weekdays          []int             `json:"weekdays"`
+	TimeOfDay         string            `json:"time_of_day"`
+	Timezone          string            `json:"timezone"`
+	Enabled           bool              `json:"enabled"`
+	NextRunAt         *time.Time        `json:"next_run_at,omitempty"`
+	LastRunAt         *time.Time        `json:"last_run_at,omitempty"`
+	LastAIRunID       *string           `json:"last_ai_run_id,omitempty"`
+	LastRunStatus     *string           `json:"last_run_status,omitempty"`
+	LastError         *string           `json:"last_error,omitempty"`
+	LastSkipReason    *string           `json:"last_skip_reason,omitempty"`
+	LastSkipAt        *time.Time        `json:"last_skip_at,omitempty"`
+	LastSkippedAt     *time.Time        `json:"last_skipped_trigger_at,omitempty"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+}
+
+type ManagedAgentScheduleTriggerConfig struct {
+	ScheduleType string `json:"schedule_type"`
+	Weekdays     []int  `json:"weekdays,omitempty"`
+	TimeOfDay    string `json:"time_of_day"`
+}
+
+type ManagedAgentScheduleReportConfig struct {
+	ReportType string `json:"report_type"`
+}
+
+type ManagedAgentScheduleRunConfig struct {
+	ModelID           string                            `json:"model_id"`
+	InitialMessage    string                            `json:"initial_message"`
+	StartPromptValues map[string]string                 `json:"start_prompt_values,omitempty"`
+	ReportConfig      *ManagedAgentScheduleReportConfig `json:"report_config,omitempty"`
 }
 
 type UpsertManagedAgentScheduleRequest struct {
-	Name         string            `json:"name"`
-	AgentID      string            `json:"agent_id"`
-	ModelID      string            `json:"model_id"`
-	Message      string            `json:"message"`
-	Params       map[string]string `json:"params,omitempty"`
-	ScheduleType string            `json:"schedule_type"`
-	Weekdays     []int             `json:"weekdays,omitempty"`
-	TimeOfDay    string            `json:"time_of_day"`
-	Timezone     string            `json:"timezone,omitempty"`
-	Enabled      *bool             `json:"enabled,omitempty"`
+	Name              string                             `json:"name"`
+	AgentID           string                             `json:"agent_id"`
+	RunKind           string                             `json:"run_kind"`
+	ModelID           string                             `json:"model_id"`
+	InitialMessage    string                             `json:"initial_message"`
+	Message           string                             `json:"message"`
+	StartPromptValues map[string]string                  `json:"start_prompt_values,omitempty"`
+	Params            map[string]string                  `json:"params,omitempty"`
+	ReportConfig      *ManagedAgentScheduleReportConfig  `json:"report_config,omitempty"`
+	TriggerConfig     *ManagedAgentScheduleTriggerConfig `json:"trigger_config,omitempty"`
+	RunConfig         *ManagedAgentScheduleRunConfig     `json:"run_config,omitempty"`
+	ScheduleType      string                             `json:"schedule_type"`
+	Weekdays          []int                              `json:"weekdays,omitempty"`
+	TimeOfDay         string                             `json:"time_of_day"`
+	Timezone          string                             `json:"timezone,omitempty"`
+	Enabled           *bool                              `json:"enabled,omitempty"`
+}
+
+type PreviewManagedAgentScheduleRequest struct {
+	AgentID       string                             `json:"agent_id"`
+	RunKind       string                             `json:"run_kind"`
+	ScheduleType  string                             `json:"schedule_type"`
+	Weekdays      []int                              `json:"weekdays,omitempty"`
+	TimeOfDay     string                             `json:"time_of_day"`
+	ReportType    string                             `json:"report_type,omitempty"`
+	ReportConfig  *ManagedAgentScheduleReportConfig  `json:"report_config,omitempty"`
+	TriggerConfig *ManagedAgentScheduleTriggerConfig `json:"trigger_config,omitempty"`
+	RunConfig     *ManagedAgentScheduleRunConfig     `json:"run_config,omitempty"`
+}
+
+type PreviewManagedAgentScheduleResponse struct {
+	NextRunAt                    time.Time `json:"next_run_at"`
+	ScheduledTriggerAtForPreview time.Time `json:"scheduled_trigger_at_for_preview"`
+	AgentType                    string    `json:"agent_type"`
+	ReportType                   string    `json:"report_type,omitempty"`
+	ReportTargetDisplay          string    `json:"report_target_display,omitempty"`
+	PeriodStart                  string    `json:"period_start,omitempty"`
+	PeriodEnd                    string    `json:"period_end,omitempty"`
+	PeriodDisplay                string    `json:"period_display,omitempty"`
 }
 
 type AIRun struct {

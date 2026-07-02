@@ -26,13 +26,17 @@ ADMIN_TOKEN = os.getenv("AIDA_ADMIN_TOKEN", "").strip()
 AIHUB_SECRET = os.getenv("AIHUB_SECRET", "").strip()
 RUN_SMOKE = os.getenv("AIDA_RUN_AGENT_SMOKE", "0") == "1"
 
-REPORT_SKILL_SLUG = "aida-report"
-REPORT_SKILL_VERSION = "1.0.0"
-REPORT_SKILL_NAME = "Aida Report Skill"
-REPORT_MCP_SLUG = "aida-report-mcp"
-REPORT_MCP_VERSION = "report-v1"
-REPORT_AGENT_NAME = "报告生成 Agent"
-REPORT_MCP_SLOT = "AIDA_REPORT_MCP_AUTH"
+REPORT_SKILL_SLUG = os.getenv("MANAGED_AGENT_REPORT_SKILL_SLUG", "aida-report")
+REPORT_SKILL_VERSION = os.getenv("MANAGED_AGENT_REPORT_SKILL_VERSION", "1.0.0")
+REPORT_SKILL_NAME = os.getenv("MANAGED_AGENT_REPORT_SKILL_NAME", "Aida Report Skill")
+REPORT_SKILL_DESCRIPTION = os.getenv("MANAGED_AGENT_REPORT_SKILL_DESCRIPTION", "Aida shared Report Skill.\nAIDA_REPORT_DEFAULT:true")
+REPORT_MCP_SLUG = os.getenv("MANAGED_AGENT_REPORT_MCP_SLUG", "aida-report-mcp")
+REPORT_MCP_VERSION = os.getenv("MANAGED_AGENT_REPORT_MCP_VERSION", "report-v1")
+REPORT_MCP_NAME = os.getenv("MANAGED_AGENT_REPORT_MCP_NAME", "Aida Report MCP")
+REPORT_MCP_DESCRIPTION = os.getenv("MANAGED_AGENT_REPORT_MCP_DESCRIPTION", "Aida generic Report MCP endpoint.\nAIDA_REPORT_DEFAULT:true")
+REPORT_AGENT_NAME = os.getenv("MANAGED_AGENT_REPORT_AGENT_NAME", "报告生成 Agent")
+REPORT_AGENT_DESCRIPTION = os.getenv("MANAGED_AGENT_REPORT_AGENT_DESCRIPTION", "默认报告生成 Agent。")
+REPORT_MCP_SLOT = os.getenv("MANAGED_AGENT_REPORT_CREDENTIAL_SLOT", "AIDA_REPORT_MCP_AUTH")
 REPORT_AGENT_MARKERS = [
     "AIDA_REPORT_AGENT:default",
     "AIDA_REPORT_AGENT_TYPES:personal_daily,personal_weekly,team_daily,team_weekly,department_daily,department_weekly",
@@ -53,6 +57,13 @@ FORBIDDEN_TOOLS = [
     "get_report_context",
     "aida_daily_report_get_context",
     "aida_daily_report_save_draft",
+]
+REQUIRED_SKILL_TERMS = [
+    "tools/call",
+    "content[0].text",
+    "date_range",
+    "week_range",
+    '"period"',
 ]
 
 
@@ -267,7 +278,7 @@ def create_skill(token, skill_md):
         "slug": REPORT_SKILL_SLUG,
         "version": REPORT_SKILL_VERSION,
         "name": REPORT_SKILL_NAME,
-        "description": "Aida shared Report Skill.\nAIDA_REPORT_DEFAULT:true",
+        "description": REPORT_SKILL_DESCRIPTION,
         "skill_md": skill_md,
     })
 
@@ -276,8 +287,8 @@ def create_mcp(token, mcp_url):
     payload = {
         "slug": REPORT_MCP_SLUG,
         "version": REPORT_MCP_VERSION,
-        "name": "Aida Report MCP",
-        "description": "Aida generic Report MCP endpoint.\nAIDA_REPORT_DEFAULT:true",
+        "name": REPORT_MCP_NAME,
+        "description": REPORT_MCP_DESCRIPTION,
         "transport": "http",
         "url": mcp_url,
         "auth_header": "Authorization",
@@ -289,15 +300,16 @@ def create_mcp(token, mcp_url):
 
 
 def agent_payload(agent_id, owner):
-    description = "\n".join(["默认报告生成 Agent。", "AIDA_REPORT_DEFAULT:true"] + REPORT_AGENT_MARKERS)
+    description = "\n".join([REPORT_AGENT_DESCRIPTION, "AIDA_REPORT_DEFAULT:true"] + REPORT_AGENT_MARKERS)
     instructions = "\n".join([
         "AIDA_REPORT_DEFAULT:true",
         *REPORT_AGENT_MARKERS,
         "你是 Aida 报告生成 Agent。根据 report_type 生成个人、小组或部门的日报/周报。",
-        "运行参数由 Aida 后端注入，包含 run_id、report_type、period、target、mcp_url。不要要求用户提供 session_ids、urls、token 或 credential。",
-        "Aida Report MCP 已通过 AIDA_REPORT_MCP_AUTH 凭据槽配置当前用户 Authorization。调用 MCP 时不要手工拼接管理员 token。",
+        "运行参数由 Aida 后端注入，包含 run_id、report_type、period、target。不要要求用户提供 session_ids、urls、token 或 credential。",
+        f"{REPORT_MCP_NAME} 已通过 {REPORT_MCP_SLOT} 凭据槽配置当前用户 Authorization。调用 MCP 时不要手工拼接管理员 token。",
         "必须使用当前用户身份调用 Aida Report MCP，并尊重 MCP 返回的权限边界和缺失来源事实。",
         "先调用 get_existing_report 获取已有内容，再根据 report_type 调用 get_sessions/get_daily_reports/get_weekly_reports/get_tasks/get_requirements/get_report_inventory 等原子工具取数。",
+        "get_sessions/get_tasks/get_requirements 等读取工具使用 date_range 或 week_range；write_report_result/write_report_failure 使用 period。",
         "生成成功后调用 write_report_result，传入相同 run_id、report_type、period、target 和 content。",
         "生成失败时调用 write_report_failure。不要编造 Aida 上下文之外的事实；如果上下文为空，应明确说明暂无记录。",
     ])
@@ -315,7 +327,7 @@ def agent_payload(agent_id, owner):
             "target={{ target_json }}",
             "run_id={{ run_id }}",
             "mcp_url={{ mcp_url }}",
-            "当前用户凭据已通过 AIDA_REPORT_MCP_AUTH credential slot 注入，请通过 Aida Report MCP 获取上下文并回写生成结果。",
+            f"当前用户凭据已通过 {REPORT_MCP_SLOT} credential slot 注入，请通过 {REPORT_MCP_NAME} 获取上下文并回写生成结果。",
         ]),
         "credential_slots": [{"name": REPORT_MCP_SLOT, "required": True}],
         "skills": [{"owner": owner, "slug": REPORT_SKILL_SLUG, "version": REPORT_SKILL_VERSION}],
@@ -394,6 +406,7 @@ def check_skill_content(account, skill):
         with urllib.request.urlopen(req, timeout=30) as resp:
             text = resp.read().decode("utf-8")
     missing = [tool for tool in REQUIRED_TOOLS if tool not in text]
+    missing.extend(["term:" + term for term in REQUIRED_SKILL_TERMS if term not in text])
     forbidden = [tool for tool in FORBIDDEN_TOOLS if tool in text]
     return missing, forbidden
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -68,6 +69,29 @@ func reportMCPError(t *testing.T, rec *httptest.ResponseRecorder) string {
 		t.Fatalf("expected structured error code, got nil. body=%s", rec.Body.String())
 	}
 	return resp.Error.Data.Code
+}
+
+func TestCopyReportRunMetadata(t *testing.T) {
+	out := map[string]any{"report_type": reportTypePersonalDaily}
+	copyReportRunMetadata(out, map[string]any{
+		"trigger_source":       "scheduled",
+		"scheduled_trigger_at": "2026-07-01T14:12:00Z",
+		"schedule_id":          "schedule-1",
+		"schedule_name":        "日报定时",
+	})
+
+	if out["trigger_source"] != "scheduled" {
+		t.Fatalf("trigger_source = %#v", out["trigger_source"])
+	}
+	if out["scheduled_trigger_at"] != "2026-07-01T14:12:00Z" {
+		t.Fatalf("scheduled_trigger_at = %#v", out["scheduled_trigger_at"])
+	}
+	if out["schedule_id"] != "schedule-1" {
+		t.Fatalf("schedule_id = %#v", out["schedule_id"])
+	}
+	if out["schedule_name"] != "日报定时" {
+		t.Fatalf("schedule_name = %#v", out["schedule_name"])
+	}
 }
 
 func TestReportMCPToolsListReturns9AtomicTools(t *testing.T) {
@@ -415,6 +439,39 @@ func TestReportMCPTargetMatrix(t *testing.T) {
 			write:      true,
 			wantErr:    nil,
 		},
+		// target=self must not bypass the report_type write/read matrix.
+		{
+			name:       "employee write team_daily via self target",
+			user:       &model.User{ID: "u-emp", Role: "employee", TeamID: strPtr("t-1")},
+			target:     reportTarget{Type: "self"},
+			reportType: "team_daily",
+			write:      true,
+			wantErr:    errForbidden,
+		},
+		{
+			name:       "employee read team_daily via self target",
+			user:       &model.User{ID: "u-emp", Role: "employee", TeamID: strPtr("t-1")},
+			target:     reportTarget{Type: "self"},
+			reportType: "team_daily",
+			write:      false,
+			wantErr:    errForbidden,
+		},
+		{
+			name:       "tl write department_weekly via self target",
+			user:       &model.User{ID: "u-tl", Role: "team_leader", TeamID: strPtr("t-1")},
+			target:     reportTarget{Type: "self"},
+			reportType: "department_weekly",
+			write:      true,
+			wantErr:    errForbidden,
+		},
+		{
+			name:       "director write own department_weekly via self target",
+			user:       &model.User{ID: "u-dir", Role: "director"},
+			target:     reportTarget{Type: "self"},
+			reportType: "department_weekly",
+			write:      true,
+			wantErr:    nil,
+		},
 		// Sanity: employee writing own personal_daily → OK
 		{
 			name:       "employee write own personal_daily",
@@ -447,5 +504,33 @@ func TestReportMCPTargetMatrix(t *testing.T) {
 				t.Fatalf("want %v, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestComputeDailyMissingNormalizesExistingReportDates(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT id::text, COALESCE").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "role", "team_id"}).
+			AddRow("303", "user303", "pm", ""))
+
+	missing := computeDailyMissing(context.Background(), db, "personal", []string{"303"}, "2026-07-01", "2026-07-03", []dailyReportItem{
+		{Date: "2026-07-01T00:00:00Z", Owner: reportOwner{UserID: "303"}},
+		{Date: "2026-07-02", Owner: reportOwner{UserID: "303"}},
+	})
+
+	if len(missing) != 1 {
+		t.Fatalf("missing len = %d, want 1: %#v", len(missing), missing)
+	}
+	if got := missing[0]["date"]; got != "2026-07-03" {
+		t.Fatalf("missing date = %#v, want 2026-07-03", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

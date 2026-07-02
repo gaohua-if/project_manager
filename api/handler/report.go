@@ -2648,22 +2648,26 @@ func (h *ReportHandler) ListDepartmentWeeklyReports(w http.ResponseWriter, r *ht
 		return
 	}
 	query := `
-		SELECT id::text, week_start, content, source_team_weekly_report_ids, archived_at, created_at, updated_at
-		FROM department_weekly_reports
+		SELECT dwr.id::text, dwr.week_start, dwr.content, dwr.source_team_weekly_report_ids,
+			dwr.archived_at, dwr.created_at, dwr.updated_at,
+			dwr.edited, COALESCE(dwr.generation_mode, ''), dwr.managed_agent_run_id::text,
+			dwr.agent_id, dwr.agent_version_id, dwr.model_id, ar.finished_at
+		FROM department_weekly_reports dwr
+		LEFT JOIN ai_runs ar ON ar.id = dwr.managed_agent_run_id
 		WHERE 1=1`
 	args := []any{}
 	argIdx := 1
 	if from := r.URL.Query().Get("from_week"); from != "" {
-		query += fmt.Sprintf(" AND week_start >= $%d", argIdx)
+		query += fmt.Sprintf(" AND dwr.week_start >= $%d", argIdx)
 		args = append(args, from)
 		argIdx++
 	}
 	if to := r.URL.Query().Get("to_week"); to != "" {
-		query += fmt.Sprintf(" AND week_start <= $%d", argIdx)
+		query += fmt.Sprintf(" AND dwr.week_start <= $%d", argIdx)
 		args = append(args, to)
 		argIdx++
 	}
-	query += " ORDER BY week_start DESC"
+	query += " ORDER BY dwr.week_start DESC"
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

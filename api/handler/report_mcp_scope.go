@@ -136,8 +136,14 @@ func resolveTarget(u *model.User, in reportTarget, reportType string, write bool
 
 	switch t.Type {
 	case "self":
-		// Always allowed; resolves to current user for personal, own team/dept for team/department.
-		return resolveSelfTarget(u, reportType), nil
+		// Resolve implicit "self" first, then apply the same role boundary as an explicit target.
+		// Otherwise an employee can ask for report_type=team_daily with target=self and bypass
+		// the team/department write matrix through resolveSelfTarget.
+		target := resolveSelfTarget(u, reportType)
+		if err := validateSelfTargetAccess(u, target, reportType); err != nil {
+			return reportTarget{}, err
+		}
+		return target, nil
 	case "user":
 		if t.UserID == "" {
 			return reportTarget{}, errInvalidTarget
@@ -225,6 +231,33 @@ func resolveTarget(u *model.User, in reportTarget, reportType string, write bool
 		return t, nil
 	}
 	return reportTarget{}, errInvalidTarget
+}
+
+func validateSelfTargetAccess(u *model.User, target reportTarget, reportType string) error {
+	switch reportType {
+	case "personal_daily", "personal_weekly":
+		if target.UserID == "" {
+			return errInvalidTarget
+		}
+		return nil
+	case "team_daily", "team_weekly":
+		if target.TeamID == "" {
+			return nil
+		}
+		if u.Role == "team_leader" && u.TeamID != nil && target.TeamID == *u.TeamID {
+			return nil
+		}
+		return errForbidden
+	case "department_daily", "department_weekly":
+		if target.DepartmentID == "" {
+			return nil
+		}
+		if u.Role == "director" && target.DepartmentID == u.ID {
+			return nil
+		}
+		return errForbidden
+	}
+	return nil
 }
 
 func resolveSelfTarget(u *model.User, reportType string) reportTarget {

@@ -173,11 +173,19 @@ func IsManagedAgentScheduleDue(schedule model.ManagedAgentSchedule, now time.Tim
 }
 
 func parseTimeOfDay(value string) (hour int, minute int, ok bool) {
-	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
+	value = strings.TrimSpace(value)
+	if len(value) != 5 || value[2] != ':' || !isScheduleDigit(value[0]) || !isScheduleDigit(value[1]) || !isScheduleDigit(value[3]) || !isScheduleDigit(value[4]) {
+		return 0, 0, false
+	}
+	parsed, err := time.Parse("15:04", value)
 	if err != nil {
 		return 0, 0, false
 	}
 	return parsed.Hour(), parsed.Minute(), true
+}
+
+func isScheduleDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9'
 }
 
 func scanManagedAgentSchedule(row interface{ Scan(dest ...any) error }) (model.ManagedAgentSchedule, error) {
