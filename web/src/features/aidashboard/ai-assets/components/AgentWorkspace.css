@@ -31,8 +31,25 @@
 
 .ai-assets-workspace__actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
   padding: 14px 0 4px;
+}
+
+.ai-assets-run-disabled-message {
+  margin-right: auto;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-assets-run-disabled-tip {
+  display: inline-flex;
+}
+
+.ai-assets-run-disabled-tip[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 .ai-assets-editor-section {
@@ -54,6 +71,12 @@
   font-weight: 700;
 }
 
+.ai-assets-required-title em {
+  margin-left: 4px;
+  color: #dc2626;
+  font-style: normal;
+}
+
 .ai-assets-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -62,6 +85,25 @@
 
 .ai-assets-editor-grid__wide {
   grid-column: 1 / -1;
+}
+
+.ai-assets-agent-editor .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.ai-assets-agent-editor .ant-form-item-control-input-content,
+.ai-assets-agent-editor .ant-input,
+.ai-assets-agent-editor .ant-select,
+.ai-assets-agent-editor .ant-input-textarea {
+  width: 100%;
+}
+
+.ai-assets-agent-editor .ant-form-item-extra {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .ai-assets-run-layout {
@@ -174,6 +216,13 @@
   font-style: normal;
 }
 
+.ai-assets-field-help {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .ai-assets-prompt-preview {
   max-height: 260px;
   margin: 0;
@@ -248,5 +297,14 @@
 
   .ai-assets-run-context {
     position: static;
+  }
+
+  .ai-assets-workspace__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-assets-run-disabled-message {
+    margin-right: 0;
   }
 }

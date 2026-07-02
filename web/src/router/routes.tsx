@@ -1,8 +1,9 @@
 import {
   BarChartOutlined,
   BellOutlined,
+  CalendarOutlined,
   DashboardOutlined,
-  FileTextOutlined,
+  FileDoneOutlined,
   RobotOutlined,
   ProjectOutlined,
   SolutionOutlined,
@@ -13,6 +14,7 @@ import { AIAssetsPage } from "@/features/aidashboard/ai-assets/pages/AIAssetsPag
 import { AgentCreatePage } from "@/features/aidashboard/ai-assets/pages/AgentCreatePage";
 import { AgentEditPage } from "@/features/aidashboard/ai-assets/pages/AgentEditPage";
 import { AgentRunPage } from "@/features/aidashboard/ai-assets/pages/AgentRunPage";
+import { AgentScheduleFormPage } from "@/features/aidashboard/ai-assets/pages/AgentScheduleFormPage";
 import { MCPCreatePage } from "@/features/aidashboard/ai-assets/pages/MCPCreatePage";
 import { SkillCreatePage } from "@/features/aidashboard/ai-assets/pages/SkillCreatePage";
 import { DashboardPage } from "@/features/aidashboard/dashboard/DashboardPage";
@@ -43,18 +45,18 @@ import type { AppRoute } from "./types";
 export const appRoutes: AppRoute[] = [
   {
     path: "/dashboard",
-    title: "控制台",
+    title: "工作台",
     icon: <DashboardOutlined />,
-    menuGroup: "概览",
+    menuGroup: "工作空间",
     menuOrder: 10,
     element: <DashboardPage />
   },
   {
     path: "/organization",
-    title: "组织 / 用户管理",
+    title: "组织成员",
     icon: <TeamOutlined />,
-    menuGroup: "管理",
-    menuOrder: 20,
+    menuGroup: "工作空间",
+    menuOrder: 90,
     roles: ["admin"],
     element: <OrganizationPage />
   },
@@ -67,10 +69,10 @@ export const appRoutes: AppRoute[] = [
   },
   {
     path: "/requirements",
-    title: "需求推进",
+    title: "需求看板",
     icon: <ProjectOutlined />,
-    menuGroup: "业务",
-    menuOrder: 30,
+    menuGroup: "工作空间",
+    menuOrder: 20,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <RequirementsListPage />
   },
@@ -141,9 +143,9 @@ export const appRoutes: AppRoute[] = [
   {
     path: "/reports/daily",
     title: "日报",
-    icon: <FileTextOutlined />,
-    menuGroup: "报告",
-    menuOrder: 70,
+    icon: <FileDoneOutlined />,
+    menuGroup: "工作空间",
+    menuOrder: 30,
     element: <DailyReportsPage />
   },
   {
@@ -167,26 +169,26 @@ export const appRoutes: AppRoute[] = [
   {
     path: "/reports/weekly",
     title: "周报",
-    icon: <FileTextOutlined />,
-    menuGroup: "报告",
-    menuOrder: 71,
+    icon: <CalendarOutlined />,
+    menuGroup: "工作空间",
+    menuOrder: 31,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <WeeklyReportsPage />
   },
   {
     path: "/tokens",
-    title: "Token 明细",
+    title: "Token 用量",
     icon: <BarChartOutlined />,
-    menuGroup: "系统",
-    menuOrder: 80,
+    menuGroup: "AI 管理",
+    menuOrder: 60,
     element: <TokensPage />
   },
   {
     path: "/ai-assets",
-    title: "我的 AI 资产",
+    title: "AI 资产",
     icon: <RobotOutlined />,
-    menuGroup: "系统",
-    menuOrder: 90,
+    menuGroup: "AI 管理",
+    menuOrder: 50,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <AIAssetsPage />
   },
@@ -217,6 +219,20 @@ export const appRoutes: AppRoute[] = [
     hideInMenu: true,
     roles: ["admin", "director", "pm", "team_leader", "employee"],
     element: <AgentRunPage />
+  },
+  {
+    path: "/ai-assets/agent-schedules/new",
+    title: "新建定时任务",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AgentScheduleFormPage />
+  },
+  {
+    path: "/ai-assets/agent-schedules/:scheduleId/edit",
+    title: "编辑定时任务",
+    hideInMenu: true,
+    roles: ["admin", "director", "pm", "team_leader", "employee"],
+    element: <AgentScheduleFormPage />
   },
   {
     path: "/ai-assets/mcp/new",

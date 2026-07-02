@@ -26,7 +26,6 @@ import type {
   ManagedReportAgentRunPayload,
   ManagedAgentSchedule,
   ManagedMCPEntry,
-  ManagedScope,
   ManagedSkill,
   PaginatedDailyReports,
   PaginatedDepartmentReports,
@@ -52,6 +51,8 @@ import type {
   TokenGroupBy,
   TokenPeriod,
   Team,
+  PreviewManagedAgentSchedulePayload,
+  PreviewManagedAgentScheduleResponse,
   UpsertManagedAgentPayload,
   UpsertManagedAgentSchedulePayload
 } from "./types";
@@ -539,11 +540,11 @@ export const fetchDepartmentWeeklyReports = (params?: Record<string, string>) =>
 
 // ───────────────────────── Managed AI assets ─────────────────────────
 
-export const fetchManagedSkills = (scope: ManagedScope = "mine", includeSystem = false) =>
+export const fetchManagedSkills = (includeSystem = false) =>
   unwrap(
     api.get<{ skills: ManagedSkill[] }>(
       "/ai-assets/skills",
-      includeSystem ? { scope, include_system: "true" } : { scope },
+      includeSystem ? { scope: "mine", include_system: "true" } : { scope: "mine" },
       { skipErrorHandler: true }
     )
   );
@@ -559,11 +560,11 @@ export const archiveManagedSkill = (slug: string, version: string, archived: boo
   unwrap(api.post<Record<string, unknown>>(`/ai-assets/skills/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/archive`, { archived }));
 export const deleteManagedSkill = (slug: string, version: string) =>
   unwrap(api.delete<Record<string, unknown>>(`/ai-assets/skills/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`));
-export const fetchManagedMCPEntries = (scope: ManagedScope = "mine", includeSystem = false) =>
+export const fetchManagedMCPEntries = (includeSystem = false) =>
   unwrap(
     api.get<{ entries: ManagedMCPEntry[] }>(
       "/ai-assets/mcp",
-      includeSystem ? { scope, include_system: "true" } : { scope },
+      includeSystem ? { scope: "mine", include_system: "true" } : { scope: "mine" },
       { skipErrorHandler: true }
     )
   );
@@ -600,6 +601,8 @@ export const fetchManagedAgentRun = (runId: string) =>
   unwrap(api.get<AIRun>(`/ai-assets/agent-runs/${runId}`));
 export const fetchManagedAgentSchedules = () =>
   unwrap(api.get<{ schedules: ManagedAgentSchedule[] }>("/ai-assets/agent-schedules"));
+export const previewManagedAgentSchedule = (payload: PreviewManagedAgentSchedulePayload) =>
+  unwrap(api.post<PreviewManagedAgentScheduleResponse>("/ai-assets/agent-schedules/preview", payload));
 export const createManagedAgentSchedule = (payload: UpsertManagedAgentSchedulePayload) =>
   unwrap(api.post<ManagedAgentSchedule>("/ai-assets/agent-schedules", payload));
 export const updateManagedAgentSchedule = (
@@ -608,8 +611,10 @@ export const updateManagedAgentSchedule = (
 ) => unwrap(api.put<ManagedAgentSchedule>(`/ai-assets/agent-schedules/${scheduleId}`, payload));
 export const deleteManagedAgentSchedule = (scheduleId: string) =>
   unwrap(api.delete<{ status: string }>(`/ai-assets/agent-schedules/${scheduleId}`));
-export const runManagedAgentScheduleNow = (scheduleId: string) =>
-  unwrap(api.post<AIRun>(`/ai-assets/agent-schedules/${scheduleId}/runs`));
+export const runManagedAgentScheduleNow = (
+  scheduleId: string,
+  triggerSource: "manual" | "save_and_run" = "manual"
+) => unwrap(api.post<AIRun>(`/ai-assets/agent-schedules/${scheduleId}/runs`, { trigger_source: triggerSource }));
 
 // ───────────────────────── Tokens ─────────────────────────
 

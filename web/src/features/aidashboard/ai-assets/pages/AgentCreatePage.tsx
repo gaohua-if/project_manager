@@ -6,10 +6,10 @@ import { useNavigate } from "react-router-dom";
 import { createManagedAgent, fetchManagedMCPEntries, fetchManagedSkills } from "../../api/client";
 import type { UpsertManagedAgentPayload } from "../../api/types";
 import { AgentEditor, type AgentEditorValues } from "../components/AgentEditor";
-import { errorMessage } from "../utils/agentAssets";
+import { AI_ASSETS_HOME, aiAssetsPath, errorMessage } from "../utils/agentAssets";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const AI_ASSETS_HOME = "/ai-assets";
+const AI_ASSETS_RETURN_PATH = aiAssetsPath("agents");
 
 export function AgentCreatePage() {
   const navigate = useNavigate();
@@ -19,12 +19,12 @@ export function AgentCreatePage() {
 
   const skillsQuery = useQuery({
     queryKey: ["managed-skills", "mine", "include-system"],
-    queryFn: () => fetchManagedSkills("mine", true),
+    queryFn: () => fetchManagedSkills(true),
     staleTime: 60_000
   });
   const mcpQuery = useQuery({
     queryKey: ["managed-mcp", "mine", "include-system"],
-    queryFn: () => fetchManagedMCPEntries("mine", true),
+    queryFn: () => fetchManagedMCPEntries(true),
     staleTime: 60_000
   });
 
@@ -36,20 +36,25 @@ export function AgentCreatePage() {
     onSuccess: () => {
       message.success("Agent 已创建");
       void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
-      navigate(AI_ASSETS_HOME);
+      navigate(AI_ASSETS_RETURN_PATH);
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
 
   useEffect(() => {
-    form.setFieldsValue({ engine: "codex", business_type: "generic", skills: [], mcp_bindings: [] });
+    form.setFieldsValue({
+      engine: "codex",
+      business_type: "generic",
+      skills: [],
+      mcp_bindings: []
+    });
   }, [form]);
 
   return (
     <PagePanel
       title="新建 Managed Agent"
-      backTo={AI_ASSETS_HOME}
-      onBack={() => navigate(AI_ASSETS_HOME)}
+      backTo={AI_ASSETS_RETURN_PATH}
+      onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
       onNavigate={(path) => navigate(path)}
       breadcrumbs={[
         { title: "系统" },
@@ -63,7 +68,7 @@ export function AgentCreatePage() {
         skills={skills}
         mcpEntries={mcpEntries}
         submitting={createMutation.isPending}
-        onCancel={() => navigate(AI_ASSETS_HOME)}
+        onCancel={() => navigate(AI_ASSETS_RETURN_PATH)}
         onSubmit={(payload: UpsertManagedAgentPayload) => createMutation.mutate(payload)}
       />
     </PagePanel>

@@ -47,7 +47,7 @@ export function AgentEditor({
   onSubmit
 }: AgentEditorProps) {
   return (
-    <section className="ai-assets-workspace">
+    <section className="ai-assets-workspace ai-assets-agent-editor">
       <Form
         form={form}
         layout="vertical"
@@ -73,9 +73,6 @@ export function AgentEditor({
             <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
               <Input placeholder="Agent 名称" />
             </Form.Item>
-            <Form.Item name="description" label="描述" className="ai-assets-editor-grid__wide">
-              <Input.TextArea rows={3} placeholder="这个 Agent 能做什么" />
-            </Form.Item>
             <Form.Item name="business_type" label="Agent 类型" initialValue="generic">
               <Select
                 options={[
@@ -83,6 +80,9 @@ export function AgentEditor({
                   { label: "报告 Agent", value: "report" }
                 ]}
               />
+            </Form.Item>
+            <Form.Item name="description" label="描述" className="ai-assets-editor-grid__wide">
+              <Input.TextArea rows={3} placeholder="这个 Agent 能做什么" />
             </Form.Item>
           </div>
         </Card>
@@ -101,8 +101,12 @@ export function AgentEditor({
                 ]}
               />
             </Form.Item>
-            <Form.Item name="default_model_id" label="默认模型">
-              <Input placeholder="留空则由平台默认值决定" />
+            <Form.Item
+              name="default_model_id"
+              label="默认模型 ID"
+              extra="可选。填写后运行页默认使用该模型；未填写时，运行时需要手动输入模型 ID。"
+            >
+              <Input placeholder="例如 MiniMax-M2.5" />
             </Form.Item>
           </div>
         </Card>
@@ -114,7 +118,7 @@ export function AgentEditor({
           <Form.Item name="start_prompt_template" label="Start Prompt 模板">
             <Input.TextArea
               rows={5}
-              placeholder="例如：请帮我分析 {{ topic }}，{{ 变量 }} 会在运行页生成输入框。"
+              placeholder="例如：请帮我分析 {{ topic }}，并输出 {{ format }}。变量名仅支持英文、数字和下划线。"
             />
           </Form.Item>
         </Card>

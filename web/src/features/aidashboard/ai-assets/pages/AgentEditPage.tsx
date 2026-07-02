@@ -12,13 +12,15 @@ import {
 import type { UpsertManagedAgentPayload } from "../../api/types";
 import { AgentEditor, type AgentEditorValues } from "../components/AgentEditor";
 import {
+  AI_ASSETS_HOME,
+  aiAssetsPath,
   currentMCPKeys,
   currentSkillKeys,
   errorMessage
 } from "../utils/agentAssets";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const AI_ASSETS_HOME = "/ai-assets";
+const AI_ASSETS_RETURN_PATH = aiAssetsPath("agents");
 
 export function AgentEditPage() {
   const navigate = useNavigate();
@@ -34,12 +36,12 @@ export function AgentEditPage() {
   });
   const skillsQuery = useQuery({
     queryKey: ["managed-skills", "mine", "include-system"],
-    queryFn: () => fetchManagedSkills("mine", true),
+    queryFn: () => fetchManagedSkills(true),
     staleTime: 60_000
   });
   const mcpQuery = useQuery({
     queryKey: ["managed-mcp", "mine", "include-system"],
-    queryFn: () => fetchManagedMCPEntries("mine", true),
+    queryFn: () => fetchManagedMCPEntries(true),
     staleTime: 60_000
   });
 
@@ -57,7 +59,7 @@ export function AgentEditPage() {
     onSuccess: () => {
       message.success("Agent 已更新");
       void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
-      navigate(AI_ASSETS_HOME);
+      navigate(AI_ASSETS_RETURN_PATH);
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
@@ -82,8 +84,8 @@ export function AgentEditPage() {
       <PagePanel
         title="编辑 Managed Agent"
         description="加载 Agent 中…"
-        backTo={AI_ASSETS_HOME}
-        onBack={() => navigate(AI_ASSETS_HOME)}
+        backTo={AI_ASSETS_RETURN_PATH}
+        onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
         onNavigate={(path) => navigate(path)}
         breadcrumbs={[
           { title: "系统" },
@@ -101,8 +103,8 @@ export function AgentEditPage() {
       <PagePanel
         title="编辑 Managed Agent"
         description="未找到该 Agent"
-        backTo={AI_ASSETS_HOME}
-        onBack={() => navigate(AI_ASSETS_HOME)}
+        backTo={AI_ASSETS_RETURN_PATH}
+        onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
         onNavigate={(path) => navigate(path)}
         breadcrumbs={[
           { title: "系统" },
@@ -123,8 +125,8 @@ export function AgentEditPage() {
   return (
     <PagePanel
       title="编辑 Managed Agent"
-      backTo={AI_ASSETS_HOME}
-      onBack={() => navigate(AI_ASSETS_HOME)}
+      backTo={AI_ASSETS_RETURN_PATH}
+      onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
       onNavigate={(path) => navigate(path)}
       breadcrumbs={[
         { title: "系统" },
@@ -138,7 +140,7 @@ export function AgentEditPage() {
         skills={skills}
         mcpEntries={mcpEntries}
         submitting={updateMutation.isPending}
-        onCancel={() => navigate(AI_ASSETS_HOME)}
+        onCancel={() => navigate(AI_ASSETS_RETURN_PATH)}
         onSubmit={(payload: UpsertManagedAgentPayload) => updateMutation.mutate(payload)}
       />
     </PagePanel>

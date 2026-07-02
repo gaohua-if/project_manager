@@ -1,4 +1,4 @@
-import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Spin, Tag } from "antd";
+import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Spin, Tag, Tooltip } from "antd";
 import { PlayCircleOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -14,6 +14,8 @@ import {
 } from "../../api/client";
 import type { AIRun, ManagedAgent, ReportType } from "../../api/types";
 import {
+  AI_ASSETS_HOME,
+  aiAssetsPath,
   errorMessage,
   extractPromptVariables,
   isReportAgentAsset,
@@ -27,7 +29,7 @@ import type { UserRole } from "@/shared/auth/types";
 
 import "../components/AgentWorkspace.css";
 
-const AI_ASSETS_HOME = "/ai-assets";
+const AI_ASSETS_RETURN_PATH = aiAssetsPath("agents");
 
 const REPORT_TYPES_MARKER = "AIDA_REPORT_AGENT_TYPES:";
 const REPORT_SYSTEM_PROMPT_KEYS = new Set([
@@ -41,8 +43,16 @@ const REPORT_SYSTEM_PROMPT_KEYS = new Set([
 ]);
 
 const REPORT_TYPE_OPTIONS: Array<{ label: string; value: ReportType; roles: UserRole[] }> = [
-  { label: "个人日报", value: "personal_daily", roles: ["employee", "pm", "team_leader", "director", "admin"] },
-  { label: "个人周报", value: "personal_weekly", roles: ["employee", "pm", "team_leader", "director", "admin"] },
+  {
+    label: "个人日报",
+    value: "personal_daily",
+    roles: ["employee", "pm", "team_leader", "director", "admin"]
+  },
+  {
+    label: "个人周报",
+    value: "personal_weekly",
+    roles: ["employee", "pm", "team_leader", "director", "admin"]
+  },
   { label: "小组日报", value: "team_daily", roles: ["team_leader", "admin"] },
   { label: "小组周报", value: "team_weekly", roles: ["team_leader", "admin"] },
   { label: "部门日报", value: "department_daily", roles: ["director", "admin"] },
@@ -55,7 +65,9 @@ function isWeeklyReportType(type: ReportType) {
 
 function supportedReportTypes(agent: ManagedAgent): ReportType[] {
   if (agent.business_type === "report") {
-    return agent.report_types?.length ? agent.report_types : REPORT_TYPE_OPTIONS.map((item) => item.value);
+    return agent.report_types?.length
+      ? agent.report_types
+      : REPORT_TYPE_OPTIONS.map((item) => item.value);
   }
   if (agent.business_type === "generic") {
     return [];
@@ -103,8 +115,25 @@ function cleanAgentDescription(agent: ManagedAgent, reportAgent: boolean) {
     .filter((line) => line && !line.startsWith("AIDA_"))
     .join("\n");
   if (description) return description;
-  if (reportAgent) return "标准 Agent 的 Aida 报告业务用途，运行时由 Aida 注入报告上下文和 Report MCP。";
+  if (reportAgent)
+    return "标准 Agent 的 Aida 报告业务用途，运行时由 Aida 注入报告上下文和 Report MCP。";
   return "暂无描述";
+}
+
+function missingPromptReason(keys: string[]) {
+  if (keys.length === 0) return "";
+  const shown = keys.slice(0, 3).join("、");
+  const suffix = keys.length > 3 ? ` 等 ${keys.length} 项` : "";
+  return `请先填写必填的 Start Prompt Values：${shown}${suffix}`;
+}
+
+function modelCardTitle(required: boolean) {
+  return (
+    <span className="ai-assets-required-title">
+      模型
+      {required ? <em>*</em> : null}
+    </span>
+  );
 }
 
 function RunStatusCard({ run }: { run?: AIRun }) {
@@ -112,7 +141,9 @@ function RunStatusCard({ run }: { run?: AIRun }) {
     <Card title="运行状态" className="ai-assets-editor-section">
       <div className="ai-assets-runner__status">
         <strong>状态</strong>
-        <Tag color={run?.status === "succeeded" ? "green" : run?.status === "failed" ? "red" : "blue"}>
+        <Tag
+          color={run?.status === "succeeded" ? "green" : run?.status === "failed" ? "red" : "blue"}
+        >
           {run?.status || "未提交"}
         </Tag>
         {run?.external_task_id ? <span>Task: {run.external_task_id}</span> : null}
@@ -182,13 +213,24 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
     }
   });
 
-  const modelId = runModelId.trim() || agent.default_model_id?.trim() || "";
+  const defaultModelId = agent.default_model_id?.trim() || "";
+  const modelId = runModelId.trim() || defaultModelId;
   const missingPromptVariables = promptVariables.filter((key) => !startPromptValues[key]?.trim());
   const promptPreview = template ? renderPromptPreview(template, startPromptValues) : "";
-  const hasPromptInput = promptVariables.length > 0
-    ? missingPromptVariables.length === 0
-    : runMessage.trim().length > 0;
-  const canRun = !activeRunQuery.isFetching && Boolean(modelId) && hasPromptInput;
+  const hasPromptInput =
+    promptVariables.length > 0 ? missingPromptVariables.length === 0 : runMessage.trim().length > 0;
+  const baseRunDisabledReason = agent.archived
+    ? "该 Agent 已归档，不能发起新的运行。"
+    : activeRunQuery.isFetching
+      ? "正在同步运行状态，请稍候。"
+      : !modelId
+        ? "请先填写模型 ID，或在 Agent 配置中设置默认模型。"
+        : missingPromptVariables.length > 0
+          ? missingPromptReason(missingPromptVariables)
+          : !hasPromptInput
+            ? "请先填写 Initial Message。"
+            : "";
+  const canRun = !baseRunDisabledReason;
 
   const runMutation = useMutation({
     mutationFn: () => {
@@ -206,6 +248,10 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
+  const runDisabledReason = runMutation.isPending
+    ? "正在提交运行请求，请稍候。"
+    : baseRunDisabledReason;
+
 
   return (
     <section className="ai-assets-workspace">
@@ -217,12 +263,18 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
               <div className="ai-assets-prompt-values">
                 {promptVariables.map((key) => (
                   <label key={key} className="ai-assets-prompt-field">
-                    <span>{key}<em>*</em></span>
+                    <span>
+                      {key}
+                      <em>*</em>
+                    </span>
                     <Input.TextArea
                       rows={2}
                       value={startPromptValues[key] || ""}
                       onChange={(event) =>
-                        setStartPromptValues((current) => ({ ...current, [key]: event.target.value }))
+                        setStartPromptValues((current) => ({
+                          ...current,
+                          [key]: event.target.value
+                        }))
                       }
                     />
                   </label>
@@ -240,12 +292,21 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
             </Card>
           )}
 
-          <Card title="模型" className="ai-assets-editor-section">
+          <Card title={modelCardTitle(!defaultModelId)} className="ai-assets-editor-section">
             <Input
               value={runModelId}
               onChange={(event) => setRunModelId(event.target.value)}
-              placeholder={agent.default_model_id ? `留空使用 Agent 默认模型：${agent.default_model_id}` : "请输入模型 ID"}
+              placeholder={
+                defaultModelId
+                  ? `留空使用 Agent 默认模型：${defaultModelId}`
+                  : "必填：请输入模型 ID"
+              }
             />
+            <p className="ai-assets-field-help">
+              {defaultModelId
+                ? "已配置默认模型，留空将使用 Agent 默认模型。"
+                : "此 Agent 未配置默认模型，本次运行必须填写模型 ID。"}
+            </p>
           </Card>
 
           {template ? (
@@ -257,17 +318,24 @@ function GenericAgentRunForm({ agent }: { agent: ManagedAgent }) {
           <RunStatusCard run={activeRunQuery.data} />
 
           <div className="ai-assets-workspace__actions">
+            {runDisabledReason ? (
+              <span className="ai-assets-run-disabled-message">{runDisabledReason}</span>
+            ) : null}
             <Space>
-              <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                loading={runMutation.isPending}
-                disabled={!canRun || runMutation.isPending}
-                onClick={() => runMutation.mutate()}
-              >
-                运行
-              </Button>
+              <Button onClick={() => navigate(AI_ASSETS_RETURN_PATH)}>返回</Button>
+              <Tooltip title={runDisabledReason || undefined}>
+                <span className="ai-assets-run-disabled-tip" aria-disabled={!canRun}>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    loading={runMutation.isPending}
+                    disabled={!canRun || runMutation.isPending}
+                    onClick={() => runMutation.mutate()}
+                  >
+                    运行
+                  </Button>
+                </span>
+              </Tooltip>
             </Space>
           </div>
         </div>
@@ -311,14 +379,25 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
 
   const reportType = options.some((option) => option.value === reportTypeInput)
     ? reportTypeInput
-    : options[0]?.value ?? reportTypeInput;
-  const modelId = runModelId.trim() || agent.default_model_id?.trim() || "";
-  const missingPromptVariables = userPromptVariables.filter((key) => !startPromptValues[key]?.trim());
+    : (options[0]?.value ?? reportTypeInput);
+  const defaultModelId = agent.default_model_id?.trim() || "";
+  const modelId = runModelId.trim() || defaultModelId;
+  const missingPromptVariables = userPromptVariables.filter(
+    (key) => !startPromptValues[key]?.trim()
+  );
   const promptPreview = template ? renderPromptPreview(template, startPromptValues) : "";
-  const canRun = options.length > 0
-    && Boolean(modelId)
-    && missingPromptVariables.length === 0
-    && !activeRunQuery.isFetching;
+  const baseRunDisabledReason = agent.archived
+    ? "该 Agent 已归档，不能发起新的运行。"
+    : activeRunQuery.isFetching
+      ? "正在同步运行状态，请稍候。"
+      : options.length === 0
+        ? "当前账号没有该 Agent 支持的报告类型运行权限。"
+        : !modelId
+          ? "请先填写模型 ID，或在 Agent 配置中设置默认模型。"
+          : missingPromptVariables.length > 0
+            ? missingPromptReason(missingPromptVariables)
+            : "";
+  const canRun = !baseRunDisabledReason;
 
   const runMutation = useMutation({
     mutationFn: () => {
@@ -344,6 +423,10 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
+  const runDisabledReason = runMutation.isPending
+    ? "正在提交运行请求，请稍候。"
+    : baseRunDisabledReason;
+
 
   return (
     <section className="ai-assets-workspace">
@@ -356,7 +439,9 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
             ) : (
               <div className="ai-assets-editor-grid">
                 <label className="ai-assets-prompt-field">
-                  <span>报告类型<em>*</em></span>
+                  <span>
+                    报告类型<em>*</em>
+                  </span>
                   <Select
                     value={reportType}
                     options={options}
@@ -365,7 +450,9 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
                 </label>
                 {isWeeklyReportType(reportType) ? (
                   <label className="ai-assets-prompt-field">
-                    <span>报告周期<em>*</em></span>
+                    <span>
+                      报告周期<em>*</em>
+                    </span>
                     <DatePicker.RangePicker
                       value={weekRange}
                       onChange={(value) => {
@@ -377,7 +464,9 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
                   </label>
                 ) : (
                   <label className="ai-assets-prompt-field">
-                    <span>报告日期<em>*</em></span>
+                    <span>
+                      报告日期<em>*</em>
+                    </span>
                     <DatePicker
                       value={reportDate}
                       onChange={(value) => {
@@ -395,12 +484,18 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
               <div className="ai-assets-prompt-values">
                 {userPromptVariables.map((key) => (
                   <label key={key} className="ai-assets-prompt-field">
-                    <span>{key}<em>*</em></span>
+                    <span>
+                      {key}
+                      <em>*</em>
+                    </span>
                     <Input.TextArea
                       rows={2}
                       value={startPromptValues[key] || ""}
                       onChange={(event) =>
-                        setStartPromptValues((current) => ({ ...current, [key]: event.target.value }))
+                        setStartPromptValues((current) => ({
+                          ...current,
+                          [key]: event.target.value
+                        }))
                       }
                     />
                   </label>
@@ -418,12 +513,21 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
             />
           </Card>
 
-          <Card title="模型" className="ai-assets-editor-section">
+          <Card title={modelCardTitle(!defaultModelId)} className="ai-assets-editor-section">
             <Input
               value={runModelId}
               onChange={(event) => setRunModelId(event.target.value)}
-              placeholder={agent.default_model_id ? `留空使用 Agent 默认模型：${agent.default_model_id}` : "请输入模型 ID"}
+              placeholder={
+                defaultModelId
+                  ? `留空使用 Agent 默认模型：${defaultModelId}`
+                  : "必填：请输入模型 ID"
+              }
             />
+            <p className="ai-assets-field-help">
+              {defaultModelId
+                ? "已配置默认模型，留空将使用 Agent 默认模型。"
+                : "此 Agent 未配置默认模型，本次运行必须填写模型 ID。"}
+            </p>
           </Card>
 
           {template ? (
@@ -435,17 +539,24 @@ function ReportAgentRunForm({ agent }: { agent: ManagedAgent }) {
           <RunStatusCard run={activeRunQuery.data} />
 
           <div className="ai-assets-workspace__actions">
+            {runDisabledReason ? (
+              <span className="ai-assets-run-disabled-message">{runDisabledReason}</span>
+            ) : null}
             <Space>
-              <Button onClick={() => navigate(AI_ASSETS_HOME)}>返回</Button>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                loading={runMutation.isPending}
-                disabled={!canRun || runMutation.isPending}
-                onClick={() => runMutation.mutate()}
-              >
-                运行
-              </Button>
+              <Button onClick={() => navigate(AI_ASSETS_RETURN_PATH)}>返回</Button>
+              <Tooltip title={runDisabledReason || undefined}>
+                <span className="ai-assets-run-disabled-tip" aria-disabled={!canRun}>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    loading={runMutation.isPending}
+                    disabled={!canRun || runMutation.isPending}
+                    onClick={() => runMutation.mutate()}
+                  >
+                    运行
+                  </Button>
+                </span>
+              </Tooltip>
             </Space>
           </div>
         </div>
@@ -474,8 +585,8 @@ export function AgentRunPage() {
       <PagePanel
         title="运行 Managed Agent"
         description="加载 Agent 中…"
-        backTo={AI_ASSETS_HOME}
-        onBack={() => navigate(AI_ASSETS_HOME)}
+        backTo={AI_ASSETS_RETURN_PATH}
+        onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
         onNavigate={(path) => navigate(path)}
         breadcrumbs={[
           { title: "系统" },
@@ -493,8 +604,8 @@ export function AgentRunPage() {
       <PagePanel
         title="运行 Managed Agent"
         description="未找到该 Agent"
-        backTo={AI_ASSETS_HOME}
-        onBack={() => navigate(AI_ASSETS_HOME)}
+        backTo={AI_ASSETS_RETURN_PATH}
+        onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
         onNavigate={(path) => navigate(path)}
         breadcrumbs={[
           { title: "系统" },
@@ -517,9 +628,11 @@ export function AgentRunPage() {
   return (
     <PagePanel
       title={`运行 ${agent.name}`}
-      description={reportAgent ? "选择报告业务参数后运行 Report Agent。" : "根据 Agent 输入契约填写运行参数。"}
-      backTo={AI_ASSETS_HOME}
-      onBack={() => navigate(AI_ASSETS_HOME)}
+      description={
+        reportAgent ? "选择报告业务参数后运行 Report Agent。" : "根据 Agent 输入契约填写运行参数。"
+      }
+      backTo={AI_ASSETS_RETURN_PATH}
+      onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
       onNavigate={(path) => navigate(path)}
       breadcrumbs={[
         { title: "系统" },

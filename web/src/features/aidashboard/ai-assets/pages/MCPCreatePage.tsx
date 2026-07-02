@@ -5,10 +5,10 @@ import { useNavigate } from "react-router-dom";
 import { createManagedMCPEntry } from "../../api/client";
 import type { ManagedMCPEntry } from "../../api/types";
 import { MCPCreateForm, type MCPCreateFormValues } from "../components/MCPCreateForm";
-import { errorMessage } from "../utils/agentAssets";
+import { AI_ASSETS_HOME, aiAssetsPath, errorMessage } from "../utils/agentAssets";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const AI_ASSETS_HOME = "/ai-assets";
+const AI_ASSETS_RETURN_PATH = aiAssetsPath("mcp");
 
 export function MCPCreatePage() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ export function MCPCreatePage() {
     onSuccess: () => {
       message.success("MCP 已创建");
       void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
-      navigate(AI_ASSETS_HOME);
+      navigate(AI_ASSETS_RETURN_PATH);
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
@@ -30,8 +30,8 @@ export function MCPCreatePage() {
     <PagePanel
       title="新建 MCP Server"
       description="配置 MCP Server 基础信息、连接方式和鉴权参数"
-      backTo={AI_ASSETS_HOME}
-      onBack={() => navigate(AI_ASSETS_HOME)}
+      backTo={AI_ASSETS_RETURN_PATH}
+      onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
       onNavigate={(path) => navigate(path)}
       breadcrumbs={[
         { title: "系统" },
@@ -43,7 +43,7 @@ export function MCPCreatePage() {
       <MCPCreateForm
         form={form}
         submitting={createMutation.isPending}
-        onCancel={() => navigate(AI_ASSETS_HOME)}
+        onCancel={() => navigate(AI_ASSETS_RETURN_PATH)}
         onSubmit={(payload) => createMutation.mutate(payload)}
       />
     </PagePanel>

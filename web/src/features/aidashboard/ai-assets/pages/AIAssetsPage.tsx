@@ -2,12 +2,13 @@ import {
   ApiOutlined,
   ClockCircleOutlined,
   CloudServerOutlined,
-  CopyOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   EyeOutlined,
   PlayCircleOutlined,
   PlusOutlined,
+  ReloadOutlined,
   RobotOutlined,
   ToolOutlined
 } from "@ant-design/icons";
@@ -15,34 +16,30 @@ import {
   Alert,
   App,
   Button,
+  Dropdown,
   Empty,
-  Form,
-  Input,
   Modal,
   Popconfirm,
-  Select,
   Space,
-  Switch,
   Tabs,
   Tag
 } from "antd";
-import type { TableProps } from "antd";
+import type { MenuProps, TableProps } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ResourceTable } from "@/shared/components/ResourceTable/ResourceTable";
 
 import {
   archiveManagedAgent,
   archiveManagedMCPEntry,
-  createDefaultReportAgent,
-  createManagedAgentSchedule,
   archiveManagedSkill,
+  createDefaultReportAgent,
   deleteManagedMCPEntry,
   deleteManagedSkill,
   deleteManagedAgentSchedule,
-  fetchDailyReportAgentIntegration,
   fetchManagedAgentRuns,
   fetchManagedAgentSchedules,
   fetchManagedAgents,
@@ -58,7 +55,6 @@ import type {
   ManagedAgentSchedule,
   ManagedMCPBinding,
   ManagedMCPEntry,
-  ManagedScope,
   ManagedSkill,
   ManagedSkillRef,
   UpsertManagedAgentSchedulePayload
@@ -70,30 +66,17 @@ import {
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 import { HttpError } from "@/shared/request/types";
 import {
+  AI_ASSETS_TAB_QUERY_PARAM,
+  aiAssetsChildPath,
+  type AssetTab,
   errorMessage,
-  isReportAgentAsset,
+  getAIAssetsTabFromSearch,
   isSystemBuiltinMCP,
   isSystemBuiltinSkill,
-  refKey,
-  SCOPE_OPTIONS
+  refKey
 } from "../utils/agentAssets";
 
 import "./AIAssetsPage.css";
-
-type AssetTab = "agents" | "skills" | "mcp" | "schedules";
-
-interface ScheduleFormValues {
-  name: string;
-  agent_id: string;
-  model_id?: string;
-  schedule_type: "daily" | "weekly";
-  weekdays?: number[];
-  time_of_day: string;
-  timezone?: string;
-  message: string;
-  params_text?: string;
-  enabled?: boolean;
-}
 
 const WEEKDAY_OPTIONS = [
   { label: "周一", value: 1 },
@@ -106,12 +89,92 @@ const WEEKDAY_OPTIONS = [
 ];
 
 function unixTime(value?: number) {
+  return formatDateTime(value);
+}
+
+function formatDateTime(value?: string | number) {
   if (!value) return "-";
-  return new Date(value * 1000).toLocaleString();
+  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function runTypeLabel(value: string) {
+  if (value === "report_agent_run") return "报告运行";
+  if (value === "manual_agent_run") return "手动运行";
+  if (value === "scheduled_agent_run") return "定时任务";
+  return value || "-";
+}
+
+function runStatusMeta(value: AIRun["status"] | ManagedAgentSchedule["last_run_status"]) {
+  const meta: Record<string, { label: string; color: string }> = {
+    pending: { label: "等待", color: "blue" },
+    running: { label: "运行中", color: "processing" },
+    succeeded: { label: "成功", color: "green" },
+    failed: { label: "失败", color: "red" },
+    timeout: { label: "超时", color: "orange" }
+  };
+  return value ? meta[value] || { label: value, color: "default" } : null;
+}
+
+function runStatusTag(value: AIRun["status"] | ManagedAgentSchedule["last_run_status"]) {
+  const meta = runStatusMeta(value);
+  if (!meta) return <Tag>未运行</Tag>;
+  return <Tag color={meta.color}>{meta.label}</Tag>;
+}
+
+function scheduleRuleText(schedule: ManagedAgentSchedule) {
+  const weekdays =
+    schedule.schedule_type === "weekly"
+      ? schedule.weekdays
+          .map((day) => WEEKDAY_OPTIONS.find((item) => item.value === day)?.label)
+          .filter(Boolean)
+          .join("、")
+      : "每天";
+  return `${weekdays} ${schedule.time_of_day}`;
+}
+
+function MobileMeta({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <span className="ai-assets-mobile-meta">
+      <span>{label}</span>
+      <strong>{value || "-"}</strong>
+    </span>
+  );
+}
+
+function AssetEmptyState({
+  icon,
+  title,
+  description,
+  action
+}: {
+  icon: ReactNode;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="ai-assets-empty-state">
+      <span className="ai-assets-empty-state__icon" aria-hidden="true">
+        {icon}
+      </span>
+      <strong>{title}</strong>
+      {description ? <span>{description}</span> : null}
+      {action ? <div className="ai-assets-empty-state__action">{action}</div> : null}
+    </div>
+  );
 }
 
 type ManagedAgentPlatformIssue = {
-  code: "MANAGED_AGENT_NOT_CONFIGURED" | "MANAGED_AGENT_UNREACHABLE" | "MANAGED_AGENT_UPSTREAM_ERROR" | "UNKNOWN";
+  code:
+    | "MANAGED_AGENT_NOT_CONFIGURED"
+    | "MANAGED_AGENT_UNREACHABLE"
+    | "MANAGED_AGENT_UPSTREAM_ERROR"
+    | "UNKNOWN";
   title: string;
   description: string;
 };
@@ -157,45 +220,29 @@ function managedAgentPlatformIssue(error: unknown): ManagedAgentPlatformIssue | 
   return null;
 }
 
-function externalAssetEmptyText(
-  platformIssue: ManagedAgentPlatformIssue | null,
-  emptyDescription: string
-) {
-  if (!platformIssue) return <Empty description={emptyDescription} />;
-  return <Empty description={platformIssue.title} />;
-}
-
-function parseParamLines(value: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  for (const line of value.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const index = trimmed.indexOf("=");
-    if (index <= 0) continue;
-    params[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim();
-  }
-  return params;
-}
-
-function formatParamLines(params?: Record<string, string>): string {
-  if (!params) return "";
-  return Object.entries(params)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-}
-
-function schedulePayload(values: ScheduleFormValues): UpsertManagedAgentSchedulePayload {
+function schedulePayloadFromRecord(
+  schedule: ManagedAgentSchedule,
+  enabled = schedule.enabled
+): UpsertManagedAgentSchedulePayload {
   return {
-    name: values.name,
-    agent_id: values.agent_id,
-    model_id: values.model_id?.trim() || undefined,
-    schedule_type: values.schedule_type,
-    weekdays: values.schedule_type === "weekly" ? values.weekdays ?? [] : [],
-    time_of_day: values.time_of_day,
-    timezone: values.timezone?.trim() || "Asia/Shanghai",
-    message: values.message,
-    params: parseParamLines(values.params_text ?? ""),
-    enabled: values.enabled ?? true
+    name: schedule.name,
+    agent_id: schedule.agent_id,
+    run_kind: schedule.run_kind || "generic_agent",
+    enabled,
+    trigger_config: {
+      schedule_type: schedule.schedule_type,
+      weekdays: schedule.schedule_type === "weekly" ? schedule.weekdays : undefined,
+      time_of_day: schedule.time_of_day
+    },
+    run_config: {
+      model_id: schedule.model_id,
+      initial_message: schedule.initial_message || schedule.message,
+      start_prompt_values: schedule.start_prompt_values || schedule.params || {},
+      report_config:
+        schedule.run_kind === "report_agent" && schedule.report_config?.report_type
+          ? { report_type: schedule.report_config.report_type }
+          : undefined
+    }
   };
 }
 
@@ -203,25 +250,31 @@ const AGENTS_PATH = "/ai-assets/agents";
 
 export function AIAssetsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [tab, setTab] = useState<AssetTab>("agents");
-  const [scope, setScope] = useState<ManagedScope>("mine");
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<ManagedAgentSchedule | null>(null);
-  const [integrationOpen, setIntegrationOpen] = useState(false);
+  const tab = getAIAssetsTabFromSearch(searchParams);
   const [viewingSkill, setViewingSkill] = useState<ManagedSkill | null>(null);
-  const [scheduleForm] = Form.useForm<ScheduleFormValues>();
-  const scheduleType = Form.useWatch("schedule_type", scheduleForm);
+
+  const setAssetTab = (nextTab: AssetTab) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set(AI_ASSETS_TAB_QUERY_PARAM, nextTab);
+        return next;
+      },
+      { replace: true }
+    );
+  };
 
   const skillsQuery = useQuery({
-    queryKey: ["managed-skills", scope],
-    queryFn: () => fetchManagedSkills(scope),
+    queryKey: ["managed-skills", "mine"],
+    queryFn: () => fetchManagedSkills(),
     staleTime: 60_000
   });
   const mcpQuery = useQuery({
-    queryKey: ["managed-mcp", scope],
-    queryFn: () => fetchManagedMCPEntries(scope),
+    queryKey: ["managed-mcp", "mine"],
+    queryFn: () => fetchManagedMCPEntries(),
     staleTime: 60_000
   });
   const agentsQuery = useQuery({
@@ -239,12 +292,6 @@ export function AIAssetsPage() {
     queryFn: () => fetchManagedAgentSchedules(),
     staleTime: 15_000
   });
-  const integrationQuery = useQuery({
-    queryKey: ["daily-report-agent-integration"],
-    queryFn: () => fetchDailyReportAgentIntegration(),
-    enabled: integrationOpen,
-    staleTime: 60_000
-  });
   const skillMarkdownQuery = useQuery({
     queryKey: [
       "managed-skill-md",
@@ -253,7 +300,11 @@ export function AIAssetsPage() {
       viewingSkill?.version
     ],
     queryFn: () =>
-      fetchManagedSkillMarkdown(viewingSkill?.owner, viewingSkill?.slug || "", viewingSkill?.version || ""),
+      fetchManagedSkillMarkdown(
+        viewingSkill?.owner,
+        viewingSkill?.slug || "",
+        viewingSkill?.version || ""
+      ),
     enabled: Boolean(viewingSkill),
     staleTime: 30_000
   });
@@ -262,10 +313,7 @@ export function AIAssetsPage() {
   const mcpEntries = useMemo(() => mcpQuery.data?.entries ?? [], [mcpQuery.data]);
   const agents = useMemo(() => agentsQuery.data?.agents ?? [], [agentsQuery.data]);
   const runs = useMemo(() => runsQuery.data?.runs ?? [], [runsQuery.data]);
-  const schedules = useMemo(
-    () => schedulesQuery.data?.schedules ?? [],
-    [schedulesQuery.data]
-  );
+  const schedules = useMemo(() => schedulesQuery.data?.schedules ?? [], [schedulesQuery.data]);
   const visibleSkills = useMemo(
     () => skills.filter((item) => !isSystemBuiltinSkill(item)),
     [skills]
@@ -274,7 +322,6 @@ export function AIAssetsPage() {
     () => mcpEntries.filter((item) => !isSystemBuiltinMCP(item)),
     [mcpEntries]
   );
-  const hasReportAgent = useMemo(() => agents.some(isReportAgentAsset), [agents]);
   const platformIssue = useMemo(
     () =>
       managedAgentPlatformIssue(skillsQuery.error) ??
@@ -292,26 +339,14 @@ export function AIAssetsPage() {
     return names;
   }, [agents]);
 
-  const createScheduleMutation = useMutation({
-    mutationFn: (payload: UpsertManagedAgentSchedulePayload) =>
-      createManagedAgentSchedule(payload),
-    onSuccess: () => {
-      message.success("定时任务已创建");
-      setScheduleOpen(false);
-      scheduleForm.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ["managed-agent-schedules"] });
-    },
-    onError: (err: unknown) => message.error(errorMessage(err))
-  });
-
   const updateScheduleMutation = useMutation({
-    mutationFn: (payload: UpsertManagedAgentSchedulePayload) =>
-      updateManagedAgentSchedule(editingSchedule?.id || "", payload),
-    onSuccess: () => {
-      message.success("定时任务已更新");
-      setScheduleOpen(false);
-      setEditingSchedule(null);
-      scheduleForm.resetFields();
+    mutationFn: (payload: { schedule: ManagedAgentSchedule; enabled: boolean }) =>
+      updateManagedAgentSchedule(
+        payload.schedule.id,
+        schedulePayloadFromRecord(payload.schedule, payload.enabled)
+      ),
+    onSuccess: (_data, variables) => {
+      message.success(variables.enabled ? "定时任务已启用" : "定时任务已停用");
       void queryClient.invalidateQueries({ queryKey: ["managed-agent-schedules"] });
     },
     onError: (err: unknown) => message.error(errorMessage(err))
@@ -332,6 +367,18 @@ export function AIAssetsPage() {
       message.success("定时任务已提交运行");
       void queryClient.invalidateQueries({ queryKey: ["managed-agent-runs"] });
       void queryClient.invalidateQueries({ queryKey: ["managed-agent-schedules"] });
+    },
+    onError: (err: unknown) => message.error(errorMessage(err))
+  });
+
+  const createDefaultReportAgentMutation = useMutation({
+    mutationFn: createDefaultReportAgent,
+    onSuccess: (agent) => {
+      message.success("默认报告 Agent 已创建");
+      void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
+      void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
+      void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
+      navigate(aiAssetsChildPath(`${AGENTS_PATH}/${agent.agent_id}/run`, "agents"));
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
@@ -387,55 +434,52 @@ export function AIAssetsPage() {
     onError: (err: unknown) => message.error(errorMessage(err))
   });
 
-  const createDefaultReportAgentMutation = useMutation({
-    mutationFn: () => createDefaultReportAgent(),
-    onSuccess: () => {
-      message.success("默认报告 Agent 已创建");
-      setTab("agents");
-      void queryClient.invalidateQueries({ queryKey: ["managed-agents"] });
-      void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
-      void queryClient.invalidateQueries({ queryKey: ["managed-mcp"] });
+  const createAssetItems: MenuProps["items"] = [
+    {
+      key: "skill",
+      icon: <ToolOutlined />,
+      label: "新建 Skill",
+      disabled: platformBlocked
     },
-    onError: (err: unknown) => message.error(errorMessage(err))
-  });
+    {
+      key: "mcp",
+      icon: <ApiOutlined />,
+      label: "新建 MCP",
+      disabled: platformBlocked
+    },
+    {
+      key: "schedule",
+      icon: <ClockCircleOutlined />,
+      label: "新建定时任务"
+    }
+  ];
 
-  const agentOptions = useMemo(
-    () =>
-      agents.map((agent) => ({
-        label: `${agent.name || agent.agent_id} (${agent.agent_id})`,
-        value: agent.agent_id
-      })),
-    [agents]
-  );
-
-  const openCreateSchedule = () => {
-    setEditingSchedule(null);
-    scheduleForm.resetFields();
-    scheduleForm.setFieldsValue({
-      schedule_type: "daily",
-      time_of_day: "19:00",
-      timezone: "Asia/Shanghai",
-      enabled: true
-    });
-    setScheduleOpen(true);
+  const handleCreateAsset: MenuProps["onClick"] = ({ key }) => {
+    if (key === "skill") {
+      navigate(aiAssetsChildPath("/ai-assets/skills/new", "skills"));
+    } else if (key === "mcp") {
+      navigate(aiAssetsChildPath("/ai-assets/mcp/new", "mcp"));
+    } else if (key === "schedule") {
+      navigate(aiAssetsChildPath("/ai-assets/agent-schedules/new", "schedules"));
+    }
   };
 
-  const openEditSchedule = (schedule: ManagedAgentSchedule) => {
-    setEditingSchedule(schedule);
-    scheduleForm.resetFields();
-    scheduleForm.setFieldsValue({
-      name: schedule.name,
-      agent_id: schedule.agent_id,
-      model_id: schedule.model_id,
-      schedule_type: schedule.schedule_type,
-      weekdays: schedule.weekdays,
-      time_of_day: schedule.time_of_day,
-      timezone: schedule.timezone,
-      message: schedule.message,
-      params_text: formatParamLines(schedule.params),
-      enabled: schedule.enabled
-    });
-    setScheduleOpen(true);
+  const renderAssetEmpty = (
+    title: string,
+    icon: ReactNode,
+    action?: ReactNode,
+    description?: string
+  ) => {
+    if (platformIssue) {
+      return (
+        <AssetEmptyState
+          icon={<CloudServerOutlined />}
+          title={platformIssue.title}
+          description={platformIssue.description}
+        />
+      );
+    }
+    return <AssetEmptyState icon={icon} title={title} description={description} action={action} />;
   };
 
   const skillColumns: TableProps<ManagedSkill>["columns"] = [
@@ -449,7 +493,7 @@ export function AIAssetsPage() {
         </span>
       )
     },
-    { title: "Owner", dataIndex: "owner", width: 140, render: (v?: string) => v || "-" },
+    { title: "归属", dataIndex: "owner", width: 140, render: (v?: string) => v || "我的" },
     { title: "Slug", dataIndex: "slug", width: 160 },
     { title: "版本", dataIndex: "version", width: 120 },
     {
@@ -537,7 +581,7 @@ export function AIAssetsPage() {
         </span>
       )
     },
-    { title: "Transport", dataIndex: "transport", width: 130 },
+    { title: "协议", dataIndex: "transport", width: 130 },
     { title: "Slug", dataIndex: "slug", width: 160 },
     { title: "版本", dataIndex: "version", width: 110 },
     {
@@ -658,7 +702,9 @@ export function AIAssetsPage() {
             icon={<PlayCircleOutlined />}
             disabled={platformBlocked || record.archived}
             title={record.archived ? "已归档 Agent 不能发起新运行" : platformActionTitle}
-            onClick={() => navigate(`${AGENTS_PATH}/${record.agent_id}/run`)}
+            onClick={() =>
+              navigate(aiAssetsChildPath(`${AGENTS_PATH}/${record.agent_id}/run`, "agents"))
+            }
           >
             运行
           </Button>
@@ -666,7 +712,9 @@ export function AIAssetsPage() {
             type="link"
             className="resource-action"
             icon={<EditOutlined />}
-            onClick={() => navigate(`${AGENTS_PATH}/${record.agent_id}/edit`)}
+            onClick={() =>
+              navigate(aiAssetsChildPath(`${AGENTS_PATH}/${record.agent_id}/edit`, "agents"))
+            }
           >
             编辑
           </Button>
@@ -704,20 +752,13 @@ export function AIAssetsPage() {
       title: "类型",
       dataIndex: "business_type",
       width: 150,
-      render: (value: string) => {
-        if (value === "manual_agent_run") return "手动运行";
-        if (value === "scheduled_agent_run") return "定时任务";
-        return value;
-      }
+      render: (value: string) => runTypeLabel(value)
     },
     {
       title: "状态",
       dataIndex: "status",
       width: 110,
-      render: (value: AIRun["status"]) => {
-        const color = value === "succeeded" ? "green" : value === "failed" ? "red" : "blue";
-        return <Tag color={color}>{value}</Tag>;
-      }
+      render: (value: AIRun["status"]) => runStatusTag(value)
     },
     { title: "模型", dataIndex: "model_id", width: 140, render: (value?: string) => value || "-" },
     {
@@ -730,7 +771,13 @@ export function AIAssetsPage() {
       title: "结果",
       dataIndex: "result",
       render: (_: string, record) => (
-        <span className="ai-assets-run-summary">
+        <span
+          className={
+            record.error_message
+              ? "ai-assets-run-summary ai-assets-run-summary--error"
+              : "ai-assets-run-summary"
+          }
+        >
           {record.error_message || record.result || "-"}
         </span>
       )
@@ -739,53 +786,63 @@ export function AIAssetsPage() {
       title: "时间",
       dataIndex: "created_at",
       width: 180,
-      render: (value: string) => new Date(value).toLocaleString()
+      render: (value: string) => formatDateTime(value)
     }
   ];
 
   const scheduleColumns: TableProps<ManagedAgentSchedule>["columns"] = [
     {
-      title: "任务",
+      title: "任务名称",
       dataIndex: "name",
       render: (_: string, record) => (
         <span className="ai-assets-name">
           <strong>{record.name}</strong>
-          <span>{agentNameByID.get(record.agent_id) || record.agent_id}</span>
         </span>
       )
     },
     {
-      title: "触发",
+      title: "Agent",
+      dataIndex: "agent_id",
+      render: (value: string) => agentNameByID.get(value) || value
+    },
+    {
+      title: "Agent 类型",
+      dataIndex: "run_kind",
+      width: 130,
+      render: (value: ManagedAgentSchedule["run_kind"]) =>
+        value === "report_agent" ? <Tag color="purple">报告 Agent</Tag> : <Tag>普通 Agent</Tag>
+    },
+    {
+      title: "触发规则",
       dataIndex: "schedule_type",
       width: 180,
+      render: (_: string, record) => scheduleRuleText(record)
+    },
+    {
+      title: "下次运行时间",
+      dataIndex: "next_run_at",
+      width: 180,
+      render: (value?: string) => formatDateTime(value)
+    },
+    {
+      title: "最近运行结果",
+      dataIndex: "last_run_status",
+      width: 140,
       render: (_: string, record) => {
-        const weekdays =
-          record.schedule_type === "weekly"
-            ? record.weekdays
-                .map((day) => WEEKDAY_OPTIONS.find((item) => item.value === day)?.label)
-                .filter(Boolean)
-                .join("、")
-            : "每天";
-        return `${weekdays} ${record.time_of_day}`;
+        if (record.last_skip_reason) return <Tag color="default">已跳过</Tag>;
+        return runStatusTag(record.last_run_status);
       }
     },
-    { title: "时区", dataIndex: "timezone", width: 150 },
     {
-      title: "状态",
+      title: "启用状态",
       dataIndex: "enabled",
       width: 100,
       render: (enabled: boolean) =>
         enabled ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>
     },
     {
-      title: "最近运行",
-      dataIndex: "last_run_at",
-      width: 180,
-      render: (value?: string) => (value ? new Date(value).toLocaleString() : "-")
-    },
-    {
       title: "操作",
-      width: 200,
+      width: 260,
       render: (_: unknown, record) => (
         <Space size={4} className="resource-actions">
           <Button
@@ -803,9 +860,26 @@ export function AIAssetsPage() {
             type="link"
             className="resource-action"
             icon={<EditOutlined />}
-            onClick={() => openEditSchedule(record)}
+            onClick={() =>
+              navigate(
+                aiAssetsChildPath(`/ai-assets/agent-schedules/${record.id}/edit`, "schedules")
+              )
+            }
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            className="resource-action"
+            loading={
+              updateScheduleMutation.isPending &&
+              updateScheduleMutation.variables?.schedule.id === record.id
+            }
+            onClick={() =>
+              updateScheduleMutation.mutate({ schedule: record, enabled: !record.enabled })
+            }
+          >
+            {record.enabled ? "停用" : "启用"}
           </Button>
           <Popconfirm
             title="删除定时任务"
@@ -830,50 +904,396 @@ export function AIAssetsPage() {
 
   const operations = (
     <Space className="ai-assets-toolbar" wrap>
-      <Select
-        className="ai-assets-scope"
-        value={scope}
-        options={SCOPE_OPTIONS}
-        onChange={setScope}
-      />
       <Button
         type="primary"
         icon={<PlusOutlined />}
         disabled={platformBlocked}
         title={platformActionTitle}
-        onClick={() => navigate(`${AGENTS_PATH}/new`)}
+        onClick={() => navigate(aiAssetsChildPath(`${AGENTS_PATH}/new`, "agents"))}
       >
         新建 Agent
       </Button>
+      <Dropdown menu={{ items: createAssetItems, onClick: handleCreateAsset }} trigger={["click"]}>
+        <Button icon={<PlusOutlined />} title={platformActionTitle}>
+          新建
+          <DownOutlined />
+        </Button>
+      </Dropdown>
+    </Space>
+  );
+
+  const agentEmptyState = renderAssetEmpty(
+    "暂无 Agent",
+    <RobotOutlined />,
+    <Space className="ai-assets-empty-state__buttons" wrap>
       <Button
-        icon={<ToolOutlined />}
-        disabled={platformBlocked}
-        title={platformActionTitle}
-        onClick={() => navigate("/ai-assets/skills/new")}
-      >
-        新建 Skill
-      </Button>
-      <Button
-        icon={<ApiOutlined />}
-        disabled={platformBlocked}
-        title={platformActionTitle}
-        onClick={() => navigate("/ai-assets/mcp/new")}
-      >
-        新建 MCP
-      </Button>
-      <Button icon={<ClockCircleOutlined />} onClick={openCreateSchedule}>
-        新建定时任务
-      </Button>
-      <Button
+        type="primary"
         icon={<RobotOutlined />}
+        loading={createDefaultReportAgentMutation.isPending}
         disabled={platformBlocked}
-        title={platformActionTitle}
-        onClick={() => setIntegrationOpen(true)}
+        onClick={() => createDefaultReportAgentMutation.mutate()}
       >
-        报告系统能力
+        创建默认 Agent
+      </Button>
+      <Button
+        icon={<PlusOutlined />}
+        disabled={platformBlocked}
+        onClick={() => navigate(aiAssetsChildPath(`${AGENTS_PATH}/new`, "agents"))}
+      >
+        新建 Agent
       </Button>
     </Space>
   );
+
+  const skillEmptyState = renderAssetEmpty(
+    "暂无 Skill",
+    <ToolOutlined />,
+    <Button
+      type="primary"
+      icon={<PlusOutlined />}
+      disabled={platformBlocked}
+      onClick={() => navigate(aiAssetsChildPath("/ai-assets/skills/new", "skills"))}
+    >
+      新建 Skill
+    </Button>
+  );
+
+  const mcpEmptyState = renderAssetEmpty(
+    "暂无 MCP",
+    <ApiOutlined />,
+    <Button
+      type="primary"
+      icon={<PlusOutlined />}
+      disabled={platformBlocked}
+      onClick={() => navigate(aiAssetsChildPath("/ai-assets/mcp/new", "mcp"))}
+    >
+      新建 MCP
+    </Button>
+  );
+
+  const scheduleEmptyState = renderAssetEmpty(
+    "暂无定时任务",
+    <ClockCircleOutlined />,
+    <Button
+      type="primary"
+      icon={<PlusOutlined />}
+      onClick={() => navigate(aiAssetsChildPath("/ai-assets/agent-schedules/new", "schedules"))}
+    >
+      新建定时任务
+    </Button>
+  );
+
+  const agentMobileList =
+    agents.length === 0 ? (
+      <div className="ai-assets-mobile-list">{agentEmptyState}</div>
+    ) : (
+      <div className="ai-assets-mobile-list">
+        {agents.map((agent) => (
+          <article className="ai-assets-mobile-card" key={agent.agent_id}>
+            <header className="ai-assets-mobile-card__header">
+              <span className="ai-assets-name">
+                <strong>{agent.name}</strong>
+                <span>{agent.description || agent.agent_id}</span>
+              </span>
+              {agent.archived ? <Tag color="default">已归档</Tag> : <Tag color="blue">可用</Tag>}
+            </header>
+            <div className="ai-assets-mobile-card__meta">
+              <MobileMeta label="Engine" value={agent.engine} />
+              <MobileMeta
+                label="版本"
+                value={agent.current_version_id || agent.managed_version || "-"}
+              />
+              <MobileMeta label="Skill" value={agent.skills?.length ?? 0} />
+              <MobileMeta label="MCP" value={agent.mcp_bindings?.length ?? 0} />
+            </div>
+            <div className="ai-assets-mobile-card__actions">
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                disabled={platformBlocked || agent.archived}
+                onClick={() =>
+                  navigate(aiAssetsChildPath(`${AGENTS_PATH}/${agent.agent_id}/run`, "agents"))
+                }
+              >
+                运行
+              </Button>
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() =>
+                  navigate(aiAssetsChildPath(`${AGENTS_PATH}/${agent.agent_id}/edit`, "agents"))
+                }
+              >
+                编辑
+              </Button>
+              <Button
+                size="small"
+                loading={
+                  archiveAgentMutation.isPending &&
+                  archiveAgentMutation.variables?.agentId === agent.agent_id
+                }
+                disabled={platformBlocked}
+                onClick={() =>
+                  archiveAgentMutation.mutate({
+                    agentId: agent.agent_id,
+                    archived: !agent.archived
+                  })
+                }
+              >
+                {agent.archived ? "恢复" : "归档"}
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+
+  const runMobileList =
+    runs.length === 0 ? (
+      <div className="ai-assets-mobile-list">
+        <AssetEmptyState icon={<PlayCircleOutlined />} title="暂无运行记录" />
+      </div>
+    ) : (
+      <div className="ai-assets-mobile-list">
+        {runs.map((run) => (
+          <article className="ai-assets-mobile-card" key={run.id}>
+            <header className="ai-assets-mobile-card__header">
+              <span className="ai-assets-name">
+                <strong>{agentNameByID.get(run.agent_id) || run.agent_id}</strong>
+                <span>{run.agent_id}</span>
+              </span>
+              {runStatusTag(run.status)}
+            </header>
+            <div className="ai-assets-mobile-card__meta">
+              <MobileMeta label="类型" value={runTypeLabel(run.business_type)} />
+              <MobileMeta label="模型" value={run.model_id || "-"} />
+              <MobileMeta label="时间" value={formatDateTime(run.created_at)} />
+            </div>
+            <p
+              className={
+                run.error_message
+                  ? "ai-assets-mobile-card__summary ai-assets-mobile-card__summary--error"
+                  : "ai-assets-mobile-card__summary"
+              }
+            >
+              {run.error_message || run.result || "无结果摘要"}
+            </p>
+          </article>
+        ))}
+      </div>
+    );
+
+  const skillMobileList =
+    visibleSkills.length === 0 ? (
+      <div className="ai-assets-mobile-list">{skillEmptyState}</div>
+    ) : (
+      <div className="ai-assets-mobile-list">
+        {visibleSkills.map((skill) => (
+          <article
+            className="ai-assets-mobile-card"
+            key={skill.skill_id || refKey(skill.owner, skill.slug, skill.version)}
+          >
+            <header className="ai-assets-mobile-card__header">
+              <span className="ai-assets-name">
+                <strong>{skill.name || skill.slug}</strong>
+                <span>{skill.description || `${skill.slug}@${skill.version}`}</span>
+              </span>
+              {skill.archived ? <Tag color="default">已归档</Tag> : <Tag color="green">可用</Tag>}
+            </header>
+            <div className="ai-assets-mobile-card__meta">
+              <MobileMeta label="归属" value={skill.owner || "我的"} />
+              <MobileMeta label="版本" value={skill.version} />
+              <MobileMeta label="创建" value={unixTime(skill.created_at)} />
+            </div>
+            <div className="ai-assets-mobile-card__actions">
+              <Button
+                size="small"
+                icon={<EyeOutlined />}
+                disabled={platformBlocked}
+                onClick={() => setViewingSkill(skill)}
+              >
+                查看
+              </Button>
+              <Button
+                size="small"
+                disabled={platformBlocked}
+                loading={
+                  archiveSkillMutation.isPending &&
+                  archiveSkillMutation.variables?.slug === skill.slug &&
+                  archiveSkillMutation.variables?.version === skill.version
+                }
+                onClick={() =>
+                  archiveSkillMutation.mutate({
+                    slug: skill.slug,
+                    version: skill.version,
+                    archived: !skill.archived
+                  })
+                }
+              >
+                {skill.archived ? "恢复" : "归档"}
+              </Button>
+              <Popconfirm
+                title="删除 Skill"
+                description="删除后无法继续绑定该版本。"
+                okText="删除"
+                cancelText="取消"
+                onConfirm={() =>
+                  deleteSkillMutation.mutate({ slug: skill.slug, version: skill.version })
+                }
+              >
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={platformBlocked}>
+                  删除
+                </Button>
+              </Popconfirm>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+
+  const mcpMobileList =
+    visibleMCPEntries.length === 0 ? (
+      <div className="ai-assets-mobile-list">{mcpEmptyState}</div>
+    ) : (
+      <div className="ai-assets-mobile-list">
+        {visibleMCPEntries.map((entry) => (
+          <article
+            className="ai-assets-mobile-card"
+            key={entry.entry_id || refKey(entry.owner, entry.slug, entry.version)}
+          >
+            <header className="ai-assets-mobile-card__header">
+              <span className="ai-assets-name">
+                <strong>{entry.name || entry.slug}</strong>
+                <span>{entry.description || entry.url || entry.command || "-"}</span>
+              </span>
+              {entry.archived ? <Tag color="default">已归档</Tag> : <Tag color="blue">可用</Tag>}
+            </header>
+            <div className="ai-assets-mobile-card__meta">
+              <MobileMeta label="协议" value={entry.transport} />
+              <MobileMeta label="版本" value={entry.version} />
+              <MobileMeta label="凭据" value={entry.requires_credential ? "需要" : "无"} />
+            </div>
+            <div className="ai-assets-mobile-card__actions">
+              <Button
+                size="small"
+                disabled={platformBlocked}
+                loading={
+                  archiveMCPMutation.isPending &&
+                  archiveMCPMutation.variables?.slug === entry.slug &&
+                  archiveMCPMutation.variables?.version === entry.version
+                }
+                onClick={() =>
+                  archiveMCPMutation.mutate({
+                    slug: entry.slug,
+                    version: entry.version,
+                    archived: !entry.archived
+                  })
+                }
+              >
+                {entry.archived ? "恢复" : "归档"}
+              </Button>
+              <Popconfirm
+                title="删除 MCP"
+                description="删除后无法继续绑定该版本。"
+                okText="删除"
+                cancelText="取消"
+                onConfirm={() =>
+                  deleteMCPMutation.mutate({ slug: entry.slug, version: entry.version })
+                }
+              >
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={platformBlocked}>
+                  删除
+                </Button>
+              </Popconfirm>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+
+  const scheduleMobileList =
+    schedules.length === 0 ? (
+      <div className="ai-assets-mobile-list">{scheduleEmptyState}</div>
+    ) : (
+      <div className="ai-assets-mobile-list">
+        {schedules.map((schedule) => (
+          <article className="ai-assets-mobile-card" key={schedule.id}>
+            <header className="ai-assets-mobile-card__header">
+              <span className="ai-assets-name">
+                <strong>{schedule.name}</strong>
+                <span>{agentNameByID.get(schedule.agent_id) || schedule.agent_id}</span>
+              </span>
+              {schedule.enabled ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>}
+            </header>
+            <div className="ai-assets-mobile-card__meta">
+              <MobileMeta
+                label="类型"
+                value={schedule.run_kind === "report_agent" ? "报告 Agent" : "普通 Agent"}
+              />
+              <MobileMeta label="触发" value={scheduleRuleText(schedule)} />
+              <MobileMeta label="下次" value={formatDateTime(schedule.next_run_at)} />
+              <MobileMeta
+                label="最近"
+                value={
+                  schedule.last_skip_reason
+                    ? "已跳过"
+                    : runStatusMeta(schedule.last_run_status)?.label || "未运行"
+                }
+              />
+            </div>
+            <div className="ai-assets-mobile-card__actions">
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                loading={
+                  runScheduleMutation.isPending && runScheduleMutation.variables === schedule.id
+                }
+                disabled={platformBlocked}
+                onClick={() => runScheduleMutation.mutate(schedule.id)}
+              >
+                运行
+              </Button>
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() =>
+                  navigate(
+                    aiAssetsChildPath(`/ai-assets/agent-schedules/${schedule.id}/edit`, "schedules")
+                  )
+                }
+              >
+                编辑
+              </Button>
+              <Button
+                size="small"
+                loading={
+                  updateScheduleMutation.isPending &&
+                  updateScheduleMutation.variables?.schedule.id === schedule.id
+                }
+                onClick={() =>
+                  updateScheduleMutation.mutate({ schedule, enabled: !schedule.enabled })
+                }
+              >
+                {schedule.enabled ? "停用" : "启用"}
+              </Button>
+              <Popconfirm
+                title="删除定时任务"
+                description="删除后不会再自动触发该 Agent。"
+                okText="删除"
+                cancelText="取消"
+                onConfirm={() => deleteScheduleMutation.mutate(schedule.id)}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />}>
+                  删除
+                </Button>
+              </Popconfirm>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
 
   return (
     <PagePanel
@@ -894,13 +1314,23 @@ export function AIAssetsPage() {
           tone="primary"
           icon={<ToolOutlined />}
           loading={skillsQuery.isLoading}
-          metric={{ key: "skills", title: "Skills", value: visibleSkills.length, description: scope }}
+          metric={{
+            key: "skills",
+            title: "Skills",
+            value: visibleSkills.length,
+            description: "我的"
+          }}
         />
         <RequirementMetricCard
           tone="info"
           icon={<CloudServerOutlined />}
           loading={mcpQuery.isLoading}
-          metric={{ key: "mcp", title: "MCP", value: visibleMCPEntries.length, description: scope }}
+          metric={{
+            key: "mcp",
+            title: "MCP",
+            value: visibleMCPEntries.length,
+            description: "我的"
+          }}
         />
         <RequirementMetricCard
           tone="warning"
@@ -928,63 +1358,49 @@ export function AIAssetsPage() {
       <Tabs
         className="ai-assets-tabs"
         activeKey={tab}
-        onChange={(key) => setTab(key as AssetTab)}
+        onChange={(key) => setAssetTab(key as AssetTab)}
         items={[
           {
             key: "agents",
             label: "我的 Agents",
             children: (
               <div className="ai-assets-agent-pane">
-                {!hasReportAgent ? (
-                  <Alert
-                    className="ai-assets-report-agent-guide"
-                    type="info"
-                    showIcon
-                    message="你还没有报告 Agent"
-                    description={
-                      <div className="ai-assets-report-agent-guide__body">
-                        <span>
-                          平台可以为你创建一个默认报告 Agent，用于生成个人日报、周报和部门报告。系统会自动挂载报告 MCP / Skill，无需手动配置。
-                        </span>
-                        <Button
-                          type="primary"
-                          icon={<RobotOutlined />}
-                          loading={createDefaultReportAgentMutation.isPending}
-                          disabled={platformBlocked}
-                          onClick={() => createDefaultReportAgentMutation.mutate()}
-                        >
-                          创建默认报告 Agent
-                        </Button>
-                      </div>
-                    }
-                  />
-                ) : null}
-                <div className="ai-assets-table-card">
+                <div className="ai-assets-table-card ai-assets-table-card--desktop">
                   <ResourceTable<ManagedAgent>
                     rowKey="agent_id"
                     columns={agentColumns}
                     dataSource={agents}
                     loading={agentsQuery.isLoading}
-                    locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Agent") }}
+                    locale={{ emptyText: agentEmptyState }}
                   />
                 </div>
+                {agentMobileList}
                 <section className="ai-assets-history">
                   <header>
                     <strong>运行历史</strong>
-                    <Button size="small" onClick={() => void runsQuery.refetch()}>
+                    <Button
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      onClick={() => void runsQuery.refetch()}
+                    >
                       刷新
                     </Button>
                   </header>
-                  <div className="ai-assets-table-card">
+                  <div className="ai-assets-table-card ai-assets-table-card--desktop">
                     <ResourceTable<AIRun>
                       rowKey="id"
                       columns={runColumns}
                       dataSource={runs}
                       loading={runsQuery.isLoading}
                       pagination={{ pageSize: 8 }}
-                      locale={{ emptyText: <Empty description="暂无运行记录" /> }}
+                      locale={{
+                        emptyText: (
+                          <AssetEmptyState icon={<PlayCircleOutlined />} title="暂无运行记录" />
+                        )
+                      }}
                     />
                   </div>
+                  {runMobileList}
                 </section>
               </div>
             )
@@ -993,142 +1409,62 @@ export function AIAssetsPage() {
             key: "skills",
             label: "我的 Skills",
             children: (
-              <div className="ai-assets-table-card">
-                <ResourceTable<ManagedSkill>
-                  rowKey={(record) => record.skill_id || refKey(record.owner, record.slug, record.version)}
-                  columns={skillColumns}
-                  dataSource={visibleSkills}
-                  loading={skillsQuery.isLoading}
-                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 Skill") }}
-                />
-              </div>
+              <>
+                <div className="ai-assets-table-card ai-assets-table-card--desktop">
+                  <ResourceTable<ManagedSkill>
+                    rowKey={(record) =>
+                      record.skill_id || refKey(record.owner, record.slug, record.version)
+                    }
+                    columns={skillColumns}
+                    dataSource={visibleSkills}
+                    loading={skillsQuery.isLoading}
+                    locale={{ emptyText: skillEmptyState }}
+                  />
+                </div>
+                {skillMobileList}
+              </>
             )
           },
           {
             key: "mcp",
             label: "我的 MCP",
             children: (
-              <div className="ai-assets-table-card">
-                <ResourceTable<ManagedMCPEntry>
-                  rowKey={(record) => record.entry_id || refKey(record.owner, record.slug, record.version)}
-                  columns={mcpColumns}
-                  dataSource={visibleMCPEntries}
-                  loading={mcpQuery.isLoading}
-                  locale={{ emptyText: externalAssetEmptyText(platformIssue, "暂无 MCP") }}
-                />
-              </div>
+              <>
+                <div className="ai-assets-table-card ai-assets-table-card--desktop">
+                  <ResourceTable<ManagedMCPEntry>
+                    rowKey={(record) =>
+                      record.entry_id || refKey(record.owner, record.slug, record.version)
+                    }
+                    columns={mcpColumns}
+                    dataSource={visibleMCPEntries}
+                    loading={mcpQuery.isLoading}
+                    locale={{ emptyText: mcpEmptyState }}
+                  />
+                </div>
+                {mcpMobileList}
+              </>
             )
           },
           {
             key: "schedules",
             label: "定时任务",
             children: (
-              <div className="ai-assets-table-card">
-                <ResourceTable<ManagedAgentSchedule>
-                  rowKey="id"
-                  columns={scheduleColumns}
-                  dataSource={schedules}
-                  loading={schedulesQuery.isLoading}
-                  locale={{ emptyText: <Empty description="暂无定时任务" /> }}
-                />
-              </div>
+              <>
+                <div className="ai-assets-table-card ai-assets-table-card--desktop">
+                  <ResourceTable<ManagedAgentSchedule>
+                    rowKey="id"
+                    columns={scheduleColumns}
+                    dataSource={schedules}
+                    loading={schedulesQuery.isLoading}
+                    locale={{ emptyText: scheduleEmptyState }}
+                  />
+                </div>
+                {scheduleMobileList}
+              </>
             )
           }
         ]}
       />
-
-      <Modal
-        title="报告系统能力"
-        open={integrationOpen}
-        onCancel={() => setIntegrationOpen(false)}
-        width={820}
-        footer={<Button onClick={() => setIntegrationOpen(false)}>关闭</Button>}
-        destroyOnClose
-      >
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <div className="ai-assets-system-capability__head">
-            <Tag color="blue">系统内置</Tag>
-            <Tag>只读</Tag>
-          </div>
-          <Input
-            addonBefore="MCP"
-            value={
-              integrationQuery.data
-                ? `${integrationQuery.data.mcp.name} (${integrationQuery.data.mcp.slug}@${integrationQuery.data.mcp.version})`
-                : ""
-            }
-            readOnly
-          />
-          <Input
-            addonBefore="Endpoint"
-            value={integrationQuery.data?.mcp.url ?? ""}
-            readOnly
-            suffix={
-              <Button
-                type="text"
-                size="small"
-                icon={<CopyOutlined />}
-                disabled={!integrationQuery.data?.mcp.url}
-                onClick={() => {
-                  void navigator.clipboard.writeText(integrationQuery.data?.mcp.url ?? "");
-                  message.success("MCP URL 已复制");
-                }}
-              />
-            }
-          />
-          <Input
-            addonBefore="Transport"
-            value={integrationQuery.data?.mcp.transport ?? ""}
-            readOnly
-          />
-          <Input
-            addonBefore="MCP 管理方式"
-            value="系统内置；不可编辑、不可删除、不可归档"
-            readOnly
-          />
-          <Input
-            addonBefore="MCP 用途"
-            value="读取报告上下文并回写报告结果"
-            readOnly
-          />
-          <Input
-            addonBefore="Skill"
-            value={
-              integrationQuery.data
-                ? `${integrationQuery.data.skill.slug}@${integrationQuery.data.skill.version}`
-                : ""
-            }
-            readOnly
-          />
-          <Input
-            addonBefore="Skill 管理方式"
-            value="系统内置；不可编辑、不可删除、不可归档"
-            readOnly
-          />
-          <Input
-            addonBefore="Skill 用途"
-            value="约束报告 Agent 的生成流程和输出格式"
-            readOnly
-          />
-          <Input.TextArea
-            rows={14}
-            value={integrationQuery.data?.skill.skill_md ?? ""}
-            readOnly
-          />
-          <Space>
-            <Button
-              icon={<CopyOutlined />}
-              disabled={!integrationQuery.data?.skill.skill_md}
-              onClick={() => {
-                void navigator.clipboard.writeText(integrationQuery.data?.skill.skill_md ?? "");
-                message.success("Skill Markdown 已复制");
-              }}
-            >
-              复制 Skill Markdown
-            </Button>
-          </Space>
-        </Space>
-      </Modal>
 
       <Modal
         title={viewingSkill ? `${viewingSkill.name || viewingSkill.slug} / SKILL.md` : "SKILL.md"}
@@ -1136,7 +1472,7 @@ export function AIAssetsPage() {
         width={860}
         footer={<Button onClick={() => setViewingSkill(null)}>关闭</Button>}
         onCancel={() => setViewingSkill(null)}
-        destroyOnClose
+        destroyOnHidden
       >
         {skillMarkdownQuery.isLoading ? (
           <Empty description="正在加载 SKILL.md" />
@@ -1153,89 +1489,6 @@ export function AIAssetsPage() {
           </pre>
         )}
       </Modal>
-
-      <Modal
-        title={editingSchedule ? "编辑定时任务" : "新建定时任务"}
-        open={scheduleOpen}
-        onCancel={() => {
-          setScheduleOpen(false);
-          setEditingSchedule(null);
-          scheduleForm.resetFields();
-        }}
-        onOk={() => scheduleForm.submit()}
-        confirmLoading={createScheduleMutation.isPending || updateScheduleMutation.isPending}
-        destroyOnClose
-      >
-        <Form
-          form={scheduleForm}
-          layout="vertical"
-          onFinish={(values) => {
-            const payload = schedulePayload(values);
-            if (editingSchedule) {
-              updateScheduleMutation.mutate(payload);
-            } else {
-              createScheduleMutation.mutate(payload);
-            }
-          }}
-        >
-          <Form.Item name="name" label="任务名称" rules={[{ required: true, message: "请输入名称" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="agent_id"
-            label="Agent"
-            rules={[{ required: true, message: "请选择 Agent" }]}
-          >
-            <Select options={agentOptions} />
-          </Form.Item>
-          <Form.Item name="model_id" label="模型">
-            <Input placeholder="留空使用 Agent 默认模型" />
-          </Form.Item>
-          <Form.Item name="schedule_type" label="重复" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { label: "每天", value: "daily" },
-                { label: "每周", value: "weekly" }
-              ]}
-            />
-          </Form.Item>
-          {scheduleType === "weekly" ? (
-            <Form.Item
-              name="weekdays"
-              label="星期"
-              rules={[{ required: true, message: "请选择星期" }]}
-            >
-              <Select mode="multiple" options={WEEKDAY_OPTIONS} />
-            </Form.Item>
-          ) : null}
-          <Form.Item
-            name="time_of_day"
-            label="触发时间"
-            rules={[
-              { required: true, message: "请输入触发时间" },
-              { pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: "格式应为 HH:mm" }
-            ]}
-          >
-            <Input placeholder="19:00" />
-          </Form.Item>
-          <Form.Item name="timezone" label="时区">
-            <Input placeholder="Asia/Shanghai" />
-          </Form.Item>
-          <Form.Item name="message" label="触发消息" rules={[{ required: true, message: "请输入消息" }]}>
-            <Input.TextArea rows={4} />
-          </Form.Item>
-          <Form.Item name="params_text" label="参数">
-            <Input.TextArea
-              rows={4}
-              placeholder={"每行一个 key=value，例如：\nreport_date=today\nproject=Aida"}
-            />
-          </Form.Item>
-          <Form.Item name="enabled" label="状态" valuePropName="checked">
-            <Switch checkedChildren="启用" unCheckedChildren="停用" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
     </PagePanel>
   );
 }

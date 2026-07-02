@@ -323,8 +323,6 @@ export interface GenerateReportDraftResponse {
   status?: string;
 }
 
-export type ManagedScope = "mine" | "public" | "all";
-
 export interface ManagedSkillRef {
   owner?: string;
   slug: string;
@@ -449,16 +447,28 @@ export interface ManagedAgentSchedule {
   user_id: string;
   name: string;
   agent_id: string;
+  run_kind: "generic_agent" | "report_agent";
   model_id?: string;
+  initial_message?: string;
   message: string;
+  start_prompt_values?: Record<string, string>;
   params?: Record<string, string>;
+  report_config?: {
+    report_type?: ReportType;
+  };
   schedule_type: "daily" | "weekly";
   weekdays: number[];
   time_of_day: string;
   timezone: string;
   enabled: boolean;
+  next_run_at?: string;
   last_run_at?: string;
   last_ai_run_id?: string;
+  last_run_status?: "pending" | "running" | "succeeded" | "failed" | "timeout";
+  last_error?: string;
+  last_skip_reason?: string;
+  last_skip_at?: string;
+  last_skipped_trigger_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -466,14 +476,41 @@ export interface ManagedAgentSchedule {
 export interface UpsertManagedAgentSchedulePayload {
   name: string;
   agent_id: string;
-  model_id?: string;
-  message: string;
-  params?: Record<string, string>;
+  run_kind: "generic_agent" | "report_agent";
+  enabled?: boolean;
+  trigger_config: {
+    schedule_type: "daily" | "weekly";
+    weekdays?: number[];
+    time_of_day: string;
+  };
+  run_config: {
+    model_id?: string;
+    initial_message?: string;
+    start_prompt_values?: Record<string, string>;
+    report_config?: {
+      report_type: ReportType;
+    };
+  };
+}
+
+export interface PreviewManagedAgentSchedulePayload {
+  agent_id?: string;
+  run_kind: "generic_agent" | "report_agent";
   schedule_type: "daily" | "weekly";
   weekdays?: number[];
   time_of_day: string;
-  timezone?: string;
-  enabled?: boolean;
+  report_type?: ReportType;
+}
+
+export interface PreviewManagedAgentScheduleResponse {
+  next_run_at: string;
+  scheduled_trigger_at_for_preview: string;
+  agent_type: "generic" | "report";
+  report_type?: ReportType;
+  report_target_display?: string;
+  period_start?: string;
+  period_end?: string;
+  period_display?: string;
 }
 
 export interface DailyReportAgentIntegration {

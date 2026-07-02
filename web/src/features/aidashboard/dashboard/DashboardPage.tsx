@@ -500,7 +500,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
       {
         key: "employee-task-3",
         type: "任务",
-        title: "整理 session 解析异常样例",
+        title: "整理工作记录解析异常样例",
         requirement: "Session 导入",
         requirementId: "req-session-import",
         taskId: "task-session-samples",
@@ -726,7 +726,7 @@ const ROLE_DATA: Record<DashboardRole, ConsoleRoleData> = {
         name: "今日部门日报",
         status: "待生成",
         description: "暂无部门日报，可直接填写。",
-        sourceSummary: "报告 Agent / MCP 上下文、部门重点需求、高优先级风险、跨组依赖和阻塞",
+        sourceSummary: "系统汇总的报告上下文、部门重点需求、高优先级风险、跨组依赖和阻塞",
         updatedAt: "18:05"
       }),
       createReport({
@@ -1356,7 +1356,10 @@ export function DashboardPage() {
       if (!current) {
         throw new Error("请先生成部门日报");
       }
-      return { report: await updateDepartmentReport(current.id, { content: draftMarkdown }), archive };
+      return {
+        report: await updateDepartmentReport(current.id, { content: draftMarkdown }),
+        archive
+      };
     },
     onSuccess: ({ report, archive }) => {
       setDepartmentDraft(report);
@@ -1722,8 +1725,8 @@ export function DashboardPage() {
         <Row className="console-dashboard-hero-row" gutter={[14, 14]} align="stretch">
           <Col className="console-dashboard-hero-row__report" xs={24} xl={12}>
             <ReportSection
-              title="报告工作台"
-              icon={<FileTextOutlined />}
+              title="报告处理"
+              icon={<FileDoneOutlined />}
               reports={personalReports}
               summaryReports={summaryReports}
               coverage={effectiveCoverage}
@@ -1872,8 +1875,18 @@ function SummaryChips({ items }: { items: SummaryChipItem[] }) {
           key={`${item.label}-${item.value}`}
           className={`console-summary-chip console-summary-chip--${item.tone ?? "default"}`}
         >
-          <span>{item.label}</span>
-          <strong>{item.value}</strong>
+          {item.label === "全部" ? (
+            <>
+              <span>共</span>
+              <strong>{item.value}</strong>
+              <span>项</span>
+            </>
+          ) : (
+            <>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </>
+          )}
         </span>
       ))}
     </div>
@@ -2114,10 +2127,7 @@ function ReportSection({
                 <ReportWeeklyInlineRow report={weeklyReport} onOpen={onOpen} />
               ) : null}
               {summaryWeeklyReport ? (
-                <ReportManagementWeeklyInlineRow
-                  report={summaryWeeklyReport}
-                  onOpen={onOpen}
-                />
+                <ReportManagementWeeklyInlineRow report={summaryWeeklyReport} onOpen={onOpen} />
               ) : null}
             </section>
           </div>
@@ -2194,10 +2204,7 @@ function ReportSummaryInlineRow({
         </span>
         {meta ? <span className="console-report-inline-meta">{meta}</span> : null}
       </div>
-      <Button
-        className="console-report-inline-action"
-        onClick={() => onOpen(report, "editor")}
-      >
+      <Button className="console-report-inline-action" onClick={() => onOpen(report, "editor")}>
         {getCompactReportButtonText(report)}
       </Button>
     </section>
@@ -2220,10 +2227,7 @@ function ReportWeeklyInlineRow({
         </span>
         <span className="console-report-inline-meta">{getPersonalWeeklyInlineCopy(report)}</span>
       </div>
-      <Button
-        className="console-report-inline-action"
-        onClick={() => onOpen(report, "editor")}
-      >
+      <Button className="console-report-inline-action" onClick={() => onOpen(report, "editor")}>
         {getCompactReportButtonText(report)}
       </Button>
     </section>
@@ -2244,14 +2248,9 @@ function ReportManagementWeeklyInlineRow({
           <strong>{getManagementWeeklyLabel(report)}</strong>
           <ReportStatusTag status={report.status} />
         </span>
-        <span className="console-report-inline-meta">
-          {getManagementWeeklyInlineCopy(report)}
-        </span>
+        <span className="console-report-inline-meta">{getManagementWeeklyInlineCopy(report)}</span>
       </div>
-      <Button
-        className="console-report-inline-action"
-        onClick={() => onOpen(report, "editor")}
-      >
+      <Button className="console-report-inline-action" onClick={() => onOpen(report, "editor")}>
         {getCompactReportButtonText(report)}
       </Button>
     </section>
@@ -2410,17 +2409,17 @@ function getManagementWeeklyInlineCopy(report: ReportItem) {
   if (report.status === "已保存") return "可继续编辑";
   if (report.status === "生成中") return "可打开编辑";
   if (report.status === "生成失败") return "可打开编辑";
-  return "暂无周报，可通过 Agent 生成";
+  return "暂无周报，可通过系统生成";
 }
 
 function getCoverageSummary(report: ReportItem) {
   if (report.scope === "team" || report.kind === "team_weekly") {
-    return "报告由 Agent / MCP 生成，成员发送状态不在当前服务统计";
+    return "已汇总成员日报来源";
   }
   if (report.scope === "department" || report.kind === "department_weekly") {
-    return "报告由 Agent / MCP 生成，小组发送状态不在当前服务统计";
+    return "已汇总小组日报来源";
   }
-  return "报告由 Agent / MCP 生成";
+  return "已基于当前可用数据生成报告";
 }
 
 function getReportModalTitle(report: ReportItem, step: ReportModalStep) {
@@ -2461,7 +2460,7 @@ function SessionUploadCard({
     <div className="console-panel console-panel--token">
       <PanelHeader
         icon={<BarChartOutlined />}
-        title="Token 统计"
+        title="Token 用量"
         extra={
           <Segmented
             className="console-token-range"
@@ -2483,7 +2482,7 @@ function SessionUploadCard({
           renderSessionUploadSummary(role, range, report)
         )}
         <div className="console-token-footer">
-          <span>基于已上传 session 解析</span>
+          <span>基于上传的工作记录统计</span>
           <Button type="link" icon={<LinkOutlined />} onClick={onViewDetail}>
             查看 Token 明细
           </Button>
@@ -2508,11 +2507,7 @@ function renderSessionUploadSummary(role: DashboardRole, range: TokenRange, repo
           scopeLabel="各组 Token"
           scopeMeta={`${report.sessions} 个 session · ${report.groups.length} 个组已上报`}
         />
-        <TokenVerticalBars
-          ariaLabel="各组 Token 分布"
-          caption="各组 Token"
-          items={report.groups}
-        />
+        <TokenVerticalBars ariaLabel="各组 Token 分布" caption="各组 Token" items={report.groups} />
       </div>
     );
   }
@@ -2625,14 +2620,14 @@ function TokenMiniBars({ bars }: { bars: TokenReport["bars"] }) {
             <div key={bar.label} className="console-token-day-bars__item">
               <span>{bar.label}</span>
               <i>
-                <b style={{ width: `${Math.max(12, Math.round((bar.value / maxValue) * 100))}%` }} />
+                <b
+                  style={{ width: `${Math.max(12, Math.round((bar.value / maxValue) * 100))}%` }}
+                />
               </i>
               <em>{bar.text}</em>
             </div>
           ))}
-          {hiddenEmptyDays ? (
-            <small>其余 {hiddenEmptyDays} 天暂无上传</small>
-          ) : null}
+          {hiddenEmptyDays ? <small>其余 {hiddenEmptyDays} 天暂无上传</small> : null}
         </div>
       ) : (
         <div className="console-token-empty-chart">
@@ -2888,7 +2883,7 @@ function getDefaultDraftMarkdown(report: ReportItem) {
 * 组内成员日报和风险项已汇总。
 
 ## 重点风险
-* session 解析任务仍处于阻塞状态。
+* 工作记录解析任务仍处于阻塞状态。
 
 ## 明日计划
 * 继续推进日报发送和需求看板联动。`;
@@ -2926,14 +2921,14 @@ function getReportSourceTitle(report: ReportItem) {
 
 function getReportSourceMeta(report: ReportItem, coverage?: ReportCoverage) {
   if (report.scope === "team" && coverage) {
-    return "报告由 Agent / MCP 生成，成员发送状态不在当前服务统计";
+    return "已汇总成员日报来源";
   }
 
   if (report.scope === "department" && coverage) {
-    return "报告由 Agent / MCP 生成，小组发送状态不在当前服务统计";
+    return "已汇总小组日报来源";
   }
 
-  return "旧报告配置流程已停用。";
+  return "该报告已切换至新版编辑流程。";
 }
 
 function getEditorMeta(report: ReportItem) {
@@ -2942,20 +2937,20 @@ function getEditorMeta(report: ReportItem) {
   }
 
   if (report.kind === "department_daily") {
-    return ["报告 Agent / MCP 上下文", "来源：系统报告能力"];
+    return ["系统汇总报告上下文", "来源：当前可用业务数据"];
   }
 
   if (report.kind === "team_daily") {
-    return ["报告 Agent / MCP 上下文", "来源：系统报告能力"];
+    return ["系统汇总报告上下文", "来源：当前可用业务数据"];
   }
 
   return [report.sourceSummary, report.skill];
 }
 
 function getSendButtonText(report: ReportItem) {
-  if (report.scope === "team")
-    return report.kind.includes("weekly") ? "保存周报" : "保存小组日报";
-  if (report.scope === "department") return report.kind.includes("weekly") ? "保存周报" : "保存部门日报";
+  if (report.scope === "team") return report.kind.includes("weekly") ? "保存周报" : "保存小组日报";
+  if (report.scope === "department")
+    return report.kind.includes("weekly") ? "保存周报" : "保存部门日报";
   return report.kind.includes("weekly") ? "保存周报" : "保存日报";
 }
 
@@ -3345,8 +3340,8 @@ function ReportModalContent({
           <strong>报告内容</strong>
           <span>
             {isSessionLoading
-              ? "正在加载今日已上传 session。"
-              : `已找到 ${sessionOptions.length} 个 session，默认勾选今日全部记录。`}
+              ? "正在加载今日工作记录。"
+              : `已找到 ${sessionOptions.length} 条工作记录，默认勾选今日全部记录。`}
           </span>
         </div>
         {sessionError ? <Alert type="error" showIcon message={sessionError} /> : null}
@@ -3359,10 +3354,10 @@ function ReportModalContent({
         >
           <div className="console-session-list">
             {isSessionLoading ? (
-              <div className="console-session-empty">正在加载 session...</div>
+              <div className="console-session-empty">正在加载工作记录...</div>
             ) : sessionOptions.length === 0 ? (
               <div className="console-session-empty">
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今日暂无已上传 session" />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今日暂无可用工作记录" />
               </div>
             ) : (
               sessionOptions.map((session) => (
@@ -3526,9 +3521,9 @@ function TeamSourceReview({
   return (
     <div className="console-department-source">
       <div className="console-session-modal__section">
-        <strong>确认成员原始日报来源</strong>
+        <strong>确认成员日报来源</strong>
         <span>
-          {sources.team_name} · {sources.report_date} · 报告由 Agent / MCP 生成，成员发送状态不在当前服务统计。
+          {sources.team_name} · {sources.report_date} · 已汇总成员日报来源。
         </span>
       </div>
 
@@ -3545,8 +3540,8 @@ function TeamSourceReview({
 
       <section className="console-department-source__block console-team-source__block">
         <div className="console-department-source__head">
-          <strong>成员原始日报</strong>
-          <Tag color="blue">Agent 来源</Tag>
+          <strong>成员日报来源</strong>
+          <Tag color="blue">系统来源</Tag>
         </div>
         {members.length === 0 ? (
           <div className="console-session-empty">暂无团队成员</div>
@@ -3578,7 +3573,7 @@ function TeamSourceReview({
                           size="small"
                           onClick={() => onExpandedUserIdChange(expanded ? null : member.user_id)}
                         >
-                          {expanded ? "收起原文" : "查看原文"}
+                          {expanded ? "收起内容" : "查看内容"}
                         </Button>
                       ) : null}
                     </div>
@@ -3588,7 +3583,9 @@ function TeamSourceReview({
                       {member.content || "暂无内容"}
                     </pre>
                   ) : !member.has_report ? (
-                    <p className="console-team-source__missing-note">当前没有可用的成员原始日报来源。</p>
+                    <p className="console-team-source__missing-note">
+                      当前没有可用的成员日报来源。
+                    </p>
                   ) : null}
                 </article>
               );
@@ -3632,15 +3629,13 @@ function DepartmentSourceReview({
     <div className="console-department-source">
       <div className="console-session-modal__section">
         <strong>确认小组日报来源</strong>
-        <span>
-          报告由 Agent / MCP 生成，小组发送状态不在当前服务统计。
-        </span>
+        <span>已汇总小组日报来源。</span>
       </div>
 
       <section className="console-department-source__block">
         <div className="console-department-source__head">
           <strong>小组日报来源</strong>
-          <Tag color="blue">Agent 来源</Tag>
+          <Tag color="blue">系统来源</Tag>
         </div>
         {submitted.length === 0 ? (
           <div className="console-session-empty">暂无可用小组日报来源</div>

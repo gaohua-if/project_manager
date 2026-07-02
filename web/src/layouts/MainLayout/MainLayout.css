@@ -5,14 +5,17 @@
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--aihub-color-page-bg);
+  background: #eef3f7;
 }
 
 .main-layout__workspace {
   min-width: 0;
   height: 100vh;
   min-height: 100vh;
-  background: var(--aihub-color-page-bg);
+  background:
+    radial-gradient(circle at 92% 2%, rgba(22, 119, 255, 0.07), transparent 28%),
+    radial-gradient(circle at 64% 0%, rgba(34, 211, 238, 0.035), transparent 26%),
+    linear-gradient(180deg, #f8fbff 0%, #f2f6fb 46%, #eef3f7 100%);
 }
 
 .main-layout__content {
@@ -22,11 +25,20 @@
   padding: 24px 26px 56px;
   overflow: auto;
   overscroll-behavior: contain;
-  background: var(--aihub-color-page-bg);
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 12% 0%, rgba(22, 119, 255, 0.028), transparent 30%), transparent;
+  background-size:
+    72px 72px,
+    72px 72px,
+    auto,
+    auto;
 }
 
 .main-layout__inner {
   position: relative;
+  z-index: 1;
   min-height: 100%;
   padding: 0;
   overflow: hidden;
@@ -42,21 +54,21 @@
 }
 
 .main-layout__content::-webkit-scrollbar-track {
-  background: var(--aihub-color-split);
+  background: #e6edf3;
   border-radius: 4px;
 }
 
 .main-layout__content::-webkit-scrollbar-thumb {
-  background: var(--aihub-color-text-tertiary);
+  background: #9aaabc;
   border-radius: 4px;
 }
 
 .main-layout__content::-webkit-scrollbar-thumb:hover {
-  background: var(--aihub-color-text-secondary);
+  background: #70849d;
 }
 
 .main-layout__mobile-drawer .ant-drawer-content {
-  background: #fbfcff;
+  background: #07111f;
 }
 
 .main-layout__mobile-drawer .ant-drawer-body {

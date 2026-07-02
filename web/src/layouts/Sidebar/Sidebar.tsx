@@ -8,7 +8,6 @@ import { getMenuRoutesForUser } from "@/router/menu";
 import { appRoutes } from "@/router/routes";
 import { findBestMenuMatch } from "@/router/routeAccess";
 import type { AppRoute } from "@/router/types";
-import { runtimeConfig } from "@/config/runtimeConfig";
 import { useAuth } from "@/shared/auth/authContext";
 import { useLayoutStore } from "@/stores/layoutStore";
 
@@ -89,7 +88,7 @@ export function SidebarContent({ collapsed = false, onNavigate }: SidebarContent
         {!collapsed && (
           <span className="app-sidebar__brand-copy">
             <strong>AIDashboard</strong>
-            <small>{runtimeConfig.appTitle}</small>
+            <small>AIDA OPS</small>
           </span>
         )}
       </a>

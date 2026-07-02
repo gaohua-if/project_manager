@@ -33,13 +33,16 @@ export function Header() {
           icon={<MenuOutlined />}
           onClick={() => setMobileSidebarOpen(true)}
         />
-        <div className="app-header__page">
-          <Nav
-            title={navProps?.title ?? title}
-            breadcrumbs={navProps?.breadcrumbs ?? defaultBreadcrumbs}
-            onNavigate={navProps?.onNavigate}
-            variant="breadcrumb"
-          />
+        <div className="app-header__context">
+          <span className="app-header__eyebrow">AIDA OPS CONSOLE</span>
+          <div className="app-header__page">
+            <Nav
+              title={navProps?.title ?? title}
+              breadcrumbs={navProps?.breadcrumbs ?? defaultBreadcrumbs}
+              onNavigate={navProps?.onNavigate}
+              variant="breadcrumb"
+            />
+          </div>
         </div>
       </div>
       <div className="app-header__right">

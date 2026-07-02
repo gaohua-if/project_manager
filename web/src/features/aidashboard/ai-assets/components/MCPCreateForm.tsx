@@ -51,16 +51,17 @@ export function MCPCreateForm({ form, submitting, onCancel, onSubmit }: MCPCreat
   const transport = Form.useWatch("transport", form) ?? "http";
 
   const handleSubmit = (values: MCPCreateFormValues) => {
+    const resolvedTransport = values.transport ?? "http";
     const payload: ManagedMCPEntry = {
       slug: values.slug.trim(),
       version: values.version.trim(),
       name: values.name?.trim() ?? "",
       description: values.description?.trim() || undefined,
-      transport: values.transport,
+      transport: resolvedTransport,
       requires_credential: values.requires_credential ?? false,
       archived: false
     };
-    if (values.transport === "http") {
+    if (resolvedTransport === "http") {
       payload.url = values.url?.trim() ?? "";
       if (values.auth_header?.trim()) payload.auth_header = values.auth_header.trim();
       if (values.auth_scheme?.trim()) payload.auth_scheme = values.auth_scheme.trim();
@@ -84,7 +85,7 @@ export function MCPCreateForm({ form, submitting, onCancel, onSubmit }: MCPCreat
       onFinish={handleSubmit}
     >
       <Card title="基础信息" className="ai-assets-editor-section">
-        <Form.Item label="Transport">
+        <Form.Item name="transport" label="Transport">
           <Segmented
             value={transport}
             onChange={(val) => form.setFieldValue("transport", val as Transport)}

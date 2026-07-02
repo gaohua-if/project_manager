@@ -5,10 +5,10 @@ import { useNavigate } from "react-router-dom";
 import { createManagedSkill } from "../../api/client";
 import type { CreateManagedSkillPayload } from "../../api/types";
 import { SkillCreateForm, type SkillCreateFormValues } from "../components/SkillCreateForm";
-import { errorMessage } from "../utils/agentAssets";
+import { AI_ASSETS_HOME, aiAssetsPath, errorMessage } from "../utils/agentAssets";
 import { PagePanel } from "@/shared/components/PagePanel/PagePanel";
 
-const AI_ASSETS_HOME = "/ai-assets";
+const AI_ASSETS_RETURN_PATH = aiAssetsPath("skills");
 
 export function SkillCreatePage() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ export function SkillCreatePage() {
     onSuccess: () => {
       message.success("Skill 已创建");
       void queryClient.invalidateQueries({ queryKey: ["managed-skills"] });
-      navigate(AI_ASSETS_HOME);
+      navigate(AI_ASSETS_RETURN_PATH);
     },
     onError: (err: unknown) => message.error(errorMessage(err))
   });
@@ -30,8 +30,8 @@ export function SkillCreatePage() {
     <PagePanel
       title="新建 Skill"
       description="创建一个只包含 SKILL.md 的 Managed Agent Skill"
-      backTo={AI_ASSETS_HOME}
-      onBack={() => navigate(AI_ASSETS_HOME)}
+      backTo={AI_ASSETS_RETURN_PATH}
+      onBack={() => navigate(AI_ASSETS_RETURN_PATH)}
       onNavigate={(path) => navigate(path)}
       breadcrumbs={[
         { title: "系统" },
@@ -43,7 +43,7 @@ export function SkillCreatePage() {
       <SkillCreateForm
         form={form}
         submitting={createMutation.isPending}
-        onCancel={() => navigate(AI_ASSETS_HOME)}
+        onCancel={() => navigate(AI_ASSETS_RETURN_PATH)}
         onSubmit={(payload) => createMutation.mutate(payload)}
       />
     </PagePanel>
